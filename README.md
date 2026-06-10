@@ -1,71 +1,83 @@
 # PRONABEC Cloud BI Platform
 
-Plataforma de datos en Google Cloud para integrar, transformar y analizar información pública relacionada con PRONABEC y presupuesto del MEF, aplicando arquitectura Medallion, procesamiento batch, BigQuery como data warehouse y Power BI como capa de visualización ejecutiva.
+Plataforma de ingeniería de datos en Google Cloud para analítica de PRONABEC, orientada a integrar datos públicos de becas y presupuesto en una plataforma batch basada en arquitectura Medallion, BigQuery y Power BI.
 
 ## Descripción general
 
-Este proyecto implementa una solución de Data Engineering y Business Intelligence orientada al análisis de becas, rendimiento académico, cobertura territorial y ejecución presupuestal.
+PRONABEC Cloud Data Platform es un proyecto de Data Engineering y Business Intelligence orientado al procesamiento batch de información pública relacionada con programas de becas, rendimiento académico, cobertura territorial y ejecución presupuestal.
 
-La plataforma integra datos públicos de PRONABEC y del Ministerio de Economía y Finanzas, los almacena en una arquitectura por capas, los transforma mediante servicios cloud y los expone en modelos analíticos listos para reportes en Power BI.
+La plataforma sigue una arquitectura cloud-native sobre Google Cloud. Los datos crudos se ingieren desde fuentes públicas, se almacenan en Cloud Storage, se transforman mediante procesamiento batch, se modelan en BigQuery y se consumen mediante dashboards ejecutivos en Power BI.
 
-## Objetivo
+## Contexto de negocio
 
-Diseñar una plataforma batch en Google Cloud que permita centralizar datos públicos, transformarlos en información confiable y facilitar el análisis ejecutivo sobre programas de becas, presupuesto, deserción, rendimiento académico y cobertura territorial.
+El proyecto se enfoca en datos públicos relacionados con programas de becas de PRONABEC y ejecución presupuestal del Ministerio de Economía y Finanzas. Su propósito es apoyar preguntas analíticas como:
 
-## Arquitectura propuesta
+- ¿Cómo ha evolucionado el presupuesto público asignado a PRONABEC a lo largo del tiempo?
+- ¿Cuál es la relación entre la ejecución presupuestal y la cobertura de becas?
+- ¿Qué regiones concentran la mayor cantidad de beneficiarios?
+- ¿Cómo se comportan el rendimiento académico y la pérdida de becas por periodos, programas y territorios?
+- ¿Qué indicadores pueden apoyar la toma de decisiones ejecutiva para la planificación de becas?
 
-La solución sigue una arquitectura Medallion:
+## Arquitectura Google Cloud planificada
 
-- Bronze: almacenamiento de datos crudos en Cloud Storage.
-- Silver: datos limpios, normalizados y estructurados en BigQuery.
-- Gold: vistas y modelos analíticos optimizados para Power BI.
-- ML: capa opcional de BigQuery ML para análisis predictivo.
+El proyecto está diseñado como una plataforma batch de datos utilizando los siguientes servicios:
 
-## Servicios principales
+- **Cloud Storage** como data lake para archivos Bronze e intermedios.
+- **Cloud Run Jobs** para ejecutar trabajos de extracción de datos en contenedores.
+- **Dataflow** para la transformación batch desde Bronze hacia Silver.
+- **BigQuery** como data warehouse analítico para las capas Silver y Gold.
+- **Cloud Composer** para la orquestación de workflows con Apache Airflow.
+- **Cloud Logging** y **Cloud Monitoring** para observabilidad.
+- **Secret Manager** para la gestión segura de configuración y credenciales.
+- **Power BI** como capa de reporting y visualización ejecutiva.
 
-- Google Cloud Storage para el data lake.
-- Dataflow para procesamiento batch.
-- BigQuery para almacenamiento analítico.
-- Cloud Composer para orquestación de workflows.
-- Cloud Run Jobs para tareas de ingesta.
-- Cloud Logging y Cloud Monitoring para observabilidad.
-- Power BI para visualización ejecutiva.
-- GitHub para versionamiento del código y documentación.
+## Arquitectura Medallion
 
-## Fuentes de datos
-
-- API pública de datos abiertos de PRONABEC.
-- Consulta presupuestal del MEF.
-- Catálogos auxiliares de ubicación, becas, periodos y entidades educativas.
-
-## Capas de datos
+La plataforma sigue una arquitectura Medallion:
 
 ### Bronze
 
-Contiene los datos crudos extraídos desde las fuentes originales. Esta capa conserva los archivos con mínima transformación y permite trazabilidad sobre cada extracción.
+Datos crudos extraídos desde los sistemas fuente y almacenados en Cloud Storage sin transformaciones de negocio. Esta capa conserva la estructura original de los datos y permite trazabilidad sobre cada extracción.
 
 ### Silver
 
-Contiene datos depurados, tipados y normalizados. En esta capa se corrigen nombres de columnas, formatos de fecha, montos, categorías de beca y campos geográficos.
+Datos limpios, estandarizados y validados en BigQuery. Esta capa incluye conversión de tipos, normalización de textos, formateo de fechas, validaciones de calidad y manejo de registros rechazados.
 
 ### Gold
 
-Contiene vistas, tablas agregadas y modelos analíticos preparados para consumo en Power BI. Esta capa responde preguntas de negocio sobre presupuesto, becarios, deserción, rendimiento y cobertura territorial.
+Tablas y vistas analíticas listas para negocio en BigQuery. Esta capa está optimizada para consumo desde Power BI y análisis ejecutivo.
 
-## Alcance inicial
+## Fuentes de datos
 
-El alcance del proyecto incluye:
+El proyecto considera las siguientes fuentes públicas:
 
-- Ingesta batch de datos públicos.
-- Almacenamiento de datos crudos en Cloud Storage.
-- Transformación con Dataflow.
-- Modelado analítico en BigQuery.
-- Validaciones de calidad de datos.
-- Orquestación con Cloud Composer.
-- Reportes ejecutivos en Power BI.
-- Observabilidad con Cloud Logging y Cloud Monitoring.
-- Modelo predictivo opcional con BigQuery ML.
+- Endpoints públicos de datos de PRONABEC.
+- Información presupuestal pública del MEF.
+- Datos geográficos de referencia para análisis territorial.
+
+## Capa de reporting
+
+Los dashboards de Power BI consumirán datasets curados desde BigQuery Gold. Las páginas de reporte planificadas son:
+
+1. Resumen Ejecutivo.
+2. Ejecución Presupuestal.
+3. Rendimiento Académico y Pérdida de Beca.
+4. Cobertura Territorial.
 
 ## Estado del proyecto
 
-Estructura inicial del repositorio.
+Este repositorio se encuentra en desarrollo activo. La etapa actual define la arquitectura cloud, el alcance analítico y la estructura base del repositorio antes de implementar los pipelines de ingesta, transformación y modelado.
+
+## Stack tecnológico
+
+- Python
+- Google Cloud Storage
+- Google BigQuery
+- Google Cloud Dataflow
+- Google Cloud Composer
+- Cloud Run Jobs
+- Cloud Logging
+- Cloud Monitoring
+- Secret Manager
+- Power BI
+- GitHub
