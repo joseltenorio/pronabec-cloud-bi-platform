@@ -1,0 +1,9 @@
+[
+  { "name": "source_row_id", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "nro_fila", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "anio", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "mes_numero", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "periodo_completo", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "mes_nombre", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "fecha_carga", "type": "STRING", "mode": "NULLABLE" }
+]

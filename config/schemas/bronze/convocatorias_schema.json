@@ -1,0 +1,22 @@
+[
+  { "name": "source_row_id", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "nro_fila", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "id_convocatoria", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "codigo_convocatoria", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "nombre_convocatoria", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "nombre_programa", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "modalidad", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "vacantes", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "etapas", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "fecha_fin_convocatoria", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "fecha_inicio_postulacion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "fecha_fin_postulacion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "fecha_inicio_evaluacion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "fecha_fin_evaluacion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "fecha_inicio_vigencia", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "fecha_fin_vigencia", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "edad_minima", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "edad_maxima", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "resolucion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "fecha_carga", "type": "STRING", "mode": "NULLABLE" }
+]

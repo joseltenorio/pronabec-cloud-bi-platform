@@ -1,0 +1,16 @@
+[
+  { "name": "source_row_id", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "nro_fila", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "convocatoria", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "departamento", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "motivo_perdida", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "tipo_resolucion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "fecha_resolucion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "fecha_inicio_beca", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "tipo_ies", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "institucion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "sede", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "carrera", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "sexo", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "fecha_carga", "type": "STRING", "mode": "NULLABLE" }
+]
