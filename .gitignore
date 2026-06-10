@@ -1,0 +1,48 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+config/gcp-key.json
+credentials/
+secrets/
+
+# Local logs
+logs/
+*.log
+
+# Local data files
+data/
+*.csv
+*.xlsx
+*.xls
+*.parquet
+*.jsonl
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Power BI temporary files
+*.pbitmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE settings
+.vscode/
+.idea/

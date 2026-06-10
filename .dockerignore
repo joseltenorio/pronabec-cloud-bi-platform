@@ -1,0 +1,15 @@
+.git
+.venv
+venv
+env
+ENV
+__pycache__
+*.pyc
+.env
+.env.*
+data
+logs
+evidence
+powerbi/screenshots
+.vscode
+.idea
