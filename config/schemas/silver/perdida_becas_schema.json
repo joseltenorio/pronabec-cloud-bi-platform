@@ -1,0 +1,97 @@
+[
+  {
+    "name": "source_row_id",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "nro_fila",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "convocatoria",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "departamento",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "motivo_perdida",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "tipo_resolucion",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "fecha_resolucion",
+    "type": "DATE",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "fecha_inicio_beca",
+    "type": "DATE",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "tipo_ies",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "institucion",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "sede",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "carrera",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "sexo",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "fecha_carga",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "source_system",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "source_dataset",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "extraction_date",
+    "type": "DATE",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "ingestion_timestamp",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "pipeline_run_id",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  }
+]
