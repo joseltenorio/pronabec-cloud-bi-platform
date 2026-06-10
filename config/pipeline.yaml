@@ -22,7 +22,8 @@ storage:
     staging: staging
 
 gcs_paths:
-  pronabec_bronze: "bronze/pronabec/{dataset}/extraction_date={extraction_date}/data.csv"
+  pronabec_bronze_raw: "bronze/pronabec/{dataset}/extraction_date={extraction_date}/data_raw.json"
+  pronabec_bronze_normalized: "bronze/pronabec/{dataset}/extraction_date={extraction_date}/data.jsonl"
   mef_bronze: "bronze/mef/presupuesto/extraction_date={extraction_date}/data.csv"
   rejected_records: "dlq/{dataset}/extraction_date={extraction_date}/rejected_records.jsonl"
 
