@@ -1,0 +1,143 @@
+pronabec:
+  base_url: "https://datosabiertos.pronabec.gob.pe/Dataset"
+
+  endpoints:
+    - name: perdida_becas
+      path: PerdidaDeBecas
+      description: "Becarios que perdieron la beca."
+      enabled: true
+      expected_columns:
+        - nro_fila
+        - convocatoria
+        - departamento
+        - motivo_perdida
+        - tipo_resolucion
+        - fecha_resolucion
+        - fecha_inicio_beca
+        - tipo_ies
+        - institucion
+        - sede
+        - carrera
+        - sexo
+        - fecha_carga
+
+    - name: notas_becarios
+      path: NotasDeBecarios
+      description: "Notas promedio de becarios por semestre académico."
+      enabled: true
+      expected_columns:
+        - nro_fila
+        - codigo_becario
+        - semestre
+        - ciclo
+        - nota_promedio
+        - fecha_carga
+
+    - name: concepto_pago
+      path: ConceptoDePago
+      description: "Conceptos y subconceptos de pago asociados a subvenciones."
+      enabled: true
+      expected_columns:
+        - nro_fila
+        - tipo_subvencion
+        - concepto
+        - subconcepto
+        - modalidad
+        - estado
+        - aplica_descuento
+        - fecha_carga
+
+    - name: convocatorias
+      path: Convocatorias
+      description: "Convocatorias, programas, modalidades, vacantes y fechas del proceso."
+      enabled: true
+      expected_columns:
+        - nro_fila
+        - id_convocatoria
+        - codigo_convocatoria
+        - nombre_convocatoria
+        - nombre_programa
+        - modalidad
+        - vacantes
+        - etapas
+        - fecha_fin_convocatoria
+        - fecha_inicio_postulacion
+        - fecha_fin_postulacion
+        - fecha_inicio_evaluacion
+        - fecha_fin_evaluacion
+        - fecha_inicio_vigencia
+        - fecha_fin_vigencia
+        - edad_minima
+        - edad_maxima
+        - resolucion
+        - fecha_carga
+
+    - name: becarios_provincia
+      path: Beca18BecariosPorProvincia
+      description: "Distribución de becarios por departamento, provincia y tipo de beca."
+      enabled: true
+      expected_columns:
+        - nro_fila
+        - departamento
+        - provincia
+        - b18_n
+        - b18_pct
+        - permanencia_n
+        - permanencia_pct
+        - bicentenario_n
+        - bicentenario_pct
+        - especial_n
+        - especial_pct
+        - ffaa_n
+        - ffaa_pct
+        - vraem_n
+        - vraem_pct
+        - repec_n
+        - repec_pct
+        - internacional_n
+        - internacional_pct
+        - otros_n
+        - otros_pct
+        - fecha_carga
+
+    - name: ubigeo_postulacion
+      path: UbigeoDePostulacionABecas
+      description: "Ubicación geográfica de postulantes a becas."
+      enabled: true
+      expected_columns:
+        - nro_fila
+        - codigo_ubigeo
+        - departamento
+        - provincia
+        - distrito
+        - fecha_carga
+
+    - name: periodos_academicos
+      path: PeriodosAcademicosDeBecarios
+      description: "Periodos académicos asociados a becarios."
+      enabled: true
+      expected_columns:
+        - nro_fila
+        - anio
+        - mes_numero
+        - periodo_completo
+        - mes_nombre
+        - fecha_carga
+
+mef:
+  source_name: "MEF Consulta Amigable"
+  description: "Información presupuestal pública relacionada con PRONABEC."
+  enabled: true
+  start_year_env_var: MEF_START_YEAR
+  end_year_env_var: MEF_END_YEAR
+  expected_columns:
+    - ano
+    - ejecutora_nombre
+    - pia
+    - pim
+    - certificacion
+    - compromiso_anual
+    - compromiso_mensual
+    - devengado
+    - girado
+    - avance_porcentaje

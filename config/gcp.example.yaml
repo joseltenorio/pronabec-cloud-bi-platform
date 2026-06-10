@@ -1,0 +1,51 @@
+project:
+  id: your-gcp-project-id
+  region: us-central1
+  zone: us-central1-a
+
+service_accounts:
+  cloud_run_jobs: project-cloud-bi-runner@your-gcp-project-id.iam.gserviceaccount.com
+  dataflow: project-cloud-bi-dataflow@your-gcp-project-id.iam.gserviceaccount.com
+  composer: project-cloud-bi-composer@your-gcp-project-id.iam.gserviceaccount.com
+
+cloud_storage:
+  bucket_name: project-cloud-bi-platform-lake
+  location: US
+  storage_class: STANDARD
+  uniform_bucket_level_access: true
+
+bigquery:
+  location: US
+  datasets:
+    bronze:
+      description: "Dataset para tablas externas o staging raw."
+    silver:
+      description: "Dataset para tablas limpias, normalizadas y validadas."
+    gold:
+      description: "Dataset para vistas y marts analíticos consumidos por Power BI."
+    audit:
+      description: "Dataset para auditoría de ejecuciones y resultados de calidad."
+    ml:
+      description: "Dataset para modelos y predicciones de BigQuery ML."
+
+dataflow:
+  runner: DataflowRunner
+  temp_location: gs://project-cloud-bi-platform-lake/temp/dataflow
+  staging_location: gs://project-cloud-bi-platform-lake/staging/dataflow
+  max_num_workers: 2
+  worker_machine_type: n1-standard-2
+
+composer:
+  environment_name: project-cloud-bi-composer
+  location: us-central1
+
+logging:
+  structured_logging: true
+
+monitoring:
+  recommended_alerts:
+    - pipeline_failure
+    - dataflow_job_failure
+    - empty_gold_tables
+    - high_rejected_records_rate
+    - budget_threshold

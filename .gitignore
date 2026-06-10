@@ -36,6 +36,12 @@ tmp/
 temp/
 *.tmp
 
+# Repomix generated outputs
+repomix-output.*
+repomix-output**
+.repomix-cache/
+repomix.config.json
+
 # Power BI temporary files
 *.pbitmp
 

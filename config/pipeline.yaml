@@ -1,0 +1,49 @@
+pipeline:
+  name: project_cloud_bi_platform
+  description: "Pipeline batch para analítica de PRONABEC y presupuesto público usando Google Cloud y Power BI."
+  environment: dev
+  processing_mode: batch
+  timezone: America/Lima
+
+execution:
+  default_schedule: "0 5 * * *"
+  retries: 2
+  retry_delay_minutes: 5
+  timeout_minutes: 60
+
+storage:
+  bucket_env_var: GCS_BUCKET_NAME
+  prefixes:
+    bronze: bronze
+    silver: silver
+    gold: gold
+    dlq: dlq
+    temp: temp
+    staging: staging
+
+gcs_paths:
+  pronabec_bronze: "bronze/pronabec/{dataset}/extraction_date={extraction_date}/data.csv"
+  mef_bronze: "bronze/mef/presupuesto/extraction_date={extraction_date}/data.csv"
+  rejected_records: "dlq/{dataset}/extraction_date={extraction_date}/rejected_records.jsonl"
+
+bigquery:
+  datasets:
+    bronze: bronze
+    silver: silver
+    gold: gold
+    audit: audit
+    ml: ml
+
+audit:
+  pipeline_runs_table: audit.pipeline_runs
+  extraction_runs_table: audit.extraction_runs
+  data_quality_results_table: audit.data_quality_results
+
+observability:
+  structured_logging: true
+  log_level_env_var: LOG_LEVEL
+  monitoring_enabled: true
+
+reporting:
+  tool: Power BI
+  consumption_layer: BigQuery Gold
