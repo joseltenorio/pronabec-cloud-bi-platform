@@ -180,7 +180,18 @@ def build_gcs_path(template: str, **values: str) -> str:
 
     Raises:
         ConfigError: Si falta una variable requerida por la plantilla.
+        ConfigError: Si una variable requerida viene vacía o como None.
     """
+    invalid_values = [
+        key
+        for key, value in values.items()
+        if value is None or str(value).strip() == ""
+    ]
+
+    if invalid_values:
+        invalid_keys = ", ".join(invalid_values)
+        raise ConfigError(f"Valores inválidos para construir ruta GCS: {invalid_keys}")
+
     try:
         return template.format(**values)
     except KeyError as exc:
