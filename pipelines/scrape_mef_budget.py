@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import re
 from datetime import date, datetime
@@ -401,6 +402,141 @@ def normalize_mef_records(
     ]
 
 
+def write_json_file(path: Path, payload: Any) -> None:
+    """
+    Escribe un archivo JSON local.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def write_csv_file(
+    path: Path,
+    records: list[dict[str, Any]],
+    fieldnames: list[str],
+) -> None:
+    """
+    Escribe registros CSV localmente.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    with path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(records)
+
+
+def build_local_mef_output_paths(
+    output_dir: str | Path,
+    extraction_date: str,
+) -> dict[str, Path]:
+    """
+    Construye rutas locales equivalentes a Bronze para dry-run MEF.
+    """
+    base_path = (
+        Path(output_dir)
+        / "bronze"
+        / "mef"
+        / "presupuesto"
+        / f"extraction_date={extraction_date}"
+    )
+
+    return {
+        "csv_path": base_path / "data.csv",
+        "metadata_path": base_path / "extraction_metadata.json",
+    }
+
+
+def build_extraction_metadata(
+    source_name: str,
+    source_dataset: str,
+    extraction_date: str,
+    run_id: str,
+    records_read: int,
+    records_written: int,
+    output_paths: dict[str, str],
+    status: str = "SUCCESS",
+    extra_metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Construye metadata técnica de extracción.
+    """
+    return {
+        "source_name": source_name,
+        "source_dataset": source_dataset,
+        "extraction_date": extraction_date,
+        "run_id": run_id,
+        "records_read": records_read,
+        "records_written": records_written,
+        "status": status,
+        "output_paths": output_paths,
+        "metadata": extra_metadata or {},
+        "created_at": datetime.utcnow().isoformat(),
+    }
+
+
+def write_mef_to_local(
+    records: list[dict[str, Any]],
+    fieldnames: list[str],
+    extraction_date: str,
+    output_dir: str | Path,
+    run_id: str,
+    records_read: int,
+    source_url: str | None,
+    source_file: str | None,
+    logger,
+) -> dict[str, str]:
+    """
+    Escribe data.csv y extraction_metadata.json localmente.
+    """
+    paths = build_local_mef_output_paths(
+        output_dir=output_dir,
+        extraction_date=extraction_date,
+    )
+
+    write_csv_file(
+        path=paths["csv_path"],
+        records=records,
+        fieldnames=fieldnames,
+    )
+
+    metadata = build_extraction_metadata(
+        source_name="MEF Consulta Amigable",
+        source_dataset="presupuesto",
+        extraction_date=extraction_date,
+        run_id=run_id,
+        records_read=records_read,
+        records_written=len(records),
+        output_paths={
+            "csv_path": str(paths["csv_path"]),
+        },
+        extra_metadata={
+            "mode": "dry_run",
+            "source_url": source_url,
+            "source_file": source_file,
+        },
+    )
+
+    write_json_file(paths["metadata_path"], metadata)
+
+    log_event(
+        logger,
+        "INFO",
+        "Archivo MEF escrito en modo dry-run",
+        csv_path=str(paths["csv_path"]),
+        metadata_path=str(paths["metadata_path"]),
+        records_written=len(records),
+    )
+
+    return {
+        "output_uri": str(paths["csv_path"]),
+        "metadata_path": str(paths["metadata_path"]),
+    }
+
+
 def get_mef_expected_columns(endpoints_config: dict[str, Any]) -> list[str]:
     """
     Obtiene columnas esperadas para MEF desde config/endpoints.yaml.
@@ -433,7 +569,7 @@ def run_extraction(args: argparse.Namespace) -> None:
 
     bucket_name = args.bucket or pipeline_settings["bucket_name"]
 
-    if not bucket_name:
+    if not args.dry_run and not bucket_name:
         raise ConfigError(
             "No se definió bucket. Configura GCS_BUCKET_NAME o usa --bucket."
         )
@@ -497,17 +633,31 @@ def run_extraction(args: argparse.Namespace) -> None:
                 "La extracción MEF no produjo registros después de filtros y normalización."
             )
 
-        object_path = build_mef_bronze_path(
-            pipeline_settings["gcs_paths"]["mef_bronze"],
-            extraction_date=extraction_date,
-        )
+        if args.dry_run:
+            output_result = write_mef_to_local(
+                records=normalized_records,
+                fieldnames=expected_columns,
+                extraction_date=extraction_date,
+                output_dir=args.output_dir,
+                run_id=run_id,
+                records_read=len(raw_records),
+                source_url=source_url,
+                source_file=source_file,
+                logger=logger,
+            )
+            output_uri = output_result["output_uri"]
+        else:
+            object_path = build_mef_bronze_path(
+                pipeline_settings["gcs_paths"]["mef_bronze"],
+                extraction_date=extraction_date,
+            )
 
-        output_uri = upload_csv(
-            bucket_name=bucket_name,
-            object_path=object_path,
-            records=normalized_records,
-            fieldnames=expected_columns,
-        )
+            output_uri = upload_csv(
+                bucket_name=bucket_name,
+                object_path=object_path,
+                records=normalized_records,
+                fieldnames=expected_columns,
+            )
 
         audit_event = create_extraction_audit_event(
             pipeline_name=pipeline_settings["pipeline_name"],
@@ -634,6 +784,16 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=DEFAULT_TIMEOUT_SECONDS,
         help="Timeout HTTP por request en segundos.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Ejecuta la extracción y escribe salida local en tmp/ sin usar GCS.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="tmp",
+        help="Directorio local para salidas dry-run.",
     )
 
     return parser.parse_args()

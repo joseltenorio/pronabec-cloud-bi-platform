@@ -133,7 +133,10 @@ def create_extraction_audit_event(
     execution_date: date | None = None,
     records_read: int | None = None,
     records_written: int | None = None,
+    records_rejected: int | None = None,
     error_message: str | None = None,
+    started_at: datetime | None = None,
+    finished_at: datetime | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> AuditEvent:
     """
@@ -150,6 +153,9 @@ def create_extraction_audit_event(
         execution_date=execution_date,
         records_read=records_read,
         records_written=records_written,
+        records_rejected=records_rejected,
         error_message=error_message,
+        started_at=started_at,
+        finished_at=finished_at,
         metadata=metadata,
     )

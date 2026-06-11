@@ -13,8 +13,10 @@ La limpieza de negocio y conversión fuerte de tipos se realiza después en Silv
 from __future__ import annotations
 
 import argparse
+import json
 import time
-from datetime import date, datetime
+from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -154,7 +156,7 @@ def consolidate_raw_payload(
     return {
         "dataset": dataset_name,
         "url": url,
-        "extracted_at": datetime.utcnow().isoformat(),
+        "extracted_at": datetime.now(UTC).isoformat(),
         "total_pages": first_page.get("total"),
         "reported_records": first_page.get("records"),
         "pages_read": len(pages),
@@ -358,6 +360,141 @@ def write_dataset_to_gcs(
     }
 
 
+def write_json_file(path: Path, payload: Any) -> None:
+    """
+    Escribe un archivo JSON local.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def write_jsonl_file(path: Path, records: list[dict[str, Any]]) -> None:
+    """
+    Escribe registros JSONL localmente.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    content = "".join(
+        json.dumps(record, ensure_ascii=False) + "\n"
+        for record in records
+    )
+
+    path.write_text(content, encoding="utf-8")
+
+
+def build_local_pronabec_output_paths(
+    output_dir: str | Path,
+    dataset_name: str,
+    extraction_date: str,
+) -> dict[str, Path]:
+    """
+    Construye rutas locales equivalentes a Bronze para dry-run.
+    """
+    base_path = (
+        Path(output_dir)
+        / "bronze"
+        / "pronabec"
+        / dataset_name
+        / f"extraction_date={extraction_date}"
+    )
+
+    return {
+        "raw_path": base_path / "data_raw.json",
+        "normalized_path": base_path / "data.jsonl",
+        "metadata_path": base_path / "extraction_metadata.json",
+    }
+
+
+def build_extraction_metadata(
+    source_name: str,
+    source_dataset: str,
+    extraction_date: str,
+    run_id: str,
+    records_read: int,
+    records_written: int,
+    output_paths: dict[str, str],
+    status: str = "SUCCESS",
+    extra_metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Construye metadata técnica de extracción.
+    """
+    return {
+        "source_name": source_name,
+        "source_dataset": source_dataset,
+        "extraction_date": extraction_date,
+        "run_id": run_id,
+        "records_read": records_read,
+        "records_written": records_written,
+        "status": status,
+        "output_paths": output_paths,
+        "metadata": extra_metadata or {},
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def write_dataset_to_local(
+    dataset_name: str,
+    raw_payload: dict[str, Any],
+    normalized_records: list[dict[str, Any]],
+    extraction_date: str,
+    output_dir: str | Path,
+    run_id: str,
+    logger,
+) -> dict[str, str]:
+    """
+    Escribe data_raw.json, data.jsonl y extraction_metadata.json localmente.
+    """
+    paths = build_local_pronabec_output_paths(
+        output_dir=output_dir,
+        dataset_name=dataset_name,
+        extraction_date=extraction_date,
+    )
+
+    write_json_file(paths["raw_path"], raw_payload)
+    write_jsonl_file(paths["normalized_path"], normalized_records)
+
+    metadata = build_extraction_metadata(
+        source_name="PRONABEC Datos Abiertos",
+        source_dataset=dataset_name,
+        extraction_date=extraction_date,
+        run_id=run_id,
+        records_read=len(normalized_records),
+        records_written=len(normalized_records),
+        output_paths={
+            "raw_path": str(paths["raw_path"]),
+            "normalized_path": str(paths["normalized_path"]),
+        },
+        extra_metadata={
+            "mode": "dry_run",
+            "pages_read": raw_payload.get("pages_read"),
+            "reported_records": raw_payload.get("reported_records"),
+        },
+    )
+
+    write_json_file(paths["metadata_path"], metadata)
+
+    log_event(
+        logger,
+        "INFO",
+        "Archivos PRONABEC escritos en modo dry-run",
+        dataset=dataset_name,
+        raw_path=str(paths["raw_path"]),
+        normalized_path=str(paths["normalized_path"]),
+        metadata_path=str(paths["metadata_path"]),
+        records_written=len(normalized_records),
+    )
+
+    return {
+        "raw_uri": str(paths["raw_path"]),
+        "normalized_uri": str(paths["normalized_path"]),
+        "metadata_path": str(paths["metadata_path"]),
+    }
+
+
 def run_extraction(args: argparse.Namespace) -> None:
     """
     Orquesta la extracción PRONABEC.
@@ -373,7 +510,7 @@ def run_extraction(args: argparse.Namespace) -> None:
 
     bucket_name = args.bucket or pipeline_settings["bucket_name"]
 
-    if not bucket_name:
+    if not args.dry_run and not bucket_name:
         raise ConfigError(
             "No se definió bucket. Configura GCS_BUCKET_NAME o usa --bucket."
         )
@@ -401,7 +538,7 @@ def run_extraction(args: argparse.Namespace) -> None:
 
     for endpoint in endpoints:
         dataset_name = endpoint["name"]
-        started_at = datetime.utcnow()
+        started_at = datetime.now(UTC)
 
         try:
             raw_payload, normalized_records = extract_dataset(
@@ -414,15 +551,28 @@ def run_extraction(args: argparse.Namespace) -> None:
                 logger=logger,
             )
 
-            uris = write_dataset_to_gcs(
-                dataset_name=dataset_name,
-                raw_payload=raw_payload,
-                normalized_records=normalized_records,
-                bucket_name=bucket_name,
-                extraction_date=extraction_date,
-                gcs_paths=pipeline_settings["gcs_paths"],
-                logger=logger,
-            )
+            if args.dry_run:
+                uris = write_dataset_to_local(
+                    dataset_name=dataset_name,
+                    raw_payload=raw_payload,
+                    normalized_records=normalized_records,
+                    extraction_date=extraction_date,
+                    output_dir=args.output_dir,
+                    run_id=run_id,
+                    logger=logger,
+                )
+            else:
+                uris = write_dataset_to_gcs(
+                    dataset_name=dataset_name,
+                    raw_payload=raw_payload,
+                    normalized_records=normalized_records,
+                    bucket_name=bucket_name,
+                    extraction_date=extraction_date,
+                    gcs_paths=pipeline_settings["gcs_paths"],
+                    logger=logger,
+                )
+
+            finished_at = datetime.now(UTC)
 
             audit_event = create_extraction_audit_event(
                 pipeline_name=pipeline_settings["pipeline_name"],
@@ -434,11 +584,12 @@ def run_extraction(args: argparse.Namespace) -> None:
                 execution_date=date.fromisoformat(extraction_date),
                 records_read=len(normalized_records),
                 records_written=len(normalized_records),
+                records_rejected=0,
+                started_at=started_at,
+                finished_at=finished_at,
                 metadata={
                     "raw_uri": uris["raw_uri"],
                     "normalized_uri": uris["normalized_uri"],
-                    "started_at": started_at.isoformat(),
-                    "finished_at": datetime.utcnow().isoformat(),
                 },
             )
 
@@ -450,6 +601,8 @@ def run_extraction(args: argparse.Namespace) -> None:
             )
 
         except Exception as exc:
+            finished_at = datetime.now(UTC)
+
             audit_event = create_extraction_audit_event(
                 pipeline_name=pipeline_settings["pipeline_name"],
                 source_name="PRONABEC Datos Abiertos",
@@ -458,11 +611,11 @@ def run_extraction(args: argparse.Namespace) -> None:
                 run_id=run_id,
                 environment=pipeline_settings["environment"],
                 execution_date=date.fromisoformat(extraction_date),
+                records_rejected=None,
                 error_message=str(exc),
-                metadata={
-                    "started_at": started_at.isoformat(),
-                    "finished_at": datetime.utcnow().isoformat(),
-                },
+                started_at=started_at,
+                finished_at=finished_at,
+                metadata={},
             )
 
             log_event(
@@ -533,6 +686,16 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.2,
         help="Pausa entre requests para evitar presión sobre la fuente.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Ejecuta la extracción y escribe salidas locales en tmp/ sin usar GCS.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="tmp",
+        help="Directorio local para salidas dry-run.",
     )
 
     return parser.parse_args()
