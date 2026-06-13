@@ -1,36 +1,101 @@
-from __future__ import annotations
-
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Iterable
 
 
-DEFAULT_PROJECT_ID = "your-gcp-project-id"
-DEFAULT_BUCKET = "project-cloud-bi-platform-lake"
+PROJECT_ID_ENV_VAR = "GCP_PROJECT_ID"
+BUCKET_ENV_VAR = "GCS_BUCKET_NAME"
 DEFAULT_OUTPUT_DIR = "build/generated/sql"
 DEFAULT_BRONZE_SCHEMAS_DIR = "config/schemas/bronze"
 DEFAULT_SILVER_SCHEMAS_DIR = "config/schemas/silver"
 
 HEADER = """-- ============================================================================
--- Archivo Generado Automáticamente - No editar manualmente
+-- Project Cloud BI Platform
+-- DDL BigQuery generado automáticamente
 -- ============================================================================
--- Generado por: tools/generate_bigquery_ddl.py
--- Esquemas de origen:
---   - config/schemas/bronze/*.json
---   - config/schemas/silver/*.json
 --
--- Este archivo se genera en build/generated/sql/ pra validación local o CI/CD
--- Para cambiar columnas o tipos, actualice los archivos de esquema JSON y vuelva a generarlos.
+-- Archivo Generado Automáticamente - No editar manualmente
+--
+-- Generado por:
+--   tools/generate_bigquery_ddl.py
+--
+-- Fuente de verdad:
+--   config/schemas/bronze/*.json
+--   config/schemas/silver/*.json
+--
+-- Ubicación esperada:
+--   build/generated/sql/
+--
+-- Este archivo se genera para validación local y despliegue CI/CD.
+-- No debe versionarse como fuente principal del esquema.
+--
+-- Para modificar columnas, tipos o modos:
+--   1. Actualizar el JSON schema correspondiente.
+--   2. Ejecutar nuevamente tools/generate_bigquery_ddl.py.
+--   3. Validar el DDL generado antes de desplegarlo en BigQuery.
+--
+-- Configuración requerida:
+--   - Proyecto GCP: --project-id o variable GCP_PROJECT_ID.
+--   - Bucket GCS:   --bucket o variable GCS_BUCKET_NAME.
+--
+-- Decisiones de diseño:
+--   - Bronze físico vive en Cloud Storage.
+--   - BigQuery Bronze usa tablas externas sobre archivos Bronze.
+--   - PRONABEC se consulta desde data.jsonl normalizado estructuralmente.
+--   - PRONABEC conserva data_raw.json para trazabilidad, pero las tablas
+--     externas se definen sobre data.jsonl.
+--   - MEF se consulta desde data.csv generado por el scraper controlado.
 -- ============================================================================
+
+
 """
+
+
+def load_dotenv_if_available() -> None:
+    """Carga variables desde .env en ejecución local, si python-dotenv está disponible."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+
+    load_dotenv()
+
+
+def clean_config_value(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    value = value.strip()
+    return value or None
+
+
+def resolve_required_config(
+    *,
+    cli_value: str | None,
+    env_var_name: str,
+    option_name: str,
+    parser: argparse.ArgumentParser,
+) -> str:
+    value = clean_config_value(cli_value) or clean_config_value(os.getenv(env_var_name))
+
+    if value is None:
+        parser.error(
+            f"Falta configuración requerida para {option_name}. "
+            f"Use {option_name} o defina la variable {env_var_name} en el entorno/.env."
+        )
+
+    return value
 
 
 def dataset_name_from_schema_path(schema_path: Path) -> str:
     suffix = "_schema"
     stem = schema_path.stem
+
     if stem.endswith(suffix):
         return stem[: -len(suffix)]
+
     return stem
 
 
@@ -51,8 +116,10 @@ def render_column(field: dict[str, str]) -> str:
 
     if mode == "REPEATED":
         return f"  {name} ARRAY<{field_type}>"
+
     if mode == "REQUIRED":
         return f"  {name} {field_type} NOT NULL"
+
     return f"  {name} {field_type}"
 
 
@@ -161,19 +228,46 @@ def generate_ddl(
 
 
 def parse_args() -> argparse.Namespace:
+    load_dotenv_if_available()
+
     parser = argparse.ArgumentParser(
         description="Genera DDL de BigQuery Bronze/Silver a partir de esquemas JSON."
     )
-    parser.add_argument("--project-id", default=DEFAULT_PROJECT_ID)
-    parser.add_argument("--bucket", default=DEFAULT_BUCKET)
+    parser.add_argument(
+        "--project-id",
+        default=None,
+        help=f"ID del proyecto GCP. También puede definirse con {PROJECT_ID_ENV_VAR}.",
+    )
+    parser.add_argument(
+        "--bucket",
+        default=None,
+        help=f"Bucket de Cloud Storage. También puede definirse con {BUCKET_ENV_VAR}.",
+    )
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--bronze-schemas-dir", default=DEFAULT_BRONZE_SCHEMAS_DIR)
     parser.add_argument("--silver-schemas-dir", default=DEFAULT_SILVER_SCHEMAS_DIR)
-    return parser.parse_args()
+
+    args = parser.parse_args()
+
+    args.project_id = resolve_required_config(
+        cli_value=args.project_id,
+        env_var_name=PROJECT_ID_ENV_VAR,
+        option_name="--project-id",
+        parser=parser,
+    )
+    args.bucket = resolve_required_config(
+        cli_value=args.bucket,
+        env_var_name=BUCKET_ENV_VAR,
+        option_name="--bucket",
+        parser=parser,
+    )
+
+    return args
 
 
 def main() -> None:
     args = parse_args()
+
     bronze_output, silver_output = generate_ddl(
         project_id=args.project_id,
         bucket=args.bucket,
@@ -181,6 +275,7 @@ def main() -> None:
         bronze_schemas_dir=Path(args.bronze_schemas_dir),
         silver_schemas_dir=Path(args.silver_schemas_dir),
     )
+
     print(f"Generated {bronze_output}")
     print(f"Generated {silver_output}")
 

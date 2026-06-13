@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -47,15 +48,24 @@ def field_names(schema: list[dict[str, str]]) -> set[str]:
     return {field["name"] for field in schema}
 
 
+def env_without_ddl_config() -> dict[str, str]:
+    env = dict(os.environ)
+    env.pop("GCP_PROJECT_ID", None)
+    env.pop("GCS_BUCKET_NAME", None)
+    return env
+
+
 def test_json_schemas_are_valid_bigquery_field_lists() -> None:
     for schema_path in schema_paths():
         schema = load_schema(schema_path)
 
         assert isinstance(schema, list), f"{schema_path} must be a list"
+
         for field in schema:
             assert "name" in field, f"{schema_path} field is missing name"
             assert "type" in field, f"{schema_path} field is missing type"
             assert "mode" in field, f"{schema_path} field is missing mode"
+
             assert field["type"] in ALLOWED_TYPES, (
                 f"{schema_path} has unsupported type {field['type']}"
             )
@@ -73,13 +83,16 @@ def test_enabled_pronabec_endpoints_have_bronze_schemas() -> None:
 
         dataset = endpoint["name"]
         schema_path = BRONZE_SCHEMAS_DIR / f"{dataset}_schema.json"
+
         assert schema_path.exists(), f"Missing Bronze schema for {dataset}"
 
         names = field_names(load_schema(schema_path))
+
         for expected_column in endpoint["expected_columns"]:
             assert expected_column in names, (
                 f"{schema_path} is missing expected column {expected_column}"
             )
+
         assert "source_row_id" in names, f"{schema_path} is missing source_row_id"
 
 
@@ -98,10 +111,15 @@ def test_bigquery_ddl_generator_writes_bronze_and_silver_sql(tmp_path: Path) -> 
         [
             sys.executable,
             "tools/generate_bigquery_ddl.py",
+            "--project-id",
+            "test-project-id",
+            "--bucket",
+            "test-bucket-name",
             "--output-dir",
             str(output_dir),
         ],
         cwd=PROJECT_ROOT,
+        env=env_without_ddl_config(),
         check=True,
     )
 
@@ -114,14 +132,108 @@ def test_bigquery_ddl_generator_writes_bronze_and_silver_sql(tmp_path: Path) -> 
     bronze_sql = bronze_sql_path.read_text(encoding="utf-8")
     silver_sql = silver_sql_path.read_text(encoding="utf-8")
 
-    assert "AUTO-GENERATED FILE" in bronze_sql
+    assert "ARCHIVO AUTOGENERADO - NO EDITAR MANUALMENTE" in bronze_sql
     assert "CREATE OR REPLACE EXTERNAL TABLE" in bronze_sql
     assert "NEWLINE_DELIMITED_JSON" in bronze_sql
     assert "CSV" in bronze_sql
-    assert "bronze.pronabec_notas_becarios_raw" in bronze_sql
-    assert "bronze.mef_presupuesto_raw" in bronze_sql
+    assert "test-project-id.bronze.pronabec_notas_becarios_raw" in bronze_sql
+    assert "test-project-id.bronze.mef_presupuesto_raw" in bronze_sql
+    assert "gs://test-bucket-name/bronze/pronabec/notas_becarios" in bronze_sql
+    assert "gs://test-bucket-name/bronze/mef/presupuesto" in bronze_sql
 
-    assert "AUTO-GENERATED FILE" in silver_sql
+    assert "ARCHIVO AUTOGENERADO - NO EDITAR MANUALMENTE" in silver_sql
     assert "CREATE OR REPLACE TABLE" in silver_sql
-    assert "silver.notas_becarios" in silver_sql
+    assert "test-project-id.silver.notas_becarios" in silver_sql
     assert "nota_promedio NUMERIC" in silver_sql
+
+
+def test_bigquery_ddl_generator_uses_environment_config(tmp_path: Path) -> None:
+    output_dir = tmp_path / "generated" / "sql"
+    env = {
+        **env_without_ddl_config(),
+        "GCP_PROJECT_ID": "env-project-id",
+        "GCS_BUCKET_NAME": "env-bucket-name",
+    }
+
+    subprocess.run(
+        [
+            sys.executable,
+            "tools/generate_bigquery_ddl.py",
+            "--output-dir",
+            str(output_dir),
+        ],
+        cwd=PROJECT_ROOT,
+        env=env,
+        check=True,
+    )
+
+    bronze_sql = (output_dir / "create_bronze_external_tables.sql").read_text(
+        encoding="utf-8"
+    )
+    silver_sql = (output_dir / "create_silver_tables.sql").read_text(
+        encoding="utf-8"
+    )
+
+    assert "env-project-id.bronze" in bronze_sql
+    assert "gs://env-bucket-name/bronze" in bronze_sql
+    assert "env-project-id.silver" in silver_sql
+
+
+def test_bigquery_ddl_generator_cli_overrides_environment(tmp_path: Path) -> None:
+    output_dir = tmp_path / "generated" / "sql"
+    env = {
+        **env_without_ddl_config(),
+        "GCP_PROJECT_ID": "env-project-id",
+        "GCS_BUCKET_NAME": "env-bucket-name",
+    }
+
+    subprocess.run(
+        [
+            sys.executable,
+            "tools/generate_bigquery_ddl.py",
+            "--project-id",
+            "cli-project-id",
+            "--bucket",
+            "cli-bucket-name",
+            "--output-dir",
+            str(output_dir),
+        ],
+        cwd=PROJECT_ROOT,
+        env=env,
+        check=True,
+    )
+
+    bronze_sql = (output_dir / "create_bronze_external_tables.sql").read_text(
+        encoding="utf-8"
+    )
+    silver_sql = (output_dir / "create_silver_tables.sql").read_text(
+        encoding="utf-8"
+    )
+
+    assert "cli-project-id.bronze" in bronze_sql
+    assert "gs://cli-bucket-name/bronze" in bronze_sql
+    assert "cli-project-id.silver" in silver_sql
+    assert "env-project-id" not in bronze_sql
+    assert "env-bucket-name" not in bronze_sql
+
+
+def test_bigquery_ddl_generator_requires_project_and_bucket(tmp_path: Path) -> None:
+    output_dir = tmp_path / "generated" / "sql"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "tools/generate_bigquery_ddl.py",
+            "--output-dir",
+            str(output_dir),
+        ],
+        cwd=PROJECT_ROOT,
+        env=env_without_ddl_config(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "Falta configuración requerida" in result.stderr
+    assert "--project-id" in result.stderr

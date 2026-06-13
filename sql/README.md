@@ -1,37 +1,108 @@
 # SQL Scripts
 
-Esta carpeta contiene scripts SQL versionados para crear y mantener estructuras analiticas de BigQuery en Project Cloud BI Platform.
+Esta carpeta contiene scripts SQL versionados para crear y mantener estructuras analíticas de BigQuery en Project Cloud BI Platform.
 
-## Generated DDL strategy - B2
+## Estrategia de DDL generado - B2
 
-Los JSON schemas versionados en `config/schemas/bronze/` y `config/schemas/silver/` son la fuente de verdad para Bronze y Silver.
+Los JSON schemas versionados en `config/schemas/bronze/` y `config/schemas/silver/` son la fuente de verdad para las estructuras Bronze y Silver.
 
-Los DDL BigQuery Bronze/Silver se generan bajo demanda en `build/generated/sql/`. Esos archivos generados no se commitean y no deben usarse como fuente de verdad permanente.
+Los DDL de BigQuery para Bronze y Silver se generan bajo demanda en:
 
-Para generar localmente:
+```text
+build/generated/sql/
+```
+
+Estos archivos generados no se versionan y no deben editarse manualmente.
+
+Archivos generados:
+
+```text
+build/generated/sql/create_bronze_external_tables.sql
+build/generated/sql/create_silver_tables.sql
+```
+
+## Configuración requerida
+
+El generador requiere conocer explícitamente:
+
+```text
+GCP_PROJECT_ID
+GCS_BUCKET_NAME
+```
+
+La configuración puede entregarse de dos formas.
+
+### Opción 1: variables de entorno o archivo `.env`
+
+Archivo `.env` local:
+
+```env
+GCP_PROJECT_ID=<gcp-project-id>
+GCS_BUCKET_NAME=<gcs-bucket-name>
+```
+
+Generación:
 
 ```bash
 python tools/generate_bigquery_ddl.py
 ```
 
-Para generar con valores reales:
+### Opción 2: argumentos CLI
 
 ```bash
-python tools/generate_bigquery_ddl.py --project-id "$GCP_PROJECT_ID" --bucket "$GCS_BUCKET_NAME"
+python tools/generate_bigquery_ddl.py \
+  --project-id <gcp-project-id> \
+  --bucket <gcs-bucket-name>
 ```
 
-En el futuro, CI/CD generara los DDL en un workspace temporal y ejecutara `bq query` contra BigQuery.
+Los argumentos CLI tienen prioridad sobre las variables de entorno.
 
-Cloud Run no genera DDL. Cloud Run ejecuta jobs de extraccion.
+Si no se proporciona `GCP_PROJECT_ID` o `GCS_BUCKET_NAME`, el generador falla y no produce DDL.
 
-Para agregar un dataset:
+## Soporte YAML futuro
 
-1. Agregarlo a `config/endpoints.yaml` si es PRONABEC.
+El soporte para leer configuración desde un YAML real no versionado, por ejemplo `config/gcp.local.yaml` o `config/gcp.dev.yaml`, queda como mejora futura.
+
+La prioridad esperada será:
+
+```text
+CLI > variables de entorno/.env > YAML
+```
+
+`config/gcp.example.yaml` se mantiene como plantilla documentada y no debe reemplazar la configuración real del ambiente.
+
+## Uso en CI/CD
+
+En CI/CD, el workflow debe inyectar `GCP_PROJECT_ID` y `GCS_BUCKET_NAME` como variables o secretos del ambiente.
+
+El flujo esperado es:
+
+```text
+1. Ejecutar tests.
+2. Generar DDL Bronze/Silver temporalmente.
+3. Ejecutar los DDL contra BigQuery.
+4. No commitear archivos generados.
+```
+
+Cloud Run no genera DDL. Cloud Run ejecuta jobs de extracción.
+
+## SQL versionado
+
+Los siguientes scripts permanecen versionados porque no se derivan directamente de los JSON schemas Bronze/Silver:
+
+```text
+sql/ddl/create_datasets.sql
+sql/ddl/create_gold_views.sql
+sql/ddl/create_audit_tables.sql
+```
+
+## Para agregar un dataset PRONABEC
+
+1. Agregar la fuente en `config/endpoints.yaml`.
 2. Crear `config/schemas/bronze/<dataset>_schema.json`.
-3. Crear `config/schemas/silver/<dataset>_schema.json` solo si pasa a Silver.
-4. Ejecutar `python tools/generate_bigquery_ddl.py`.
+3. Crear `config/schemas/silver/<dataset>_schema.json` solo si el dataset pasa a Silver.
+4. Ejecutar el generador de DDL.
 5. Ejecutar tests.
-6. No commitear DDL generado.
 
 ## Estructura planificada
 
@@ -53,11 +124,11 @@ sql/
     `-- predict_dropout_risk.sql
 ```
 
-## Convencion
+## Convención
 
-Los scripts deben estar organizados por proposito:
+Los scripts deben organizarse por propósito:
 
-- ddl/: creacion de datasets, tablas Audit y vistas Gold versionadas.
-- quality/: validaciones de calidad de datos.
-- gold/: marts y vistas analiticas.
-- ml/: modelos y predicciones con BigQuery ML.
+- `ddl/`: creación de datasets, tablas Audit y vistas Gold versionadas.
+- `quality/`: validaciones de calidad de datos.
+- `gold/`: marts y vistas analíticas.
+- `ml/`: modelos y predicciones con BigQuery ML.
