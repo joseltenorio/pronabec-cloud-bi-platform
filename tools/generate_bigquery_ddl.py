@@ -54,7 +54,10 @@ HEADER = """-- =================================================================
 
 
 def load_dotenv_if_available() -> None:
-    """Carga variables desde .env en ejecución local, si python-dotenv está disponible."""
+    """Carga variables desde .env en ejecución local, salvo que se desactive explícitamente."""
+    if os.getenv("DISABLE_DOTENV") == "1":
+        return
+
     try:
         from dotenv import load_dotenv
     except ImportError:
