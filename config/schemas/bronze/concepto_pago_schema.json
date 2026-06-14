@@ -3,7 +3,7 @@
   { "name": "nro_fila", "type": "STRING", "mode": "NULLABLE" },
   { "name": "tipo_subvencion", "type": "STRING", "mode": "NULLABLE" },
   { "name": "concepto", "type": "STRING", "mode": "NULLABLE" },
-  { "name": "subconcepto", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "categoria", "type": "STRING", "mode": "NULLABLE" },
   { "name": "modalidad", "type": "STRING", "mode": "NULLABLE" },
   { "name": "estado", "type": "STRING", "mode": "NULLABLE" },
   { "name": "aplica_descuento", "type": "STRING", "mode": "NULLABLE" },

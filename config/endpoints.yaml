@@ -9,13 +9,13 @@ pronabec:
       expected_columns:
         - nro_fila
         - convocatoria
-        - departamento
+        - region
         - motivo_perdida
         - tipo_resolucion
         - fecha_resolucion
-        - fecha_inicio_beca
-        - tipo_ies
-        - institucion
+        - fecha_postulacion
+        - tipo_ie
+        - insti_educ
         - sede
         - carrera
         - sexo
@@ -41,7 +41,7 @@ pronabec:
         - nro_fila
         - tipo_subvencion
         - concepto
-        - subconcepto
+        - categoria
         - modalidad
         - estado
         - aplica_descuento
@@ -54,10 +54,10 @@ pronabec:
       expected_columns:
         - nro_fila
         - id_convocatoria
-        - codigo_convocatoria
-        - nombre_convocatoria
-        - nombre_programa
+        - codigo_anual
+        - description_conv
         - modalidad
+        - programa
         - vacantes
         - etapas
         - fecha_fin_convocatoria
@@ -78,7 +78,7 @@ pronabec:
       enabled: true
       expected_columns:
         - nro_fila
-        - departamento
+        - region
         - provincia
         - b18_n
         - b18_pct
@@ -107,7 +107,7 @@ pronabec:
       expected_columns:
         - nro_fila
         - codigo_ubigeo
-        - departamento
+        - region
         - provincia
         - distrito
         - fecha_carga

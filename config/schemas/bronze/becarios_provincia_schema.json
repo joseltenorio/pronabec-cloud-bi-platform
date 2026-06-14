@@ -1,7 +1,7 @@
 [
   { "name": "source_row_id", "type": "STRING", "mode": "NULLABLE" },
   { "name": "nro_fila", "type": "STRING", "mode": "NULLABLE" },
-  { "name": "departamento", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "region", "type": "STRING", "mode": "NULLABLE" },
   { "name": "provincia", "type": "STRING", "mode": "NULLABLE" },
   { "name": "b18_n", "type": "STRING", "mode": "NULLABLE" },
   { "name": "b18_pct", "type": "STRING", "mode": "NULLABLE" },

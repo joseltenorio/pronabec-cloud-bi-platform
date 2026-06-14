@@ -2,7 +2,7 @@
   { "name": "source_row_id", "type": "STRING", "mode": "NULLABLE" },
   { "name": "nro_fila", "type": "STRING", "mode": "NULLABLE" },
   { "name": "codigo_ubigeo", "type": "STRING", "mode": "NULLABLE" },
-  { "name": "departamento", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "region", "type": "STRING", "mode": "NULLABLE" },
   { "name": "provincia", "type": "STRING", "mode": "NULLABLE" },
   { "name": "distrito", "type": "STRING", "mode": "NULLABLE" },
   { "name": "fecha_carga", "type": "STRING", "mode": "NULLABLE" }
