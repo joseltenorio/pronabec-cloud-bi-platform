@@ -160,51 +160,145 @@ A partir del profiling inicial se identificaron los siguientes puntos:
 
 ### Descripción
 
-La Consulta Amigable del Ministerio de Economía y Finanzas permite consultar información presupuestal pública. Para este proyecto se considera la información relacionada con PRONABEC o con la unidad ejecutora correspondiente a becas y crédito educativo.
+La Consulta Amigable del Ministerio de Economía y Finanzas (MEF) permite consultar información presupuestal pública. Para este proyecto, se extrae la información correspondiente al presupuesto anual y ejecución financiera de la Unidad Ejecutora de PRONABEC.
+
+* **Fuente**: MEF Consulta Amigable - Navegador
+* **URL base**: `https://apps5.mineco.gob.pe/transparencia/Navegador/`
 
 ### Justificación de uso
 
-Esta fuente permite incorporar el componente financiero al análisis. Al cruzar presupuesto con cobertura, becarios, convocatorias y rendimiento académico, el proyecto puede responder preguntas sobre ejecución presupuestal, evolución del presupuesto y relación entre recursos públicos y alcance de los programas de becas.
+Esta fuente permite incorporar la perspectiva financiera a la plataforma. Al cruzar presupuesto con cobertura, becarios, convocatorias y rendimiento académico, el proyecto puede responder preguntas sobre ejecución presupuestal, evolución del presupuesto y la relación entre recursos asignados y alcance territorial/operativo de los programas.
 
-### Campos esperados
+### Diferencias de Configuración e Ingesta con PRONABEC
 
-| Campo                | Descripción                             |
-| -------------------- | --------------------------------------- |
-| `ano`                | Año fiscal consultado                   |
-| `ejecutora_nombre`   | Nombre de la entidad o unidad ejecutora |
-| `pia`                | Presupuesto Institucional de Apertura   |
-| `pim`                | Presupuesto Institucional Modificado    |
-| `certificacion`      | Monto certificado                       |
-| `compromiso_anual`   | Compromiso anual                        |
-| `compromiso_mensual` | Compromiso mensual                      |
-| `devengado`          | Monto devengado                         |
-| `girado`             | Monto girado                            |
-| `avance_porcentaje`  | Porcentaje de avance presupuestal       |
+La fuente del MEF difiere significativamente del patrón de extracción de PRONABEC:
 
-### Método de ingesta
+* **PRONABEC**:
+  * Usa endpoints homogéneos en formato JSON del portal: `/Dataset/Listar<Dataset>`.
+  * Cada dataset se registra en [endpoints.yaml](file:///c:/Users/Windows%2011/Desktop/Proyectos/pronabec-cloud-bi-platform/config/endpoints.yaml) especificando `name`, `path`, `enabled` y `expected_columns`.
+  * El extractor común mapea el arreglo `rows[].cell` usando `expected_columns` de forma automática.
+* **MEF**:
+  * No expone endpoints JSON tabulares homogéneos.
+  * Consiste en una aplicación web clásica basada en formularios ASP.NET con estado de vista (`__VIEWSTATE`, `__EVENTVALIDATION`), navegación jerárquica y dinámicas del lado del servidor.
+  * El extractor realiza un raspado web (scraping) controlado simulando navegación HTTP mediante peticiones GET y POST consecutivas utilizando `requests.Session` y `BeautifulSoup`. No requiere ni usa Selenium.
+  * Por ello, toda la lógica de navegación vive de forma dura y estructurada en [scrape_mef_budget.py](file:///c:/Users/Windows%2011/Desktop/Proyectos/pronabec-cloud-bi-platform/pipelines/scrape_mef_budget.py).
+  * La URL base de Consulta Amigable se maneja como constante del extractor.
+  * El archivo [endpoints.yaml](file:///c:/Users/Windows%2011/Desktop/Proyectos/pronabec-cloud-bi-platform/config/endpoints.yaml) conserva principalmente la definición de las columnas esperadas del dataset `presupuesto_mef` para fines de validación técnica, pero no gobierna el flujo de la navegación.
 
-La ingesta se realizará mediante un scraper batch controlado en Python. El resultado se almacenará en Cloud Storage dentro de la capa Bronze.
+### Flujo de Navegación del Scraper
 
-A diferencia de PRONABEC, MEF no se tratará inicialmente como un endpoint JSON tabular. El scraper será responsable de producir una salida tabular controlada.
+El scraper navega de forma programática por la jerarquía del portal Consulta Amigable usando la siguiente ruta de selección:
 
-### Ruta esperada en Bronze
+1. **Año fiscal**: Determinado por el año consultado (ej. 2026, o rango indicado por `--start-year` y `--end-year`).
+2. **Tipo de registro**: Actividades/Proyectos (`ActProy`).
+3. **Nivel de Gobierno**: GOBIERNO NACIONAL.
+4. **Sector**: EDUCACION.
+5. **Pliego**: `010: M. DE EDUCACION`.
+6. **Unidad Ejecutora**: `117-1438: PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO`.
+   *(Nota: Se observó y confirmó en pruebas reales del portal que el código ejecutor de PRONABEC es `117-1438`, y no `117-1483` como se estimó inicialmente).*
 
-```text
-gs://<bucket>/bronze/mef/presupuesto/extraction_date=YYYY-MM-DD/data.csv
+Como mecanismo de resiliencia ante cambios menores de texto en la tabla de la página final, el scraper implementa búsquedas alternativas por palabras clave (fallbacks) en el siguiente orden:
+1. `["117-1438", "PROGRAMA NACIONAL DE BECAS", "CREDITO EDUCATIVO"]`
+2. `["BECAS", "CREDITO"]`
+3. `["PRONABEC"]`
+
+### Campos Extraídos y Mapeo a Bronze
+
+El portal MEF expone columnas presupuestales tradicionales en su tabla final. El extractor captura estas columnas y las normaliza al contrato de la capa Bronze definido en [presupuesto_mef_schema.json](file:///c:/Users/Windows%2011/Desktop/Proyectos/pronabec-cloud-bi-platform/config/schemas/bronze/presupuesto_mef_schema.json):
+
+| Columna en Portal MEF | Columna en Contrato Bronze | Descripción |
+| :--- | :--- | :--- |
+| (Parámetro) | `ano` | Año fiscal consultado |
+| Nombre de Fila Ejecutora | `ejecutora_nombre` | Nombre o código de la Unidad Ejecutora |
+| PIA | `pia` | Presupuesto Institucional de Apertura |
+| PIM | `pim` | Presupuesto Institucional Modificado |
+| Certificación | `certificacion` | Monto certificado acumulado |
+| Compromiso Anual | `compromiso_anual` | Compromiso anual acumulado |
+| Atención de Compromiso Mensual | `compromiso_mensual` | Compromiso mensual acumulado |
+| Devengado | `devengado` | Monto devengado acumulado |
+| Girado | `girado` | Monto girado acumulado |
+| Avance % | `avance_porcentaje` | Porcentaje de avance de la ejecución presupuestal |
+
+### Método de Ingesta y Parámetros
+
+El método principal de ingesta es mediante el modo de raspado real, habilitado con el flag `--consulta-amigable`. El extractor de MEF se ejecuta mediante:
+
+```bash
+python -m pipelines.scrape_mef_budget --consulta-amigable [argumentos]
 ```
 
-### Frecuencia esperada
+#### Parámetros del Scraper:
+* `--consulta-amigable`: Activa el modo de scraping interactivo directo contra el portal web de Consulta Amigable.
+* `--start-year` / `--end-year`: Especifican el rango de años fiscales a consultar.
+* `--extraction-date`: Registra de manera lógica la fecha de la foto de los datos (formato `YYYY-MM-DD`).
+* `--dry-run`: Habilita la ejecución local sin interacción de escritura contra Google Cloud Storage.
+* `--output-dir`: Especifica la ruta base local del sistema de archivos para guardar resultados cuando se usa `--dry-run`.
 
-La frecuencia recomendada es semanal o mensual, debido a que el análisis presupuestal no requiere actualización en tiempo real.
+### Salidas y Rutas en Bronze
 
-### Consideraciones
+* **Ruta GCS en producción**:
+  ```text
+  gs://<bucket>/bronze/mef/presupuesto/extraction_date=YYYY-MM-DD/data.csv
+  ```
 
-- El scraping puede ser más frágil que una API.
-- Si el portal cambia su estructura, el extractor puede requerir mantenimiento.
-- Se deben registrar logs por año consultado.
-- Se deben validar montos numéricos y años fiscales.
-- Los montos deben convertirse a tipos numéricos en Silver.
-- El porcentaje de avance debe normalizarse antes de ser usado en métricas Gold.
+* **Ruta Local en modo Dry-Run** (ej. usando `--output-dir tmp`):
+  Cuando se indica `--output-dir tmp`, las salidas quedan ordenadas de forma clara según la partición:
+  * Archivo de datos normalizado (CSV):
+    ```text
+    tmp/bronze/mef/presupuesto/extraction_date=YYYY-MM-DD/data.csv
+    ```
+  * Archivo de auditoría/metadatos (JSON):
+    ```text
+    tmp/bronze/mef/presupuesto/extraction_date=YYYY-MM-DD/extraction_metadata.json
+    ```
+  *(Nota: Si se usa `--output-dir tmp/local_bronze`, la estructura resultante se alojará bajo `tmp/local_bronze/bronze/...`).*
+
+### Comando de Prueba Local Recomendado
+
+Para verificar el funcionamiento del scraper en un entorno local seguro de forma aislada, se aconseja ejecutar los siguientes comandos en PowerShell:
+
+* **Prueba para un año individual (2026)**:
+  ```powershell
+  python -m pipelines.scrape_mef_budget `
+    --consulta-amigable `
+    --extraction-date 2026-06-14 `
+    --start-year 2026 `
+    --end-year 2026 `
+    --dry-run `
+    --output-dir tmp
+  ```
+
+* **Prueba para rango de años (2024-2026)**:
+  ```powershell
+  python -m pipelines.scrape_mef_budget `
+    --consulta-amigable `
+    --extraction-date 2026-06-14 `
+    --start-year 2024 `
+    --end-year 2026 `
+    --dry-run `
+    --output-dir tmp
+  ```
+
+* **Comandos de Verificación de Resultados**:
+  ```powershell
+  # 1. Verificar la estructura física generada en tmp
+  Get-ChildItem -Recurse tmp\bronze\mef
+
+  # 2. Previsualizar las primeras líneas del archivo CSV
+  Get-Content tmp\bronze\mef\presupuesto\extraction_date=2026-06-14\data.csv -TotalCount 5
+
+  # 3. Leer el contenido de metadatos de auditoría
+  Get-Content tmp\bronze\mef\presupuesto\extraction_date=2026-06-14\extraction_metadata.json -TotalCount 30
+  ```
+
+### Riesgos y Mitigación
+
+* **Fragilidad del Scraping (Riesgo Alto)**: Al depender de un portal web externo que utiliza ASP.NET, cambios en el HTML, variaciones en los IDs de los botones del formulario (ej. `ctl00$CPH1$...`), reestructuraciones de la tabla o alteración del código de Unidad Ejecutora pueden romper la secuencia de peticiones.
+* **Mitigación y Plan de Contingencia**:
+  * El scraper implementa logs detallados y control de excepciones paso a paso.
+  * **Modos de Contingencia**: El script conserva los modos `--source-file` y `--source-url` para ingresar directamente un CSV local ya descargado de forma manual o una tabla HTML estática de contingencia. Estos se mantienen estrictamente como caminos de respaldo y no deben considerarse la vía principal de extracción.
+
+---
 
 ---
 

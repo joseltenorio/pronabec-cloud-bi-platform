@@ -120,6 +120,31 @@ Se evaluaron cuatro nuevos endpoints de PRONABEC para su incorporación en la ca
 - **Decisión de aceptación para Bronze**: Aceptado.
 - **Observaciones de calidad**: El campo `nota_promedio` se reporta con formato de coma decimal y múltiples posiciones decimales (ej. `14,500000`). Se almacena como `STRING` en la capa Bronze para evitar pérdidas de precisión o fallas en la ingesta cruda. `anio_convocatoria` y `fecha_carga` se mantienen como `STRING`.
 
+## Exploración y hallazgos sobre MEF Consulta Amigable
+
+Para incorporar datos presupuestales, se realizó una inspección y perfilado del portal Consulta Amigable del Ministerio de Economía y Finanzas (MEF) - Navegador de Transparencia Económica.
+
+### Proceso de Inspección
+Se verificó que el Navegador web del MEF permite filtrar dinámicamente la información pública por año fiscal y por la clasificación de **Actividades/Proyectos**. A través de la simulación del protocolo HTTP, se observó la jerarquía de navegación requerida para llegar a la información presupuestaria de la institución de becas:
+1. **Punto de Partida**: TOTAL (Presupuesto Nacional de la República).
+2. **Nivel de Gobierno**: Selección de `E: GOBIERNO NACIONAL`.
+3. **Sector**: Selección de `10: EDUCACION`.
+4. **Pliego**: Selección de `010: M. DE EDUCACION`.
+5. **Unidad Ejecutora**: Búsqueda en la tabla resultante del código correspondiente a PRONABEC.
+
+### Observaciones y Código Técnico de la Ejecutora
+Durante la fase de discovery real en el portal Consulta Amigable, se constató que:
+* La fila de la Unidad Ejecutora correspondiente a PRONABEC aparece identificada exactamente bajo el texto:
+  `117-1438: PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO`
+  *(Nota: Se corrigió una asunción inicial del proyecto donde se pensaba que el código era `117-1483`. Las pruebas y la inspección directa del portal retornaron consistentemente `117-1438`).*
+* La fila de datos contiene las siguientes métricas presupuestales en columnas contiguas:
+  `PIA` (Presupuesto Institucional de Apertura), `PIM` (Presupuesto Institucional Modificado), `Certificación`, `Compromiso Anual`, `Atención de Compromiso Mensual` (Compromiso Mensual), `Devengado`, `Girado` y `Avance %` (porcentaje de avance de la ejecución).
+
+### Decisiones de Diseño y Normalización
+1. **Implementación del Scraper**: Dado que Consulta Amigable es una aplicación ASP.NET clásica que mantiene estado en el servidor y utiliza formularios dinámicos, se descartó el uso de una API JSON sencilla. Se decidió implementar un scraping HTTP controlado basado en `requests.Session` y `BeautifulSoup` dentro de [scrape_mef_budget.py](file:///c:/Users/Windows%2011/Desktop/Proyectos/pronabec-cloud-bi-platform/pipelines/scrape_mef_budget.py).
+2. **Resiliencia / Fallbacks**: Como mitigación ante cambios de etiquetas en el portal, se definieron fallbacks que buscan en la tabla las palabras clave `BECAS + CREDITO` o `PRONABEC` si no se encuentra la ejecutora exacta `117-1438`.
+3. **Normalización del Contrato**: La salida se normaliza estructuralmente al contrato Bronze `presupuesto_mef` definido en [presupuesto_mef_schema.json](file:///c:/Users/Windows%2011/Desktop/Proyectos/pronabec-cloud-bi-platform/config/schemas/bronze/presupuesto_mef_schema.json), generando un archivo CSV alineado con los nombres estandarizados de columnas.
+
 ## Salidas locales
 
 Los archivos generados se almacenan en:

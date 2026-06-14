@@ -576,9 +576,10 @@ silver.presupuesto_mef
 
 ## Consideraciones de transformación
 
-- MEF se obtiene mediante scraper controlado.
-- El resultado Bronze de MEF será inicialmente tabular.
-- Los montos deben normalizarse antes de cargar la tabla Silver.
+- El dataset de presupuesto MEF se obtiene mediante un scraper controlado que lee directamente del portal Consulta Amigable.
+- En la capa Bronze, los datos se preservan en formato CSV crudo (`data.csv`), conservando las columnas (`ano`, `ejecutora_nombre`, `pia`, `pim`, `certificacion`, `compromiso_anual`, `compromiso_mensual`, `devengado`, `girado`, `avance_porcentaje`) como valores tabulares conservadores (generalmente representados como texto en el CSV de origen) para garantizar resiliencia en la ingesta.
+- El tipado fuerte (ej. conversión a `INTEGER` para el año, `NUMERIC` para montos y porcentajes) y la validación de negocio ocurren rigurosamente en la transformación hacia la capa Silver.
+- Los montos deben normalizarse y limpiarse de cualquier carácter extraño (comas, espacios) antes de materializarse en la tabla Silver.
 - El análisis presupuestal no requiere procesamiento en tiempo real.
 
 ---

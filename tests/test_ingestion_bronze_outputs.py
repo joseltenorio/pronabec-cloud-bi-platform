@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from pipelines.common.config import load_yaml_config
-from pipelines.extract_pronabec_api import (
+from pipelines.extract_pronabec import (
     consolidate_raw_payload,
     normalize_rows,
     write_dataset_to_local,
