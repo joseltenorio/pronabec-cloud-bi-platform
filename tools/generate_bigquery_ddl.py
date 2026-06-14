@@ -139,9 +139,14 @@ def render_bronze_table(
 ) -> str:
     columns = render_columns(schema)
 
-    if dataset == "presupuesto_mef":
-        table_name = f"{project_id}.bronze.mef_presupuesto_raw"
-        source_uri = f"gs://{bucket}/bronze/mef/presupuesto/extraction_date=*/data.csv"
+    if dataset.startswith("presupuesto_mef"):
+        if dataset == "presupuesto_mef":
+            slice_name = "presupuesto"
+        else:
+            slice_name = dataset.replace("presupuesto_mef_", "presupuesto_")
+
+        table_name = f"{project_id}.bronze.mef_{slice_name}_raw"
+        source_uri = f"gs://{bucket}/bronze/mef/{slice_name}/extraction_date=*/data.csv"
         options = f"""OPTIONS (
   format = 'CSV',
   uris = ['{source_uri}'],

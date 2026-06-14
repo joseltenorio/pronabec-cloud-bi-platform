@@ -233,11 +233,12 @@ def test_gcs_paths_consistency_with_ddl(tmp_path: Path) -> None:
             expected = pronabec_norm_tmpl.format(dataset=dataset_name, extraction_date="*")
             assert relative_path == expected, f"DDL path '{relative_path}' mismatch with pipeline.yaml expected '{expected}'"
         elif "bronze/mef/" in relative_path:
-            # Format is bronze/mef/presupuesto/extraction_date={extraction_date}/data.csv
-            match = re.match(r"bronze/mef/presupuesto/extraction_date=\*/data\.csv", relative_path)
+            # Format is bronze/mef/<slice>/extraction_date={extraction_date}/data.csv
+            match = re.match(r"bronze/mef/([^/]+)/extraction_date=\*/data\.csv", relative_path)
             assert match, f"DDL MEF path structure is invalid: {relative_path}"
+            slice_name = match.group(1)
 
-            expected = mef_tmpl.format(extraction_date="*")
+            expected = mef_tmpl.replace("presupuesto", slice_name).format(extraction_date="*")
             assert relative_path == expected, f"DDL path '{relative_path}' mismatch with pipeline.yaml expected '{expected}'"
         else:
             pytest.fail(f"Unknown bronze folder in external table DDL: {relative_path}")

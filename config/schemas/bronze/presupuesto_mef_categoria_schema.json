@@ -1,0 +1,15 @@
+[
+  { "name": "ano", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "periodo_tipo", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "periodo_valor", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "codigo_categoria", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "categoria_presupuestal", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "pia", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "pim", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "certificacion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "compromiso_anual", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "compromiso_mensual", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "devengado", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "girado", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "avance_porcentaje", "type": "STRING", "mode": "NULLABLE" }
+]

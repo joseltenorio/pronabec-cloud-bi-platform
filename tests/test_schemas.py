@@ -139,8 +139,12 @@ def test_bigquery_ddl_generator_writes_bronze_and_silver_sql(tmp_path: Path) -> 
     assert "CSV" in bronze_sql
     assert "test-project-id.bronze.pronabec_notas_becarios_raw" in bronze_sql
     assert "test-project-id.bronze.mef_presupuesto_raw" in bronze_sql
+    assert "test-project-id.bronze.mef_presupuesto_hierarchy_raw" in bronze_sql
+    assert "test-project-id.bronze.mef_presupuesto_producto_raw" in bronze_sql
     assert "gs://test-bucket-name/bronze/pronabec/notas_becarios" in bronze_sql
-    assert "gs://test-bucket-name/bronze/mef/presupuesto" in bronze_sql
+    assert "gs://test-bucket-name/bronze/mef/presupuesto/extraction_date" in bronze_sql
+    assert "gs://test-bucket-name/bronze/mef/presupuesto_hierarchy/extraction_date" in bronze_sql
+    assert "gs://test-bucket-name/bronze/mef/presupuesto_producto/extraction_date" in bronze_sql
 
     assert "Archivo Generado Automáticamente - No editar manualmente" in silver_sql
     assert "CREATE OR REPLACE TABLE" in silver_sql
