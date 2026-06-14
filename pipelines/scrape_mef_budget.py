@@ -44,11 +44,6 @@ DEFAULT_ENDPOINTS_CONFIG = "config/endpoints.yaml"
 DEFAULT_PIPELINE_CONFIG = "config/pipeline.yaml"
 DEFAULT_TIMEOUT_SECONDS = 90
 CONSULTA_AMIGABLE_BASE_URL = "https://apps5.mineco.gob.pe/transparencia/Navegador/"
-CONSULTA_AMIGABLE_DEFAULT_URL = CONSULTA_AMIGABLE_BASE_URL + "default.aspx"
-CONSULTA_AMIGABLE_NAVIGATE_URL = CONSULTA_AMIGABLE_BASE_URL + "Navegar.aspx"
-MEF_PRONABEC_EXECUTORA_NAME = (
-    "117-1438: PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO"
-)
 CONSULTA_AMIGABLE_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -58,6 +53,39 @@ CONSULTA_AMIGABLE_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "es-PE,es;q=0.9,en;q=0.8",
 }
+
+
+def get_consulta_amigable_base_url() -> str:
+    """
+    Obtiene la URL base de Consulta Amigable parametrizada.
+    """
+    base = os.getenv("MEF_CONSULTA_AMIGABLE_BASE_URL", CONSULTA_AMIGABLE_BASE_URL)
+    if not base.endswith("/"):
+        base += "/"
+    return base
+
+
+def get_consulta_amigable_default_url() -> str:
+    """
+    Obtiene la URL default.aspx construida a partir de la base.
+    """
+    return get_consulta_amigable_base_url() + "default.aspx"
+
+
+def get_consulta_amigable_navigate_url() -> str:
+    """
+    Obtiene la URL Navegar.aspx construida a partir de la base.
+    """
+    return get_consulta_amigable_base_url() + "Navegar.aspx"
+
+
+def get_mef_pronabec_executora_name() -> str:
+    """
+    Obtiene el nombre completo formateado de la Unidad Ejecutora de PRONABEC.
+    """
+    code = os.getenv("MEF_PRONABEC_EXECUTORA_CODE", "117-1438")
+    name = os.getenv("MEF_PRONABEC_EXECUTORA_NAME", "PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO")
+    return f"{code}: {name}"
 
 
 class MEFExtractionError(Exception):
@@ -377,14 +405,14 @@ def scrape_consulta_amigable_year(year: int, timeout: int = 60) -> dict[str, Any
         session.headers.update(CONSULTA_AMIGABLE_HEADERS)
 
         default_response = session.get(
-            CONSULTA_AMIGABLE_DEFAULT_URL,
+            get_consulta_amigable_default_url(),
             params=params,
             timeout=timeout,
         )
         default_response.raise_for_status()
 
         navigate_response = session.get(
-            CONSULTA_AMIGABLE_NAVIGATE_URL,
+            get_consulta_amigable_navigate_url(),
             params=params,
             timeout=timeout,
         )
@@ -438,11 +466,13 @@ def scrape_consulta_amigable_year(year: int, timeout: int = 60) -> dict[str, Any
             grp1_value=pliego_value,
         )
 
+        executora_code = os.getenv("MEF_PRONABEC_EXECUTORA_CODE", "117-1438")
+        executora_name = os.getenv("MEF_PRONABEC_EXECUTORA_NAME", "PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO")
+        name_parts = [p.strip() for p in re.split(r'\s+[yY]\s+', executora_name) if p.strip()]
+        primary_filters = [executora_code] + name_parts
+
         row = (
-            extract_mef_budget_row(
-                soup,
-                ["117-1438", "PROGRAMA NACIONAL DE BECAS", "CREDITO EDUCATIVO"],
-            )
+            extract_mef_budget_row(soup, primary_filters)
             or extract_mef_budget_row(soup, ["BECAS", "CREDITO"])
             or extract_mef_budget_row(soup, ["PRONABEC"])
         )
@@ -456,7 +486,7 @@ def scrape_consulta_amigable_year(year: int, timeout: int = 60) -> dict[str, Any
 
     return {
         "ano": year,
-        "ejecutora_nombre": ejecutora_nombre or MEF_PRONABEC_EXECUTORA_NAME,
+        "ejecutora_nombre": ejecutora_nombre or get_mef_pronabec_executora_name(),
         "pia": clean_mef_number(budget_values[0]),
         "pim": clean_mef_number(budget_values[1]),
         "certificacion": clean_mef_number(budget_values[2]),
@@ -874,21 +904,63 @@ def run_extraction(args: argparse.Namespace) -> None:
     mef_config = endpoints_config["mef"]
     expected_columns = get_mef_expected_columns(endpoints_config)
 
+    # 1. Determine source mode and paths following CLI > env > defaults priority
     if args.consulta_amigable:
         source_mode = "consulta_amigable"
-        source_url = CONSULTA_AMIGABLE_BASE_URL
+        source_url = get_consulta_amigable_base_url()
         source_file = None
     elif args.source_file:
         source_mode = "source_file"
         source_url = args.source_url or get_env_var("MEF_SOURCE_URL")
         source_file = args.source_file
-    else:
+    elif args.source_url:
         source_mode = "source_url"
-        source_url = args.source_url or get_env_var("MEF_SOURCE_URL")
+        source_url = args.source_url
         source_file = None
+    else:
+        # Fallback to env configurations
+        env_source_mode = os.getenv("MEF_SOURCE_MODE")
+        if env_source_mode == "consulta_amigable":
+            source_mode = "consulta_amigable"
+            source_url = get_consulta_amigable_base_url()
+            source_file = None
+        elif env_source_mode == "source_file":
+            env_source_file = os.getenv("MEF_SOURCE_FILE")
+            if not env_source_file:
+                raise ConfigError("MEF_SOURCE_MODE=source_file requiere configurar MEF_SOURCE_FILE en el entorno.")
+            source_mode = "source_file"
+            source_url = args.source_url or get_env_var("MEF_SOURCE_URL")
+            source_file = env_source_file
+        elif env_source_mode == "source_url":
+            env_source_url = os.getenv("MEF_SOURCE_URL")
+            if not env_source_url:
+                raise ConfigError("MEF_SOURCE_MODE=source_url requiere configurar MEF_SOURCE_URL en el entorno.")
+            source_mode = "source_url"
+            source_url = env_source_url
+            source_file = None
+        elif env_source_mode:
+            raise ConfigError(
+                f"Valor no válido para MEF_SOURCE_MODE: '{env_source_mode}'. "
+                "Debe ser: consulta_amigable, source_file o source_url."
+            )
+        else:
+            # If no CLI and no MEF_SOURCE_MODE, check if MEF_SOURCE_URL exists to default to source_url
+            env_source_url = os.getenv("MEF_SOURCE_URL")
+            if env_source_url:
+                source_mode = "source_url"
+                source_url = env_source_url
+                source_file = None
+            else:
+                raise ConfigError(
+                    "No se especificó fuente para MEF. "
+                    "Usa --consulta-amigable, --source-file, --source-url, "
+                    "o configura MEF_SOURCE_MODE en el entorno."
+                )
+
     extraction_date = args.extraction_date or date.today().isoformat()
     run_id = args.run_id or generate_run_id("mef_extraction")
 
+    # 2. Determine range of years: CLI > env > defaults
     start_year = args.start_year
     if start_year is None:
         start_year = parse_optional_int(
@@ -901,7 +973,19 @@ def run_extraction(args: argparse.Namespace) -> None:
             get_env_var(mef_config.get("end_year_env_var", "MEF_END_YEAR"))
         )
 
-    text_filter = args.text_filter or "PRONABEC"
+    # 3. Determine text filter: CLI > env > default
+    text_filter = args.text_filter
+    if text_filter is None:
+        text_filter = os.getenv("MEF_TEXT_FILTER", "PRONABEC")
+
+    # 4. Determine timeout: CLI > env > default
+    timeout = args.timeout
+    if timeout is None:
+        env_timeout = os.getenv("MEF_TIMEOUT_SECONDS")
+        if env_timeout:
+            timeout = int(env_timeout)
+        else:
+            timeout = DEFAULT_TIMEOUT_SECONDS
 
     log_event(
         logger,
@@ -921,27 +1005,27 @@ def run_extraction(args: argparse.Namespace) -> None:
     started_at = datetime.utcnow()
 
     try:
-        if args.consulta_amigable:
+        if source_mode == "consulta_amigable":
             if start_year is None or end_year is None:
                 raise ConfigError(
-                    "--consulta-amigable requiere --start-year y --end-year "
+                    "El modo consulta_amigable requiere --start-year y --end-year "
                     "o MEF_START_YEAR/MEF_END_YEAR."
                 )
 
             raw_records = scrape_consulta_amigable_range(
                 start_year=start_year,
                 end_year=end_year,
-                timeout=args.timeout,
+                timeout=timeout,
             )
         else:
             raw_records = fetch_mef_records(
                 source_url=source_url,
                 source_file=source_file,
-                timeout=args.timeout,
+                timeout=timeout,
                 table_index=args.table_index,
             )
 
-        if args.consulta_amigable:
+        if source_mode == "consulta_amigable":
             filtered_records = raw_records
         else:
             filtered_records = filter_records_by_text(raw_records, text_filter)
@@ -1047,7 +1131,7 @@ def run_extraction(args: argparse.Namespace) -> None:
         raise
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(args_list: list[str] | None = None) -> argparse.Namespace:
     """
     Lee argumentos CLI.
     """
@@ -1102,8 +1186,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--text-filter",
-        default=os.getenv("MEF_TEXT_FILTER", "PRONABEC"),
-        help="Texto usado para filtrar registros relacionados con PRONABEC.",
+        default=None,
+        help="Texto usado para filtrar registros relacionados con PRONABEC. Si se omite, se usa MEF_TEXT_FILTER o 'PRONABEC'.",
     )
     parser.add_argument(
         "--table-index",
@@ -1114,8 +1198,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--timeout",
         type=int,
-        default=DEFAULT_TIMEOUT_SECONDS,
-        help="Timeout HTTP por request en segundos.",
+        default=None,
+        help="Timeout HTTP por request en segundos. Si se omite, se usa MEF_TIMEOUT_SECONDS o 90.",
     )
     parser.add_argument(
         "--dry-run",
@@ -1128,10 +1212,15 @@ def parse_args() -> argparse.Namespace:
         help="Directorio local para salidas dry-run.",
     )
 
-    return parser.parse_args()
+    return parser.parse_args(args_list)
 
 
 def main() -> None:
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
     args = parse_args()
     run_extraction(args)
 

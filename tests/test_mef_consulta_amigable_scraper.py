@@ -290,3 +290,111 @@ def test_write_mef_to_local_includes_consulta_amigable_metadata(
         "source_url": CONSULTA_AMIGABLE_BASE_URL,
         "source_file": None,
     }
+
+
+def test_mef_scraper_parametrization_cli_vs_env(monkeypatch) -> None:
+    monkeypatch.setenv("MEF_SOURCE_MODE", "source_url")
+    monkeypatch.setenv("MEF_SOURCE_URL", "https://example.com/test.csv")
+    monkeypatch.setenv("GCS_BUCKET_NAME", "dummy-bucket")
+
+    called_modes = []
+
+    def mock_scrape_consulta_amigable_range(start_year, end_year, timeout):
+        called_modes.append("consulta_amigable")
+        return [{"ano": 2026, "ejecutora_nombre": "PRONABEC", "pia": 0, "pim": 0, "certificacion": 0, "compromiso_anual": 0, "compromiso_mensual": 0, "devengado": 0, "girado": 0, "avance_porcentaje": 0}]
+
+    def mock_fetch_mef_records(source_url, source_file, timeout, table_index):
+        called_modes.append("source_url")
+        return []
+
+    monkeypatch.setattr(scrape_mef_budget, "scrape_consulta_amigable_range", mock_scrape_consulta_amigable_range)
+    monkeypatch.setattr(scrape_mef_budget, "fetch_mef_records", mock_fetch_mef_records)
+
+    monkeypatch.setattr(scrape_mef_budget, "get_pipeline_settings", lambda config: {
+        "pipeline_name": "test",
+        "environment": "test",
+        "log_level": "INFO",
+        "bucket_name": "dummy-bucket",
+        "gcs_paths": {"mef_bronze": "mef_bronze"}
+    })
+
+    monkeypatch.setattr(scrape_mef_budget, "load_yaml_config", lambda config: {
+        "mef": {"expected_columns": ["ano", "ejecutora_nombre", "pia", "pim", "certificacion", "compromiso_anual", "compromiso_mensual", "devengado", "girado", "avance_porcentaje"]}
+    })
+
+    args = scrape_mef_budget.parse_args([
+        "--consulta-amigable",
+        "--start-year", "2026",
+        "--end-year", "2026",
+        "--dry-run"
+    ])
+    scrape_mef_budget.run_extraction(args)
+    assert "consulta_amigable" in called_modes
+    called_modes.clear()
+
+    monkeypatch.setenv("MEF_SOURCE_MODE", "consulta_amigable")
+    monkeypatch.setenv("MEF_START_YEAR", "2026")
+    monkeypatch.setenv("MEF_END_YEAR", "2026")
+
+    args_env = scrape_mef_budget.parse_args([
+        "--dry-run"
+    ])
+    scrape_mef_budget.run_extraction(args_env)
+    assert "consulta_amigable" in called_modes
+    called_modes.clear()
+
+    monkeypatch.setenv("MEF_START_YEAR", "2020")
+    monkeypatch.setenv("MEF_END_YEAR", "2020")
+
+    resolved_years = []
+    def mock_scrape_consulta_amigable_range_years(start_year, end_year, timeout):
+        resolved_years.append((start_year, end_year))
+        return [{"ano": 2026, "ejecutora_nombre": "PRONABEC", "pia": 0, "pim": 0, "certificacion": 0, "compromiso_anual": 0, "compromiso_mensual": 0, "devengado": 0, "girado": 0, "avance_porcentaje": 0}]
+
+    monkeypatch.setattr(scrape_mef_budget, "scrape_consulta_amigable_range", mock_scrape_consulta_amigable_range_years)
+
+    args_years = scrape_mef_budget.parse_args([
+        "--consulta-amigable",
+        "--start-year", "2026",
+        "--end-year", "2026",
+        "--dry-run"
+    ])
+    scrape_mef_budget.run_extraction(args_years)
+    assert resolved_years == [(2026, 2026)]
+    resolved_years.clear()
+
+    monkeypatch.setenv("MEF_TIMEOUT_SECONDS", "45")
+    resolved_timeouts = []
+    def mock_scrape_consulta_amigable_range_timeout(start_year, end_year, timeout):
+        resolved_timeouts.append(timeout)
+        return [{"ano": 2026, "ejecutora_nombre": "PRONABEC", "pia": 0, "pim": 0, "certificacion": 0, "compromiso_anual": 0, "compromiso_mensual": 0, "devengado": 0, "girado": 0, "avance_porcentaje": 0}]
+
+    monkeypatch.setattr(scrape_mef_budget, "scrape_consulta_amigable_range", mock_scrape_consulta_amigable_range_timeout)
+
+    args_timeout = scrape_mef_budget.parse_args([
+        "--consulta-amigable",
+        "--start-year", "2026",
+        "--end-year", "2026",
+        "--dry-run"
+    ])
+    scrape_mef_budget.run_extraction(args_timeout)
+    assert resolved_timeouts == [45]
+    resolved_timeouts.clear()
+
+
+def test_mef_scraper_parametrization_executora_and_base_url(monkeypatch) -> None:
+    monkeypatch.setenv("MEF_PRONABEC_EXECUTORA_CODE", "999-9999")
+    monkeypatch.setenv("MEF_PRONABEC_EXECUTORA_NAME", "UNIDAD PRUEBA DE BECAS Y FINANCIAMIENTO")
+    monkeypatch.setenv("MEF_CONSULTA_AMIGABLE_BASE_URL", "https://custom-mef.example.com/")
+
+    assert scrape_mef_budget.get_consulta_amigable_base_url() == "https://custom-mef.example.com/"
+    assert scrape_mef_budget.get_consulta_amigable_default_url() == "https://custom-mef.example.com/default.aspx"
+    assert scrape_mef_budget.get_consulta_amigable_navigate_url() == "https://custom-mef.example.com/Navegar.aspx"
+    assert scrape_mef_budget.get_mef_pronabec_executora_name() == "999-9999: UNIDAD PRUEBA DE BECAS Y FINANCIAMIENTO"
+
+    executora_code = "999-9999"
+    executora_name = "UNIDAD PRUEBA DE BECAS Y FINANCIAMIENTO"
+    import re
+    name_parts = [p.strip() for p in re.split(r'\s+[yY]\s+', executora_name) if p.strip()]
+    primary_filters = [executora_code] + name_parts
+    assert primary_filters == ["999-9999", "UNIDAD PRUEBA DE BECAS", "FINANCIAMIENTO"]
