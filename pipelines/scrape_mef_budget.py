@@ -102,6 +102,68 @@ MEF_BREAKDOWN_CONFIG = {
             "avance_porcentaje",
         ],
     },
+    "fuente": {
+        "button_name": "ctl00$CPH1$BtnFuenteAgregada",
+        "source_dataset": "presupuesto_fuente",
+        "code_field": "codigo_fuente",
+        "description_field": "fuente_financiamiento",
+        "fieldnames": [
+            "ano",
+            "periodo_tipo",
+            "periodo_valor",
+            "codigo_fuente",
+            "fuente_financiamiento",
+            "pia",
+            "pim",
+            "certificacion",
+            "compromiso_anual",
+            "compromiso_mensual",
+            "devengado",
+            "girado",
+            "avance_porcentaje",
+        ],
+    },
+    "rubro": {
+        "button_name": "ctl00$CPH1$BtnRubro",
+        "source_dataset": "presupuesto_rubro",
+        "code_field": "codigo_rubro",
+        "description_field": "rubro",
+        "fieldnames": [
+            "ano",
+            "periodo_tipo",
+            "periodo_valor",
+            "codigo_rubro",
+            "rubro",
+            "pia",
+            "pim",
+            "certificacion",
+            "compromiso_anual",
+            "compromiso_mensual",
+            "devengado",
+            "girado",
+            "avance_porcentaje",
+        ],
+    },
+    "departamento": {
+        "button_name": "ctl00$CPH1$BtnDepartamentoMeta",
+        "source_dataset": "presupuesto_departamento",
+        "code_field": None,
+        "description_field": "departamento",
+        "fieldnames": [
+            "ano",
+            "periodo_tipo",
+            "periodo_valor",
+            "departamento",
+            "pia",
+            "pim",
+            "certificacion",
+            "compromiso_anual",
+            "compromiso_mensual",
+            "devengado",
+            "girado",
+            "avance_porcentaje",
+        ],
+    },
 }
 DEFAULT_MEF_BREAKDOWN_SLICES = ["producto", "generica"]
 CONSULTA_AMIGABLE_BASE_URL = "https://apps5.mineco.gob.pe/transparencia/Navegador/"
@@ -652,16 +714,23 @@ def build_mef_breakdown_record(
         return None
 
     label = descriptors[-1]
-    code, description = split_mef_code_description(label)
+    code_field = config["code_field"]
+    description_field = config["description_field"]
+
+    if code_field:
+        code, description = split_mef_code_description(label)
+    else:
+        code = ""
+        description = clean_cell_value(label)
+
     if not description:
         return None
 
-    return {
+    record = {
         "ano": str(ano),
         "periodo_tipo": periodo_tipo,
         "periodo_valor": periodo_valor,
-        config["code_field"]: code,
-        config["description_field"]: description,
+        description_field: description,
         "pia": budget_values[0],
         "pim": budget_values[1],
         "certificacion": budget_values[2],
@@ -671,6 +740,11 @@ def build_mef_breakdown_record(
         "girado": budget_values[6],
         "avance_porcentaje": budget_values[7],
     }
+
+    if code_field:
+        record[code_field] = code
+
+    return record
 
 
 def extract_mef_breakdown_rows(
@@ -720,8 +794,9 @@ def extract_mef_breakdown_rows(
                 continue
 
             config = MEF_BREAKDOWN_CONFIG[slice_name]
+            code_field = config["code_field"]
             key = (
-                record[config["code_field"]],
+                record[code_field] if code_field else "",
                 record[config["description_field"]],
             )
             if key in seen:

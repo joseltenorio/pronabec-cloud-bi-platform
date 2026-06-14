@@ -270,6 +270,15 @@ def test_split_mef_code_description_handles_hierarchy_labels() -> None:
         "2.3",
         "BIENES Y SERVICIOS",
     )
+    assert split_mef_code_description("1: RECURSOS ORDINARIOS") == (
+        "1",
+        "RECURSOS ORDINARIOS",
+    )
+    assert split_mef_code_description("00: RECURSOS ORDINARIOS") == (
+        "00",
+        "RECURSOS ORDINARIOS",
+    )
+    assert split_mef_code_description("15: LIMA") == ("15", "LIMA")
     assert split_mef_code_description("SIN CODIGO") == ("", "SIN CODIGO")
 
 
@@ -369,11 +378,65 @@ def test_extract_mef_generica_breakdown_rows_from_fake_html() -> None:
     assert records[1]["generica"] == "OTROS GASTOS"
 
 
+def test_extract_mef_funding_and_geography_breakdown_rows_from_fake_html() -> None:
+    fuente_records = extract_mef_breakdown_rows(
+        soup=soup_from_html(
+            breakdown_table(
+                "1: RECURSOS ORDINARIOS",
+                "3: RECURSOS POR OPERACIONES OFICIALES DE CREDITO",
+            )
+        ),
+        ano=2026,
+        slice_name="fuente",
+    )
+    rubro_records = extract_mef_breakdown_rows(
+        soup=soup_from_html(
+            breakdown_table(
+                "00: RECURSOS ORDINARIOS",
+                "15: FONDO DE COMPENSACION REGIONAL",
+            )
+        ),
+        ano=2026,
+        slice_name="rubro",
+    )
+    departamento_records = extract_mef_breakdown_rows(
+        soup=soup_from_html(
+            breakdown_table(
+                "LIMA",
+                "15: LIMA",
+            )
+        ),
+        ano=2026,
+        slice_name="departamento",
+    )
+
+    assert fuente_records[0]["codigo_fuente"] == "1"
+    assert fuente_records[0]["fuente_financiamiento"] == "RECURSOS ORDINARIOS"
+    assert fuente_records[1]["codigo_fuente"] == "3"
+    assert fuente_records[1]["fuente_financiamiento"] == (
+        "RECURSOS POR OPERACIONES OFICIALES DE CREDITO"
+    )
+
+    assert rubro_records[0]["codigo_rubro"] == "00"
+    assert rubro_records[0]["rubro"] == "RECURSOS ORDINARIOS"
+    assert rubro_records[1]["codigo_rubro"] == "15"
+    assert rubro_records[1]["rubro"] == "FONDO DE COMPENSACION REGIONAL"
+
+    assert departamento_records[0]["departamento"] == "LIMA"
+    assert departamento_records[1]["departamento"] == "15: LIMA"
+    assert "codigo_departamento" not in departamento_records[1]
+
+
 def test_parse_breakdown_slices_defaults_cli_and_env_values() -> None:
     assert parse_breakdown_slices(None) == ["producto", "generica"]
     assert parse_breakdown_slices("") == ["producto", "generica"]
     assert parse_breakdown_slices("producto,generica") == ["producto", "generica"]
     assert parse_breakdown_slices(" generica ") == ["generica"]
+    assert parse_breakdown_slices("fuente,rubro,departamento") == [
+        "fuente",
+        "rubro",
+        "departamento",
+    ]
 
 
 class FakeResponse:
@@ -559,64 +622,60 @@ def test_write_mef_hierarchy_to_local_includes_metadata(tmp_path: Path) -> None:
 
 def test_write_mef_breakdown_to_local_includes_metadata(tmp_path: Path) -> None:
     logger_mock = type("MockLogger", (), {"log": lambda *args, **kwargs: None})()
-    producto_records = extract_mef_breakdown_rows(
-        soup_from_html(breakdown_table("3000885: ENTREGA DE BECA")),
-        ano=2026,
-        slice_name="producto",
-    )
-    generica_records = extract_mef_breakdown_rows(
-        soup_from_html(breakdown_table("2.3: BIENES Y SERVICIOS")),
-        ano=2026,
-        slice_name="generica",
-    )
+    slice_examples = {
+        "producto": (
+            "3000885: ENTREGA DE BECA",
+            "presupuesto_producto",
+        ),
+        "generica": (
+            "2.3: BIENES Y SERVICIOS",
+            "presupuesto_generica",
+        ),
+        "fuente": (
+            "1: RECURSOS ORDINARIOS",
+            "presupuesto_fuente",
+        ),
+        "rubro": (
+            "00: RECURSOS ORDINARIOS",
+            "presupuesto_rubro",
+        ),
+        "departamento": (
+            "15: LIMA",
+            "presupuesto_departamento",
+        ),
+    }
 
-    producto_result = write_mef_breakdown_to_local(
-        records=producto_records,
-        extraction_date="2026-06-14",
-        output_dir=tmp_path,
-        run_id="test_run",
-        records_read=len(producto_records),
-        source_url=CONSULTA_AMIGABLE_BASE_URL,
-        slice_name="producto",
-        logger=logger_mock,
-        source_mode="consulta_amigable",
-    )
-    generica_result = write_mef_breakdown_to_local(
-        records=generica_records,
-        extraction_date="2026-06-14",
-        output_dir=tmp_path,
-        run_id="test_run",
-        records_read=len(generica_records),
-        source_url=CONSULTA_AMIGABLE_BASE_URL,
-        slice_name="generica",
-        logger=logger_mock,
-        source_mode="consulta_amigable",
-    )
+    for slice_name, (label, dataset) in slice_examples.items():
+        records = extract_mef_breakdown_rows(
+            soup_from_html(breakdown_table(label)),
+            ano=2026,
+            slice_name=slice_name,
+        )
 
-    producto_csv = Path(producto_result["output_uri"])
-    generica_csv = Path(generica_result["output_uri"])
+        result = write_mef_breakdown_to_local(
+            records=records,
+            extraction_date="2026-06-14",
+            output_dir=tmp_path,
+            run_id="test_run",
+            records_read=len(records),
+            source_url=CONSULTA_AMIGABLE_BASE_URL,
+            slice_name=slice_name,
+            logger=logger_mock,
+            source_mode="consulta_amigable",
+        )
 
-    assert str(producto_csv.parent).replace("\\", "/").endswith(
-        "bronze/mef/presupuesto_producto/extraction_date=2026-06-14"
-    )
-    assert str(generica_csv.parent).replace("\\", "/").endswith(
-        "bronze/mef/presupuesto_generica/extraction_date=2026-06-14"
-    )
-    assert producto_csv.exists()
-    assert generica_csv.exists()
+        csv_path = Path(result["output_uri"])
+        assert str(csv_path.parent).replace("\\", "/").endswith(
+            f"bronze/mef/{dataset}/extraction_date=2026-06-14"
+        )
+        assert csv_path.exists()
 
-    producto_metadata = json.loads(
-        Path(producto_result["metadata_path"]).read_text(encoding="utf-8")
-    )
-    generica_metadata = json.loads(
-        Path(generica_result["metadata_path"]).read_text(encoding="utf-8")
-    )
-
-    assert producto_metadata["source_dataset"] == "presupuesto_producto"
-    assert producto_metadata["metadata"]["breakdown_slice"] == "producto"
-    assert generica_metadata["source_dataset"] == "presupuesto_generica"
-    assert generica_metadata["metadata"]["breakdown_slice"] == "generica"
-    assert producto_metadata["metadata"]["source_system"] == "MEF"
+        metadata = json.loads(
+            Path(result["metadata_path"]).read_text(encoding="utf-8")
+        )
+        assert metadata["source_dataset"] == dataset
+        assert metadata["metadata"]["breakdown_slice"] == slice_name
+        assert metadata["metadata"]["source_system"] == "MEF"
 
 
 def test_mef_scraper_parametrization_cli_vs_env(monkeypatch) -> None:
@@ -1118,6 +1177,137 @@ def test_run_extraction_with_spending_breakdowns_writes_selected_slices(
     )
     assert producto_metadata["metadata"]["breakdown_slice"] == "producto"
     assert generica_metadata["metadata"]["breakdown_slice"] == "generica"
+
+
+def test_run_extraction_with_funding_and_geography_breakdowns_writes_slices(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("GCS_BUCKET_NAME", "dummy-bucket")
+
+    monkeypatch.setattr(
+        scrape_mef_budget,
+        "get_pipeline_settings",
+        lambda config: {
+            "pipeline_name": "test",
+            "environment": "test",
+            "log_level": "INFO",
+            "bucket_name": "dummy-bucket",
+            "gcs_paths": {"mef_bronze": "mef_bronze"},
+        },
+    )
+    monkeypatch.setattr(
+        scrape_mef_budget,
+        "load_yaml_config",
+        lambda config: {
+            "mef": {
+                "expected_columns": [
+                    "ano",
+                    "ejecutora_nombre",
+                    "pia",
+                    "pim",
+                    "certificacion",
+                    "compromiso_anual",
+                    "compromiso_mensual",
+                    "devengado",
+                    "girado",
+                    "avance_porcentaje",
+                ]
+            }
+        },
+    )
+
+    captured_slices = []
+
+    def fake_range_snapshot(
+        start_year,
+        end_year,
+        timeout,
+        include_hierarchy,
+        breakdown_slices,
+    ):
+        captured_slices.extend(breakdown_slices)
+        return {
+            "budget_records": [
+                {
+                    "ano": 2026,
+                    "ejecutora_nombre": PRONABEC_EXECUTORA,
+                    "pia": 1429676488.0,
+                    "pim": 1607711495.0,
+                    "certificacion": 1590100549.0,
+                    "compromiso_anual": 1138467562.0,
+                    "compromiso_mensual": 675591756.0,
+                    "devengado": 662693665.0,
+                    "girado": 660194362.0,
+                    "avance_porcentaje": 41.2,
+                }
+            ],
+            "hierarchy_records": [],
+            "breakdown_records": {
+                "fuente": extract_mef_breakdown_rows(
+                    soup_from_html(breakdown_table("1: RECURSOS ORDINARIOS")),
+                    ano=2026,
+                    slice_name="fuente",
+                ),
+                "rubro": extract_mef_breakdown_rows(
+                    soup_from_html(breakdown_table("00: RECURSOS ORDINARIOS")),
+                    ano=2026,
+                    slice_name="rubro",
+                ),
+                "departamento": extract_mef_breakdown_rows(
+                    soup_from_html(breakdown_table("15: LIMA")),
+                    ano=2026,
+                    slice_name="departamento",
+                ),
+            },
+        }
+
+    monkeypatch.setattr(
+        scrape_mef_budget,
+        "scrape_consulta_amigable_range_snapshot",
+        fake_range_snapshot,
+    )
+
+    args = scrape_mef_budget.parse_args(
+        [
+            "--consulta-amigable",
+            "--extraction-date",
+            "2026-06-14",
+            "--start-year",
+            "2026",
+            "--end-year",
+            "2026",
+            "--include-spending-breakdowns",
+            "--breakdown-slices",
+            "fuente,rubro,departamento",
+            "--dry-run",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+    scrape_mef_budget.run_extraction(args)
+
+    assert captured_slices == ["fuente", "rubro", "departamento"]
+
+    expected_paths = {
+        "fuente": "presupuesto_fuente",
+        "rubro": "presupuesto_rubro",
+        "departamento": "presupuesto_departamento",
+    }
+    for slice_name, dataset in expected_paths.items():
+        slice_path = (
+            tmp_path
+            / "bronze"
+            / "mef"
+            / dataset
+            / "extraction_date=2026-06-14"
+        )
+        assert (slice_path / "data.csv").exists()
+        metadata = json.loads(
+            (slice_path / "extraction_metadata.json").read_text(encoding="utf-8")
+        )
+        assert metadata["source_dataset"] == dataset
+        assert metadata["metadata"]["breakdown_slice"] == slice_name
 
 
 def test_mef_scraper_parametrization_executora_and_base_url(monkeypatch) -> None:
