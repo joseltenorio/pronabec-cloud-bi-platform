@@ -124,6 +124,77 @@ pronabec:
         - mes_nombre
         - fecha_carga
 
+    - name: colegios_habiles
+      path: ColegiosHabiles
+      description: "Instituciones educativas hábiles registradas en el portal de Datos Abiertos de PRONABEC."
+      enabled: true
+      expected_columns:
+        - nro_fila
+        - ugel
+        - institucion_educativa
+        - tipo_gestion
+        - nivel_modalidad
+        - forma_atencion
+        - centro_poblado
+        - distrito
+        - direccion
+        - telefono
+        - fecha_carga
+
+        - name: becarios_pais_estudio
+      path: BecariosPorPaisDeEstudio
+      description: "Becarios registrados por país de estudio, modalidad, convocatoria, tipo de institución, institución y sexo."
+      enabled: false
+      expected_columns:
+        - nro_fila
+        - modalidad
+        - convocatoria
+        - pais_estudio
+        - tipo_institucion
+        - institucion
+        - sexo
+        - fecha_carga
+
+    - name: convocatorias_carrera_sede
+      path: ConvocatoriaPorCarreraSede
+      description: "Convocatorias por carrera, sede, institución educativa y datos administrativos de oferta académica."
+      enabled: false
+      expected_columns:
+        - nro_fila
+        - id_convocatoria
+        - convocatoria
+        - pais_origen
+        - nivel_educativo
+        - tipo_institucion
+        - sede
+        - institucion
+        - carrera
+        - resolucion
+        - gestion
+        - abreviatura
+        - region
+        - web
+        - representante
+        - telefono
+        - ruc
+        - email
+        - fecha_carga
+
+    - name: nota_postulante_region
+      path: NotaPromedioDelPostulantePorRegion
+      description: "Nota promedio de postulantes por región, modalidad, año de convocatoria, tipo de institución, institución educativa y semestre."
+      enabled: false
+      expected_columns:
+        - nro_fila
+        - region
+        - nota_promedio
+        - modalidad
+        - anio_convocatoria
+        - tipo_institucion
+        - institucion_educativa
+        - semestre
+        - fecha_carga
+
 mef:
   source_name: "MEF Consulta Amigable"
   description: "Información presupuestal pública relacionada con PRONABEC."
