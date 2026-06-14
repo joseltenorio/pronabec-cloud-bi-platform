@@ -47,7 +47,7 @@ CONSULTA_AMIGABLE_BASE_URL = "https://apps5.mineco.gob.pe/transparencia/Navegado
 CONSULTA_AMIGABLE_DEFAULT_URL = CONSULTA_AMIGABLE_BASE_URL + "default.aspx"
 CONSULTA_AMIGABLE_NAVIGATE_URL = CONSULTA_AMIGABLE_BASE_URL + "Navegar.aspx"
 MEF_PRONABEC_EXECUTORA_NAME = (
-    "117-1483: PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO"
+    "117-1438: PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO"
 )
 CONSULTA_AMIGABLE_HEADERS = {
     "User-Agent": (
@@ -441,7 +441,7 @@ def scrape_consulta_amigable_year(year: int, timeout: int = 60) -> dict[str, Any
         row = (
             extract_mef_budget_row(
                 soup,
-                ["117-1483", "PROGRAMA NACIONAL DE BECAS", "CREDITO EDUCATIVO"],
+                ["117-1438", "PROGRAMA NACIONAL DE BECAS", "CREDITO EDUCATIVO"],
             )
             or extract_mef_budget_row(soup, ["BECAS", "CREDITO"])
             or extract_mef_budget_row(soup, ["PRONABEC"])
