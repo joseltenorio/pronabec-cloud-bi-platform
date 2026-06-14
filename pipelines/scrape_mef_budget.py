@@ -164,8 +164,50 @@ MEF_BREAKDOWN_CONFIG = {
             "avance_porcentaje",
         ],
     },
+    "temporal": {
+        "button_name": "ctl00$CPH1$BtnMes",
+        "button_names": [
+            "ctl00$CPH1$BtnMes",
+            "ctl00$CPH1$BtnTrimestre",
+            "ctl00$CPH1$BtnPeriodo",
+        ],
+        "source_dataset": "presupuesto_temporal",
+        "code_field": None,
+        "description_field": None,
+        "fieldnames": [
+            "ano",
+            "periodo_tipo",
+            "periodo_valor",
+            "trimestre",
+            "mes_numero",
+            "mes_nombre",
+            "pia",
+            "pim",
+            "certificacion",
+            "compromiso_anual",
+            "compromiso_mensual",
+            "devengado",
+            "girado",
+            "avance_porcentaje",
+        ],
+    },
 }
 DEFAULT_MEF_BREAKDOWN_SLICES = ["producto", "generica"]
+MEF_MONTHS = {
+    "ENERO": ("01", "1"),
+    "FEBRERO": ("02", "1"),
+    "MARZO": ("03", "1"),
+    "ABRIL": ("04", "2"),
+    "MAYO": ("05", "2"),
+    "JUNIO": ("06", "2"),
+    "JULIO": ("07", "3"),
+    "AGOSTO": ("08", "3"),
+    "SETIEMBRE": ("09", "3"),
+    "SEPTIEMBRE": ("09", "3"),
+    "OCTUBRE": ("10", "4"),
+    "NOVIEMBRE": ("11", "4"),
+    "DICIEMBRE": ("12", "4"),
+}
 CONSULTA_AMIGABLE_BASE_URL = "https://apps5.mineco.gob.pe/transparencia/Navegador/"
 CONSULTA_AMIGABLE_HEADERS = {
     "User-Agent": (
@@ -747,6 +789,82 @@ def build_mef_breakdown_record(
     return record
 
 
+def parse_mef_temporal_period(label: str, ano: int | str) -> dict[str, str]:
+    """
+    Interpreta una etiqueta temporal del portal MEF sin inferir periodos ausentes.
+    """
+    cleaned = clean_cell_value(label)
+    normalized = normalize_mef_text(cleaned)
+    year = str(ano)
+
+    for month_name, (month_number, quarter) in MEF_MONTHS.items():
+        if re.search(rf"\b{month_name}\b", normalized):
+            return {
+                "periodo_tipo": "MENSUAL",
+                "periodo_valor": f"{year}-{month_number}",
+                "trimestre": quarter,
+                "mes_numero": month_number,
+                "mes_nombre": month_name,
+            }
+
+    quarter_match = re.search(r"\b(?:TRIMESTRE|TRIM|T)\s*([1-4])\b", normalized)
+    if not quarter_match:
+        quarter_match = re.search(
+            r"\b([1-4])(?:ER|RO|DO|TO)?\s*(?:TRIMESTRE|TRIM)\b",
+            normalized,
+        )
+
+    if quarter_match:
+        quarter = quarter_match.group(1)
+        return {
+            "periodo_tipo": "TRIMESTRAL",
+            "periodo_valor": f"{year}-T{quarter}",
+            "trimestre": quarter,
+            "mes_numero": "",
+            "mes_nombre": "",
+        }
+
+    return {
+        "periodo_tipo": "ANUAL",
+        "periodo_valor": year,
+        "trimestre": "",
+        "mes_numero": "",
+        "mes_nombre": "",
+    }
+
+
+def build_mef_temporal_record(
+    descriptor_cells: list[str],
+    budget_values: list[str],
+    ano: int | str,
+) -> dict[str, str] | None:
+    """
+    Normaliza una fila temporal MEF al contrato Bronze conservador.
+    """
+    descriptors = [cell for cell in descriptor_cells if cell]
+    if not descriptors or len(budget_values) < 8:
+        return None
+
+    period = parse_mef_temporal_period(descriptors[-1], ano=ano)
+
+    return {
+        "ano": str(ano),
+        "periodo_tipo": period["periodo_tipo"],
+        "periodo_valor": period["periodo_valor"],
+        "trimestre": period["trimestre"],
+        "mes_numero": period["mes_numero"],
+        "mes_nombre": period["mes_nombre"],
+        "pia": budget_values[0],
+        "pim": budget_values[1],
+        "certificacion": budget_values[2],
+        "compromiso_anual": budget_values[3],
+        "compromiso_mensual": budget_values[4],
+        "devengado": budget_values[5],
+        "girado": budget_values[6],
+        "avance_porcentaje": budget_values[7],
+    }
+
+
 def extract_mef_breakdown_rows(
     soup: BeautifulSoup,
     ano: int | str,
@@ -782,23 +900,33 @@ def extract_mef_breakdown_rows(
             if not any(re.search(r"\d", value) for value in budget_values):
                 continue
 
-            record = build_mef_breakdown_record(
-                descriptor_cells=descriptor_cells,
-                budget_values=budget_values,
-                ano=ano,
-                slice_name=slice_name,
-                periodo_tipo=periodo_tipo,
-                periodo_valor=resolved_periodo_valor,
-            )
+            if slice_name == "temporal":
+                record = build_mef_temporal_record(
+                    descriptor_cells=descriptor_cells,
+                    budget_values=budget_values,
+                    ano=ano,
+                )
+            else:
+                record = build_mef_breakdown_record(
+                    descriptor_cells=descriptor_cells,
+                    budget_values=budget_values,
+                    ano=ano,
+                    slice_name=slice_name,
+                    periodo_tipo=periodo_tipo,
+                    periodo_valor=resolved_periodo_valor,
+                )
             if not record:
                 continue
 
             config = MEF_BREAKDOWN_CONFIG[slice_name]
             code_field = config["code_field"]
-            key = (
-                record[code_field] if code_field else "",
-                record[config["description_field"]],
-            )
+            if slice_name == "temporal":
+                key = (record["periodo_tipo"], record["periodo_valor"])
+            else:
+                key = (
+                    record[code_field] if code_field else "",
+                    record[config["description_field"]],
+                )
             if key in seen:
                 continue
 
@@ -823,6 +951,20 @@ def post_mef_navigation(
     response = session.post(url, data=payload, timeout=timeout)
     response.raise_for_status()
     return BeautifulSoup(response.text, "html.parser")
+
+
+def resolve_mef_breakdown_button_name(soup: BeautifulSoup, slice_name: str) -> str:
+    """
+    Resuelve el boton ASP.NET disponible para un slice de breakdown.
+    """
+    config = MEF_BREAKDOWN_CONFIG[slice_name]
+    button_names = config.get("button_names") or [config["button_name"]]
+
+    for button_name in button_names:
+        if soup.find(attrs={"name": button_name}):
+            return button_name
+
+    return config["button_name"]
 
 
 def choose_mef_grp1_or_raise(
@@ -1021,12 +1163,11 @@ def scrape_consulta_amigable_breakdown_snapshot(
     records_by_slice: dict[str, list[dict[str, str]]] = {}
 
     for slice_name in breakdown_slices:
-        config = MEF_BREAKDOWN_CONFIG[slice_name]
         slice_soup = post_mef_navigation(
             session=session,
             soup=base_soup,
             url=navigate_url,
-            button_name=config["button_name"],
+            button_name=resolve_mef_breakdown_button_name(base_soup, slice_name),
             timeout=timeout,
             grp1_value=pronabec_grp1_value,
         )

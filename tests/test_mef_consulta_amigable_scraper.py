@@ -14,6 +14,7 @@ from pipelines.scrape_mef_budget import (
     extract_mef_budget_row,
     find_mef_grp1_value,
     parse_breakdown_slices,
+    parse_mef_temporal_period,
     scrape_consulta_amigable_year,
     split_mef_code_description,
     write_mef_breakdown_to_local,
@@ -427,15 +428,101 @@ def test_extract_mef_funding_and_geography_breakdown_rows_from_fake_html() -> No
     assert "codigo_departamento" not in departamento_records[1]
 
 
+def test_parse_mef_temporal_period_normalizes_months_and_quarters() -> None:
+    assert parse_mef_temporal_period("ENERO", ano=2026) == {
+        "periodo_tipo": "MENSUAL",
+        "periodo_valor": "2026-01",
+        "trimestre": "1",
+        "mes_numero": "01",
+        "mes_nombre": "ENERO",
+    }
+    assert parse_mef_temporal_period("ABRIL", ano=2026)["trimestre"] == "2"
+    assert parse_mef_temporal_period("JULIO", ano=2026)["trimestre"] == "3"
+    assert parse_mef_temporal_period("OCTUBRE", ano=2026) == {
+        "periodo_tipo": "MENSUAL",
+        "periodo_valor": "2026-10",
+        "trimestre": "4",
+        "mes_numero": "10",
+        "mes_nombre": "OCTUBRE",
+    }
+    assert parse_mef_temporal_period("TRIMESTRE 2", ano=2026) == {
+        "periodo_tipo": "TRIMESTRAL",
+        "periodo_valor": "2026-T2",
+        "trimestre": "2",
+        "mes_numero": "",
+        "mes_nombre": "",
+    }
+    assert parse_mef_temporal_period("TOTAL ANUAL", ano=2026) == {
+        "periodo_tipo": "ANUAL",
+        "periodo_valor": "2026",
+        "trimestre": "",
+        "mes_numero": "",
+        "mes_nombre": "",
+    }
+
+
+def test_extract_mef_temporal_monthly_rows_from_fake_html() -> None:
+    records = extract_mef_breakdown_rows(
+        soup=soup_from_html(breakdown_table("ENERO", "ABRIL")),
+        ano=2026,
+        slice_name="temporal",
+    )
+
+    assert records[0] == {
+        "ano": "2026",
+        "periodo_tipo": "MENSUAL",
+        "periodo_valor": "2026-01",
+        "trimestre": "1",
+        "mes_numero": "01",
+        "mes_nombre": "ENERO",
+        "pia": "1,000",
+        "pim": "2,000",
+        "certificacion": "1,900",
+        "compromiso_anual": "1,500",
+        "compromiso_mensual": "1,100",
+        "devengado": "1,000",
+        "girado": "900",
+        "avance_porcentaje": "50.0",
+    }
+    assert records[1]["periodo_tipo"] == "MENSUAL"
+    assert records[1]["periodo_valor"] == "2026-04"
+    assert records[1]["trimestre"] == "2"
+    assert records[1]["mes_numero"] == "04"
+    assert records[1]["mes_nombre"] == "ABRIL"
+
+
+def test_extract_mef_temporal_quarterly_rows_from_fake_html() -> None:
+    records = extract_mef_breakdown_rows(
+        soup=soup_from_html(breakdown_table("TRIMESTRE 1", "T4")),
+        ano=2026,
+        slice_name="temporal",
+    )
+
+    assert records[0]["periodo_tipo"] == "TRIMESTRAL"
+    assert records[0]["periodo_valor"] == "2026-T1"
+    assert records[0]["trimestre"] == "1"
+    assert records[0]["mes_numero"] == ""
+    assert records[0]["mes_nombre"] == ""
+    assert records[1]["periodo_tipo"] == "TRIMESTRAL"
+    assert records[1]["periodo_valor"] == "2026-T4"
+    assert records[1]["trimestre"] == "4"
+
+
 def test_parse_breakdown_slices_defaults_cli_and_env_values() -> None:
     assert parse_breakdown_slices(None) == ["producto", "generica"]
     assert parse_breakdown_slices("") == ["producto", "generica"]
     assert parse_breakdown_slices("producto,generica") == ["producto", "generica"]
     assert parse_breakdown_slices(" generica ") == ["generica"]
+    assert parse_breakdown_slices("temporal") == ["temporal"]
     assert parse_breakdown_slices("fuente,rubro,departamento") == [
         "fuente",
         "rubro",
         "departamento",
+    ]
+    assert parse_breakdown_slices("producto,generica,temporal") == [
+        "producto",
+        "generica",
+        "temporal",
     ]
 
 
@@ -642,6 +729,10 @@ def test_write_mef_breakdown_to_local_includes_metadata(tmp_path: Path) -> None:
         "departamento": (
             "15: LIMA",
             "presupuesto_departamento",
+        ),
+        "temporal": (
+            "ENERO",
+            "presupuesto_temporal",
         ),
     }
 
@@ -1308,6 +1399,121 @@ def test_run_extraction_with_funding_and_geography_breakdowns_writes_slices(
         )
         assert metadata["source_dataset"] == dataset
         assert metadata["metadata"]["breakdown_slice"] == slice_name
+
+
+def test_run_extraction_with_temporal_breakdown_writes_slice(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("GCS_BUCKET_NAME", "dummy-bucket")
+
+    monkeypatch.setattr(
+        scrape_mef_budget,
+        "get_pipeline_settings",
+        lambda config: {
+            "pipeline_name": "test",
+            "environment": "test",
+            "log_level": "INFO",
+            "bucket_name": "dummy-bucket",
+            "gcs_paths": {"mef_bronze": "mef_bronze"},
+        },
+    )
+    monkeypatch.setattr(
+        scrape_mef_budget,
+        "load_yaml_config",
+        lambda config: {
+            "mef": {
+                "expected_columns": [
+                    "ano",
+                    "ejecutora_nombre",
+                    "pia",
+                    "pim",
+                    "certificacion",
+                    "compromiso_anual",
+                    "compromiso_mensual",
+                    "devengado",
+                    "girado",
+                    "avance_porcentaje",
+                ]
+            }
+        },
+    )
+
+    captured_slices = []
+
+    def fake_range_snapshot(
+        start_year,
+        end_year,
+        timeout,
+        include_hierarchy,
+        breakdown_slices,
+    ):
+        captured_slices.extend(breakdown_slices)
+        return {
+            "budget_records": [
+                {
+                    "ano": 2026,
+                    "ejecutora_nombre": PRONABEC_EXECUTORA,
+                    "pia": 1429676488.0,
+                    "pim": 1607711495.0,
+                    "certificacion": 1590100549.0,
+                    "compromiso_anual": 1138467562.0,
+                    "compromiso_mensual": 675591756.0,
+                    "devengado": 662693665.0,
+                    "girado": 660194362.0,
+                    "avance_porcentaje": 41.2,
+                }
+            ],
+            "hierarchy_records": [],
+            "breakdown_records": {
+                "temporal": extract_mef_breakdown_rows(
+                    soup_from_html(breakdown_table("ENERO")),
+                    ano=2026,
+                    slice_name="temporal",
+                ),
+            },
+        }
+
+    monkeypatch.setattr(
+        scrape_mef_budget,
+        "scrape_consulta_amigable_range_snapshot",
+        fake_range_snapshot,
+    )
+
+    args = scrape_mef_budget.parse_args(
+        [
+            "--consulta-amigable",
+            "--extraction-date",
+            "2026-06-14",
+            "--start-year",
+            "2026",
+            "--end-year",
+            "2026",
+            "--include-spending-breakdowns",
+            "--breakdown-slices",
+            "temporal",
+            "--dry-run",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+    scrape_mef_budget.run_extraction(args)
+
+    assert captured_slices == ["temporal"]
+    temporal_path = (
+        tmp_path
+        / "bronze"
+        / "mef"
+        / "presupuesto_temporal"
+        / "extraction_date=2026-06-14"
+    )
+    assert (temporal_path / "data.csv").exists()
+
+    metadata = json.loads(
+        (temporal_path / "extraction_metadata.json").read_text(encoding="utf-8")
+    )
+    assert metadata["source_dataset"] == "presupuesto_temporal"
+    assert metadata["metadata"]["breakdown_slice"] == "temporal"
 
 
 def test_mef_scraper_parametrization_executora_and_base_url(monkeypatch) -> None:
