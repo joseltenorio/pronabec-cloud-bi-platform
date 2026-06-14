@@ -35,7 +35,7 @@ from bs4 import BeautifulSoup
 
 from pipelines.common.audit import create_extraction_audit_event, generate_run_id
 from pipelines.common.config import ConfigError, get_env_var, get_pipeline_settings, load_yaml_config
-from pipelines.common.gcs import build_mef_bronze_path, upload_csv
+from pipelines.common.gcs import build_mef_bronze_path, upload_csv, upload_json
 from pipelines.common.logging import log_event, setup_structured_logger
 from pipelines.common.validation import validate_required_columns
 
@@ -1530,9 +1530,34 @@ def write_csv_file(
         writer.writerows(records)
 
 
+def resolve_mef_record_year(record: dict[str, Any]) -> str:
+    """
+    Resuelve el año fiscal de un registro MEF.
+    """
+    raw_year = record.get("ano")
+    if raw_year is None or raw_year == "":
+        raise MEFExtractionError(f"El registro MEF no contiene el campo 'ano': {record}")
+    match = re.search(r"\d{4}", str(raw_year))
+    if not match:
+        raise MEFExtractionError(f"No se pudo resolver el año fiscal del registro MEF: {record}")
+    return match.group(0)
+
+
+def group_records_by_fiscal_year(records: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """
+    Agrupa registros MEF por año fiscal.
+    """
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for record in records:
+        year = resolve_mef_record_year(record)
+        grouped.setdefault(year, []).append(record)
+    return grouped
+
+
 def build_local_mef_output_paths(
     output_dir: str | Path,
     extraction_date: str,
+    fiscal_year: str | int,
 ) -> dict[str, Path]:
     """
     Construye rutas locales equivalentes a Bronze para dry-run MEF.
@@ -1543,6 +1568,7 @@ def build_local_mef_output_paths(
         / "mef"
         / "presupuesto"
         / f"extraction_date={extraction_date}"
+        / f"year={fiscal_year}"
     )
 
     return {
@@ -1554,6 +1580,7 @@ def build_local_mef_output_paths(
 def build_local_mef_hierarchy_output_paths(
     output_dir: str | Path,
     extraction_date: str,
+    fiscal_year: str | int,
 ) -> dict[str, Path]:
     """
     Construye rutas locales equivalentes a Bronze para hierarchy MEF.
@@ -1564,6 +1591,7 @@ def build_local_mef_hierarchy_output_paths(
         / "mef"
         / "presupuesto_hierarchy"
         / f"extraction_date={extraction_date}"
+        / f"year={fiscal_year}"
     )
 
     return {
@@ -1576,6 +1604,7 @@ def build_local_mef_breakdown_output_paths(
     output_dir: str | Path,
     extraction_date: str,
     slice_name: str,
+    fiscal_year: str | int,
 ) -> dict[str, Path]:
     """
     Construye rutas locales Bronze para un slice de breakdown MEF.
@@ -1587,6 +1616,7 @@ def build_local_mef_breakdown_output_paths(
         / "mef"
         / source_dataset
         / f"extraction_date={extraction_date}"
+        / f"year={fiscal_year}"
     )
 
     return {
@@ -1634,13 +1664,17 @@ def write_mef_to_local(
     source_file: str | None,
     logger,
     source_mode: str = "external",
+    fiscal_year: str | int | None = None,
 ) -> dict[str, str]:
     """
     Escribe data.csv y extraction_metadata.json localmente.
     """
+    if fiscal_year is None:
+        fiscal_year = resolve_mef_record_year(records[0]) if records else "9999"
     paths = build_local_mef_output_paths(
         output_dir=output_dir,
         extraction_date=extraction_date,
+        fiscal_year=fiscal_year,
     )
 
     write_csv_file(
@@ -1664,6 +1698,7 @@ def write_mef_to_local(
             "source_mode": source_mode,
             "source_url": source_url,
             "source_file": source_file,
+            "fiscal_year": str(fiscal_year),
         },
     )
 
@@ -1693,13 +1728,17 @@ def write_mef_hierarchy_to_local(
     source_url: str | None,
     logger,
     source_mode: str = "consulta_amigable",
+    fiscal_year: str | int | None = None,
 ) -> dict[str, str]:
     """
     Escribe data.csv y metadata local para presupuesto_hierarchy.
     """
+    if fiscal_year is None:
+        fiscal_year = resolve_mef_record_year(records[0]) if records else "9999"
     paths = build_local_mef_hierarchy_output_paths(
         output_dir=output_dir,
         extraction_date=extraction_date,
+        fiscal_year=fiscal_year,
     )
 
     write_csv_file(
@@ -1724,6 +1763,7 @@ def write_mef_hierarchy_to_local(
             "source_dataset": "presupuesto_hierarchy",
             "source_mode": source_mode,
             "source_url": source_url,
+            "fiscal_year": str(fiscal_year),
         },
     )
 
@@ -1744,14 +1784,17 @@ def write_mef_hierarchy_to_local(
     }
 
 
-def build_mef_hierarchy_bronze_path(extraction_date: str) -> str:
+def build_mef_hierarchy_bronze_path(
+    extraction_date: str,
+    fiscal_year: str | int | None = None,
+) -> str:
     """
     Construye ruta GCS Bronze para presupuesto_hierarchy.
     """
-    return (
-        "bronze/mef/presupuesto_hierarchy/"
-        f"extraction_date={extraction_date}/data.csv"
-    )
+    base = f"bronze/mef/presupuesto_hierarchy/extraction_date={extraction_date}"
+    if fiscal_year is not None:
+        base += f"/year={fiscal_year}"
+    return f"{base}/data.csv"
 
 
 def write_mef_breakdown_to_local(
@@ -1764,15 +1807,19 @@ def write_mef_breakdown_to_local(
     slice_name: str,
     logger,
     source_mode: str = "consulta_amigable",
+    fiscal_year: str | int | None = None,
 ) -> dict[str, str]:
     """
     Escribe data.csv y metadata local para un slice de gasto MEF.
     """
+    if fiscal_year is None:
+        fiscal_year = resolve_mef_record_year(records[0]) if records else "9999"
     config = MEF_BREAKDOWN_CONFIG[slice_name]
     paths = build_local_mef_breakdown_output_paths(
         output_dir=output_dir,
         extraction_date=extraction_date,
         slice_name=slice_name,
+        fiscal_year=fiscal_year,
     )
 
     write_csv_file(
@@ -1798,6 +1845,7 @@ def write_mef_breakdown_to_local(
             "source_mode": source_mode,
             "source_url": source_url,
             "breakdown_slice": slice_name,
+            "fiscal_year": str(fiscal_year),
         },
     )
 
@@ -1822,15 +1870,16 @@ def write_mef_breakdown_to_local(
 def build_mef_breakdown_bronze_path(
     extraction_date: str,
     slice_name: str,
+    fiscal_year: str | int | None = None,
 ) -> str:
     """
     Construye ruta GCS Bronze para un slice de breakdown MEF.
     """
     source_dataset = MEF_BREAKDOWN_CONFIG[slice_name]["source_dataset"]
-    return (
-        f"bronze/mef/{source_dataset}/"
-        f"extraction_date={extraction_date}/data.csv"
-    )
+    base = f"bronze/mef/{source_dataset}/extraction_date={extraction_date}"
+    if fiscal_year is not None:
+        base += f"/year={fiscal_year}"
+    return f"{base}/data.csv"
 
 
 def get_mef_expected_columns(endpoints_config: dict[str, Any]) -> list[str]:
@@ -2053,87 +2102,217 @@ def run_extraction(args: argparse.Namespace) -> None:
             raise MEFExtractionError(
                 "La extracción MEF no produjo registros después de filtros y normalización."
             )
+        # Group records by fiscal year
+        normalized_by_year = group_records_by_fiscal_year(normalized_records)
+        hierarchy_by_year = group_records_by_fiscal_year(hierarchy_records)
+        
+        breakdown_by_year: dict[str, dict[str, list[dict[str, Any]]]] = {}
+        for slice_name, records in breakdown_records.items():
+            breakdown_by_year[slice_name] = group_records_by_fiscal_year(records)
 
-        if args.dry_run:
-            output_result = write_mef_to_local(
-                records=normalized_records,
-                fieldnames=expected_columns,
-                extraction_date=extraction_date,
-                output_dir=args.output_dir,
-                run_id=run_id,
-                records_read=len(raw_records),
-                source_url=source_url,
-                source_file=source_file,
-                source_mode=source_mode,
-                logger=logger,
-            )
-            output_uri = output_result["output_uri"]
+        # Resolve raw_records by year for records_read counts
+        raw_by_year = {}
+        try:
+            raw_by_year = group_records_by_fiscal_year(raw_records)
+        except Exception:
+            if raw_records:
+                actual_columns = list(raw_records[0].keys())
+                column_mapping = resolve_column_mapping(actual_columns, expected_columns)
+                ano_col = column_mapping.get("ano")
+                if ano_col:
+                    for r in raw_records:
+                        val = r.get(ano_col)
+                        if val:
+                            match = re.search(r"\d{4}", str(val))
+                            if match:
+                                raw_by_year.setdefault(match.group(0), []).append(r)
 
-            hierarchy_output_uri = None
-            if include_hierarchy:
-                hierarchy_output = write_mef_hierarchy_to_local(
-                    records=hierarchy_records,
-                    extraction_date=extraction_date,
-                    output_dir=args.output_dir,
-                    run_id=run_id,
-                    records_read=len(hierarchy_records),
-                    source_url=source_url,
-                    source_mode=source_mode,
-                    logger=logger,
-                )
-                hierarchy_output_uri = hierarchy_output["output_uri"]
+        all_years = set(normalized_by_year.keys())
+        if include_hierarchy:
+            all_years.update(hierarchy_by_year.keys())
+        if include_spending_breakdowns:
+            for slice_name in breakdown_by_year:
+                all_years.update(breakdown_by_year[slice_name].keys())
+        
+        all_years_sorted = sorted(list(all_years))
 
-            breakdown_output_uris = {}
-            if include_spending_breakdowns:
-                for slice_name, records in breakdown_records.items():
-                    breakdown_output = write_mef_breakdown_to_local(
-                        records=records,
+        output_uris = {}
+        hierarchy_output_uris = {}
+        breakdown_output_uris = {}
+
+        for year in all_years_sorted:
+            # 1. Budget records for this year
+            year_budget_records = normalized_by_year.get(year, [])
+            year_raw_count = len(raw_by_year.get(year, []))
+            
+            if year_budget_records:
+                if args.dry_run:
+                    res = write_mef_to_local(
+                        records=year_budget_records,
+                        fieldnames=expected_columns,
                         extraction_date=extraction_date,
                         output_dir=args.output_dir,
                         run_id=run_id,
-                        records_read=len(records),
+                        records_read=year_raw_count,
                         source_url=source_url,
+                        source_file=source_file,
                         source_mode=source_mode,
-                        slice_name=slice_name,
                         logger=logger,
+                        fiscal_year=year,
                     )
-                    breakdown_output_uris[slice_name] = breakdown_output["output_uri"]
-        else:
-            object_path = build_mef_bronze_path(
-                pipeline_settings["gcs_paths"]["mef_bronze"],
-                extraction_date=extraction_date,
-            )
-
-            output_uri = upload_csv(
-                bucket_name=bucket_name,
-                object_path=object_path,
-                records=normalized_records,
-                fieldnames=expected_columns,
-            )
-
-            hierarchy_output_uri = None
-            if include_hierarchy:
-                hierarchy_output_uri = upload_csv(
-                    bucket_name=bucket_name,
-                    object_path=build_mef_hierarchy_bronze_path(
+                    output_uris[year] = res["output_uri"]
+                else:
+                    object_path = build_mef_bronze_path(
+                        pipeline_settings["gcs_paths"]["mef_bronze"],
                         extraction_date=extraction_date,
-                    ),
-                    records=hierarchy_records,
-                    fieldnames=MEF_HIERARCHY_FIELDNAMES,
-                )
-
-            breakdown_output_uris = {}
-            if include_spending_breakdowns:
-                for slice_name, records in breakdown_records.items():
-                    breakdown_output_uris[slice_name] = upload_csv(
-                        bucket_name=bucket_name,
-                        object_path=build_mef_breakdown_bronze_path(
-                            extraction_date=extraction_date,
-                            slice_name=slice_name,
-                        ),
-                        records=records,
-                        fieldnames=MEF_BREAKDOWN_CONFIG[slice_name]["fieldnames"],
+                        fiscal_year=year,
                     )
+                    csv_uri = upload_csv(
+                        bucket_name=bucket_name,
+                        object_path=object_path,
+                        records=year_budget_records,
+                        fieldnames=expected_columns,
+                    )
+                    output_uris[year] = csv_uri
+                    
+                    # Upload extraction_metadata.json
+                    meta_path = object_path.replace("data.csv", "extraction_metadata.json")
+                    meta_payload = build_extraction_metadata(
+                        source_name="MEF Consulta Amigable",
+                        source_dataset="presupuesto",
+                        extraction_date=extraction_date,
+                        run_id=run_id,
+                        records_read=year_raw_count,
+                        records_written=len(year_budget_records),
+                        output_paths={"csv_path": csv_uri},
+                        extra_metadata={
+                            "mode": "production",
+                            "source_mode": source_mode,
+                            "source_url": source_url,
+                            "source_file": source_file,
+                            "fiscal_year": str(year),
+                        },
+                    )
+                    upload_json(
+                        bucket_name=bucket_name,
+                        object_path=meta_path,
+                        payload=meta_payload,
+                    )
+
+            # 2. Hierarchy records for this year
+            if include_hierarchy:
+                year_hierarchy_records = hierarchy_by_year.get(year, [])
+                if year_hierarchy_records:
+                    if args.dry_run:
+                        res = write_mef_hierarchy_to_local(
+                            records=year_hierarchy_records,
+                            extraction_date=extraction_date,
+                            output_dir=args.output_dir,
+                            run_id=run_id,
+                            records_read=len(year_hierarchy_records),
+                            source_url=source_url,
+                            source_mode=source_mode,
+                            logger=logger,
+                            fiscal_year=year,
+                        )
+                        hierarchy_output_uris[year] = res["output_uri"]
+                    else:
+                        object_path = build_mef_hierarchy_bronze_path(
+                            extraction_date=extraction_date,
+                            fiscal_year=year,
+                        )
+                        csv_uri = upload_csv(
+                            bucket_name=bucket_name,
+                            object_path=object_path,
+                            records=year_hierarchy_records,
+                            fieldnames=MEF_HIERARCHY_FIELDNAMES,
+                        )
+                        hierarchy_output_uris[year] = csv_uri
+                        
+                        # Upload extraction_metadata.json
+                        meta_path = object_path.replace("data.csv", "extraction_metadata.json")
+                        meta_payload = build_extraction_metadata(
+                            source_name="MEF",
+                            source_dataset="presupuesto_hierarchy",
+                            extraction_date=extraction_date,
+                            run_id=run_id,
+                            records_read=len(year_hierarchy_records),
+                            records_written=len(year_hierarchy_records),
+                            output_paths={"csv_path": csv_uri},
+                            extra_metadata={
+                                "mode": "production",
+                                "source_system": "MEF",
+                                "source_dataset": "presupuesto_hierarchy",
+                                "source_mode": source_mode,
+                                "source_url": source_url,
+                                "fiscal_year": str(year),
+                            },
+                        )
+                        upload_json(
+                            bucket_name=bucket_name,
+                            object_path=meta_path,
+                            payload=meta_payload,
+                        )
+
+            # 3. Breakdown slices for this year
+            if include_spending_breakdowns:
+                for slice_name in breakdown_slices:
+                    slice_records = breakdown_by_year[slice_name].get(year, [])
+                    if slice_records:
+                        breakdown_output_uris.setdefault(slice_name, {})
+                        if args.dry_run:
+                            res = write_mef_breakdown_to_local(
+                                records=slice_records,
+                                extraction_date=extraction_date,
+                                output_dir=args.output_dir,
+                                run_id=run_id,
+                                records_read=len(slice_records),
+                                source_url=source_url,
+                                source_mode=source_mode,
+                                slice_name=slice_name,
+                                logger=logger,
+                                fiscal_year=year,
+                            )
+                            breakdown_output_uris[slice_name][year] = res["output_uri"]
+                        else:
+                            object_path = build_mef_breakdown_bronze_path(
+                                extraction_date=extraction_date,
+                                slice_name=slice_name,
+                                fiscal_year=year,
+                            )
+                            csv_uri = upload_csv(
+                                bucket_name=bucket_name,
+                                object_path=object_path,
+                                records=slice_records,
+                                fieldnames=MEF_BREAKDOWN_CONFIG[slice_name]["fieldnames"],
+                            )
+                            breakdown_output_uris[slice_name][year] = csv_uri
+                            
+                            # Upload extraction_metadata.json
+                            meta_path = object_path.replace("data.csv", "extraction_metadata.json")
+                            meta_payload = build_extraction_metadata(
+                                source_name="MEF",
+                                source_dataset=MEF_BREAKDOWN_CONFIG[slice_name]["source_dataset"],
+                                extraction_date=extraction_date,
+                                run_id=run_id,
+                                records_read=len(slice_records),
+                                records_written=len(slice_records),
+                                output_paths={"csv_path": csv_uri},
+                                extra_metadata={
+                                    "mode": "production",
+                                    "source_system": "MEF",
+                                    "source_dataset": MEF_BREAKDOWN_CONFIG[slice_name]["source_dataset"],
+                                    "source_mode": source_mode,
+                                    "source_url": source_url,
+                                    "breakdown_slice": slice_name,
+                                    "fiscal_year": str(year),
+                                },
+                            )
+                            upload_json(
+                                bucket_name=bucket_name,
+                                object_path=meta_path,
+                                payload=meta_payload,
+                            )
 
         audit_event = create_extraction_audit_event(
             pipeline_name=pipeline_settings["pipeline_name"],
@@ -2146,8 +2325,8 @@ def run_extraction(args: argparse.Namespace) -> None:
             records_read=len(raw_records),
             records_written=len(normalized_records),
             metadata={
-                "output_uri": output_uri,
-                "hierarchy_output_uri": hierarchy_output_uri,
+                "output_uris": output_uris,
+                "hierarchy_output_uris": hierarchy_output_uris,
                 "hierarchy_records_written": len(hierarchy_records),
                 "include_hierarchy": include_hierarchy,
                 "breakdown_output_uris": breakdown_output_uris,
@@ -2172,8 +2351,8 @@ def run_extraction(args: argparse.Namespace) -> None:
             logger,
             "INFO",
             "Extracción MEF completada",
-            output_uri=output_uri,
-            hierarchy_output_uri=hierarchy_output_uri,
+            output_uris=output_uris,
+            hierarchy_output_uris=hierarchy_output_uris,
             breakdown_output_uris=breakdown_output_uris,
             records_read=len(raw_records),
             records_written=len(normalized_records),

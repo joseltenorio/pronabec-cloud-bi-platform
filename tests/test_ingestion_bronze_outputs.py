@@ -163,7 +163,7 @@ def test_mef_bronze_outputs_validation(tmp_path: Path) -> None:
     csv_file = Path(uris["output_uri"])
     metadata_file = Path(uris["metadata_path"])
 
-    assert str(csv_file.parent).replace("\\", "/").endswith("bronze/mef/presupuesto/extraction_date=2026-06-10")
+    assert str(csv_file.parent).replace("\\", "/").endswith("bronze/mef/presupuesto/extraction_date=2026-06-10/year=2026")
     assert csv_file.exists()
     assert metadata_file.exists()
 
@@ -182,8 +182,6 @@ def test_gcs_paths_consistency_with_ddl(tmp_path: Path) -> None:
     # 1. Load paths config
     pipeline_settings = load_yaml_config(PROJECT_ROOT / "config" / "pipeline.yaml")
     pronabec_norm_tmpl = pipeline_settings["gcs_paths"]["pronabec_bronze_normalized"]
-    mef_tmpl = pipeline_settings["gcs_paths"]["mef_bronze"]
-
     # 2. Generate DDL dynamically into tmp_path using generate_bigquery_ddl.py
     output_dir = tmp_path / "generated" / "sql"
     env = dict(os.environ)
@@ -233,12 +231,12 @@ def test_gcs_paths_consistency_with_ddl(tmp_path: Path) -> None:
             expected = pronabec_norm_tmpl.format(dataset=dataset_name, extraction_date="*")
             assert relative_path == expected, f"DDL path '{relative_path}' mismatch with pipeline.yaml expected '{expected}'"
         elif "bronze/mef/" in relative_path:
-            # Format is bronze/mef/<slice>/extraction_date={extraction_date}/data.csv
-            match = re.match(r"bronze/mef/([^/]+)/extraction_date=\*/data\.csv", relative_path)
+            # Format is bronze/mef/<slice>/extraction_date=*/year=*/data.csv
+            match = re.match(r"bronze/mef/([^/]+)/extraction_date=\*/year=\*/data\.csv", relative_path)
             assert match, f"DDL MEF path structure is invalid: {relative_path}"
             slice_name = match.group(1)
 
-            expected = mef_tmpl.replace("presupuesto", slice_name).format(extraction_date="*")
-            assert relative_path == expected, f"DDL path '{relative_path}' mismatch with pipeline.yaml expected '{expected}'"
+            expected = f"bronze/mef/{slice_name}/extraction_date=*/year=*/data.csv"
+            assert relative_path == expected, f"DDL path '{relative_path}' mismatch with expected '{expected}'"
         else:
             pytest.fail(f"Unknown bronze folder in external table DDL: {relative_path}")

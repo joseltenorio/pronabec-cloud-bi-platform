@@ -146,7 +146,7 @@ def render_bronze_table(
             slice_name = dataset.replace("presupuesto_mef_", "presupuesto_")
 
         table_name = f"{project_id}.bronze.mef_{slice_name}_raw"
-        source_uri = f"gs://{bucket}/bronze/mef/{slice_name}/extraction_date=*/data.csv"
+        source_uri = f"gs://{bucket}/bronze/mef/{slice_name}/extraction_date=*/year=*/data.csv"
         options = f"""OPTIONS (
   format = 'CSV',
   uris = ['{source_uri}'],

@@ -103,14 +103,19 @@ def build_pronabec_normalized_path(
 def build_mef_bronze_path(
     template: str,
     extraction_date: str,
+    fiscal_year: str | int | None = None,
 ) -> str:
     """
-    Construye la ruta relativa para data.csv de MEF.
+    Construye la ruta relativa para data.csv de MEF, opcionalmente particionada por año fiscal.
     """
-    return build_gcs_path(
+    base_path = build_gcs_path(
         template,
         extraction_date=extraction_date,
     )
+    if fiscal_year is not None:
+        p = Path(base_path)
+        return str(p.parent / f"year={fiscal_year}" / p.name).replace("\\", "/")
+    return base_path
 
 
 def build_rejected_records_path(

@@ -655,7 +655,7 @@ def test_write_mef_to_local_includes_consulta_amigable_metadata(
     metadata_path = Path(result["metadata_path"])
 
     assert str(csv_path.parent).replace("\\", "/").endswith(
-        "bronze/mef/presupuesto/extraction_date=2026-06-14"
+        "bronze/mef/presupuesto/extraction_date=2026-06-14/year=2026"
     )
     assert csv_path.exists()
     assert metadata_path.exists()
@@ -666,6 +666,7 @@ def test_write_mef_to_local_includes_consulta_amigable_metadata(
         "source_mode": "consulta_amigable",
         "source_url": CONSULTA_AMIGABLE_BASE_URL,
         "source_file": None,
+        "fiscal_year": "2026",
     }
 
 
@@ -688,7 +689,7 @@ def test_write_mef_hierarchy_to_local_includes_metadata(tmp_path: Path) -> None:
     metadata_path = Path(result["metadata_path"])
 
     assert str(csv_path.parent).replace("\\", "/").endswith(
-        "bronze/mef/presupuesto_hierarchy/extraction_date=2026-06-14"
+        "bronze/mef/presupuesto_hierarchy/extraction_date=2026-06-14/year=2026"
     )
     assert csv_path.exists()
     assert metadata_path.exists()
@@ -757,7 +758,7 @@ def test_write_mef_breakdown_to_local_includes_metadata(tmp_path: Path) -> None:
 
         csv_path = Path(result["output_uri"])
         assert str(csv_path.parent).replace("\\", "/").endswith(
-            f"bronze/mef/{dataset}/extraction_date=2026-06-14"
+            f"bronze/mef/{dataset}/extraction_date=2026-06-14/year=2026"
         )
         assert csv_path.exists()
 
@@ -938,6 +939,7 @@ def test_run_extraction_without_include_hierarchy_skips_hierarchy_output(
         / "mef"
         / "presupuesto"
         / "extraction_date=2026-06-14"
+        / "year=2026"
         / "data.csv"
     ).exists()
     assert not (
@@ -946,6 +948,7 @@ def test_run_extraction_without_include_hierarchy_skips_hierarchy_output(
         / "mef"
         / "presupuesto_hierarchy"
         / "extraction_date=2026-06-14"
+        / "year=2026"
         / "data.csv"
     ).exists()
 
@@ -1036,6 +1039,7 @@ def test_run_extraction_with_include_hierarchy_writes_hierarchy_output(
         / "mef"
         / "presupuesto_hierarchy"
         / "extraction_date=2026-06-14"
+        / "year=2026"
     )
 
     assert (hierarchy_path / "data.csv").exists()
@@ -1127,6 +1131,7 @@ def test_run_extraction_without_spending_breakdowns_skips_slice_outputs(
         / "mef"
         / "presupuesto_producto"
         / "extraction_date=2026-06-14"
+        / "year=2026"
         / "data.csv"
     ).exists()
     assert not (
@@ -1135,6 +1140,7 @@ def test_run_extraction_without_spending_breakdowns_skips_slice_outputs(
         / "mef"
         / "presupuesto_generica"
         / "extraction_date=2026-06-14"
+        / "year=2026"
         / "data.csv"
     ).exists()
 
@@ -1249,6 +1255,7 @@ def test_run_extraction_with_spending_breakdowns_writes_selected_slices(
         / "mef"
         / "presupuesto_producto"
         / "extraction_date=2026-06-14"
+        / "year=2026"
     )
     generica_path = (
         tmp_path
@@ -1256,6 +1263,7 @@ def test_run_extraction_with_spending_breakdowns_writes_selected_slices(
         / "mef"
         / "presupuesto_generica"
         / "extraction_date=2026-06-14"
+        / "year=2026"
     )
 
     assert (producto_path / "data.csv").exists()
@@ -1392,6 +1400,7 @@ def test_run_extraction_with_funding_and_geography_breakdowns_writes_slices(
             / "mef"
             / dataset
             / "extraction_date=2026-06-14"
+            / "year=2026"
         )
         assert (slice_path / "data.csv").exists()
         metadata = json.loads(
@@ -1506,6 +1515,7 @@ def test_run_extraction_with_temporal_breakdown_writes_slice(
         / "mef"
         / "presupuesto_temporal"
         / "extraction_date=2026-06-14"
+        / "year=2026"
     )
     assert (temporal_path / "data.csv").exists()
 
