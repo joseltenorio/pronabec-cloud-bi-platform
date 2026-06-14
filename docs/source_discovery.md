@@ -84,6 +84,42 @@ Para guardar la salida completa de ejecución en un archivo local:
 python tools/profile_pronabec_sources.py *> tmp/pronabec_profile_run.txt
 ```
 
+## Exploración de endpoints adicionales de PRONABEC
+
+Se evaluaron cuatro nuevos endpoints de PRONABEC para su incorporación en la capa Bronze. Todos siguen el patrón técnico jqGrid y se extraen en formato JSON y JSONL.
+
+### 1. Colegios Hábiles (`colegios_habiles`)
+- **Endpoint JSON evaluado**: `/Dataset/ListarColegiosHabiles`
+- **Estructura de respuesta**: Objeto jqGrid con metadatos de paginación y registros tabulares en `rows[].cell`.
+- **Registros reportados**: 71,605
+- **Columnas detectadas en `rows[].cell`**: 11 (mapeadas a `nro_fila` más 10 campos de datos).
+- **Decisión de aceptación para Bronze**: Aceptado. Se genera salida `data_raw.json` y `data.jsonl`.
+- **Observaciones de calidad**: El campo `telefono` puede venir vacío, con formatos no estándar o con caracteres no numéricos, por lo que se conserva como `STRING`.
+
+### 2. Becarios por País de Estudio (`becarios_pais_estudio`)
+- **Endpoint JSON evaluado**: `/Dataset/ListarBecariosPorPaisDeEstudio`
+- **Estructura de respuesta**: Estructura jqGrid estándar.
+- **Registros reportados**: 87,501
+- **Columnas detectadas en `rows[].cell`**: 8 (mapeadas a `nro_fila` más 7 campos de datos).
+- **Decisión de aceptación para Bronze**: Aceptado.
+- **Observaciones de calidad**: Permite el cruce geográfico de la formación internacional del becario. `fecha_carga` se conserva como `STRING`.
+
+### 3. Convocatorias por Carrera y Sede (`convocatorias_carrera_sede`)
+- **Endpoint JSON evaluado**: `/Dataset/ListarConvocatoriaPorCarreraSede`
+- **Estructura de respuesta**: Estructura jqGrid estándar.
+- **Registros reportados**: 395,487
+- **Columnas detectadas en `rows[].cell`**: 19 (mapeadas a `nro_fila` más 18 campos de datos).
+- **Decisión de aceptación para Bronze**: Aceptado. Es el dataset de mayor volumen identificado para PRONABEC en esta fase.
+- **Observaciones de calidad**: Se detectaron valores nulos o vacíos frecuentes en columnas administrativas como `resolucion`, `region`, `web`, `representante`, `telefono` y `email`. El campo `ruc` (Registro Único de Contribuyentes) y `telefono` se conservan como `STRING` en Bronze para asegurar trazabilidad.
+
+### 4. Nota Promedio del Postulante por Región (`nota_postulante_region`)
+- **Endpoint JSON evaluado**: `/Dataset/ListarNotaPromedioDelPostulantePorRegion`
+- **Estructura de respuesta**: Estructura jqGrid estándar.
+- **Registros reportados**: 61
+- **Columnas detectadas en `rows[].cell`**: 9 (mapeadas a `nro_fila` más 8 campos de datos).
+- **Decisión de aceptación para Bronze**: Aceptado.
+- **Observaciones de calidad**: El campo `nota_promedio` se reporta con formato de coma decimal y múltiples posiciones decimales (ej. `14,500000`). Se almacena como `STRING` en la capa Bronze para evitar pérdidas de precisión o fallas en la ingesta cruda. `anio_convocatoria` y `fecha_carga` se mantienen como `STRING`.
+
 ## Salidas locales
 
 Los archivos generados se almacenan en:

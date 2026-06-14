@@ -60,29 +60,37 @@ Esta fuente es relevante porque permite analizar el comportamiento de los progra
 
 ### Datasets considerados
 
-| Dataset               | Endpoint de datos esperado           | Descripción                                                     | Uso analítico                            |
-| --------------------- | ------------------------------------ | --------------------------------------------------------------- | ---------------------------------------- |
-| `notas_becarios`      | `ListarNotasDeBecarios`              | Notas promedio de becarios por semestre académico               | Rendimiento académico y riesgo académico |
-| `perdida_becas`       | `ListarPerdidaDeBecas`               | Registros de becarios que perdieron la beca                     | Análisis de deserción o pérdida de beca  |
-| `convocatorias`       | `ListarConvocatorias`                | Información de convocatorias, programas, modalidades y vacantes | Análisis histórico de oferta de becas    |
-| `concepto_pago`       | `ListarConceptoDePago`               | Conceptos y subconceptos de subvención                          | Análisis de beneficios y pagos           |
-| `becarios_provincia`  | `ListarBeca18BecariosPorProvincia`   | Cantidad de becarios por provincia y tipo de beca               | Cobertura territorial                    |
-| `ubigeo_postulacion`  | `ListarUbigeoDePostulacionABecas`    | Ubicación geográfica de postulantes                             | Normalización territorial                |
-| `periodos_academicos` | `ListarPeriodosAcademicosDeBecarios` | Periodos académicos de becarios                                 | Dimensión temporal académica             |
+| Dataset | Endpoint de datos esperado | Descripción | Uso analítico |
+| :--- | :--- | :--- | :--- |
+| `notas_becarios` | `ListarNotasDeBecarios` | Notas promedio de becarios por semestre académico | Rendimiento académico y riesgo académico |
+| `perdida_becas` | `ListarPerdidaDeBecas` | Registros de becarios que perdieron la beca | Análisis de deserción o pérdida de beca |
+| `convocatorias` | `ListarConvocatorias` | Información de convocatorias, programas, modalidades y vacantes | Análisis histórico de oferta de becas |
+| `concepto_pago` | `ListarConceptoDePago` | Conceptos y subconceptos de subvención | Análisis de beneficios y pagos |
+| `becarios_provincia` | `ListarBeca18BecariosPorProvincia` | Cantidad de becarios por provincia y tipo de beca | Cobertura territorial |
+| `ubigeo_postulacion` | `ListarUbigeoDePostulacionABecas` | Ubicación geográfica de postulantes | Normalización territorial |
+| `periodos_academicos` | `ListarPeriodosAcademicosDeBecarios` | Periodos académicos de becarios | Dimensión temporal académica |
+| `colegios_habiles` | `ListarColegiosHabiles` | Colegios habilitados para la postulación | Análisis de procedencia y oferta educativa |
+| `becarios_pais_estudio` | `ListarBecariosPorPaisDeEstudio` | Distribución de becarios por país de estudio | Análisis de internacionalización y convenios |
+| `convocatorias_carrera_sede` | `ListarConvocatoriaPorCarreraSede` | Convocatorias desagregadas por carrera e institución/sede | Oferta académica de carreras y especialidades |
+| `nota_postulante_region` | `ListarNotaPromedioDelPostulantePorRegion` | Nota promedio de postulantes por región y modalidad | Rendimiento y admisión por origen territorial |
 
 ### Volumen identificado en exploración
 
 La exploración inicial permitió identificar los siguientes volúmenes aproximados reportados por los endpoints:
 
-| Dataset               | Registros reportados | Páginas estimadas con `rows=100` |
-| --------------------- | -------------------: | -------------------------------: |
-| `notas_becarios`      |               103224 |                             1033 |
-| `ubigeo_postulacion`  |                 1695 |                               17 |
-| `concepto_pago`       |                  819 |                                9 |
-| `convocatorias`       |                  402 |                                5 |
-| `becarios_provincia`  |                  221 |                                3 |
-| `periodos_academicos` |                  216 |                                3 |
-| `perdida_becas`       |                  141 |                                2 |
+| Dataset | Registros reportados | Páginas estimadas con `rows=100` |
+| :--- | :---: | :---: |
+| `convocatorias_carrera_sede` | 395487 | 3955 |
+| `notas_becarios` | 103224 | 1033 |
+| `becarios_pais_estudio` | 87501 | 876 |
+| `colegios_habiles` | 71605 | 717 |
+| `ubigeo_postulacion` | 1695 | 17 |
+| `concepto_pago` | 819 | 9 |
+| `convocatorias` | 402 | 5 |
+| `becarios_provincia` | 221 | 3 |
+| `periodos_academicos` | 216 | 3 |
+| `perdida_becas` | 141 | 2 |
+| `nota_postulante_region` | 61 | 1 |
 
 Estos valores deben considerarse referenciales, ya que pueden cambiar si PRONABEC actualiza sus datos públicos.
 
@@ -130,6 +138,11 @@ A partir del profiling inicial se identificaron los siguientes puntos:
 - `becarios_provincia` contiene cantidades y porcentajes por tipo de beca; los porcentajes pueden venir con coma decimal.
 - `ubigeo_postulacion` contiene códigos ubigeo que deben conservarse como texto para no perder ceros a la izquierda.
 - `periodos_academicos` contiene una estructura útil para construir una dimensión temporal académica.
+- En `convocatorias_carrera_sede`, varias columnas administrativas (como `resolucion`, `region`, `web`, `representante`, `telefono` y `email`) pueden venir nulas y deben conservarse como tales en la transformación.
+- En `nota_postulante_region`, `nota_promedio` viene representado como texto con coma decimal (ej. `14,500000`), conservándose como STRING en Bronze, requiriendo conversión controlada antes de su uso numérico en Silver.
+- Campos de contacto e identificadores administrativos como `telefono` (en `colegios_habiles` y `convocatorias_carrera_sede`) y `ruc` (en `convocatorias_carrera_sede`) deben conservarse como STRING para evitar la pérdida de ceros iniciales, guiones, nulos o caracteres especiales.
+- La columna `fecha_carga` en todos los nuevos datasets se conserva como STRING en Bronze para mantener la fidelidad de la respuesta cruda de la fuente.
+- Posibles espacios en blanco iniciales o finales (espacios sobrantes) en campos textuales de varios endpoints requerirán un proceso de limpieza (trimming) durante la transformación.
 
 ### Limitaciones
 

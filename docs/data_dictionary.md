@@ -17,6 +17,10 @@ Este diccionario cubre los datasets públicos considerados para el análisis de 
 - Becarios por provincia.
 - Ubigeo de postulación.
 - Periodos académicos.
+- Colegios hábiles.
+- Becarios por país de estudio.
+- Convocatorias por carrera y sede.
+- Nota promedio del postulante por región.
 - Presupuesto MEF.
 - Vistas Gold esperadas para Power BI.
 
@@ -365,9 +369,176 @@ silver.periodos_academicos
 - `periodo_completo` puede usarse para segmentación temporal en Power BI.
 - Esta tabla puede integrarse con una dimensión calendario si el análisis lo requiere.
 
+# 8. Dataset: colegios_habiles
+
+## Descripción
+
+Contiene el listado de colegios o instituciones educativas de nivel escolar habilitadas en los procesos de postulación de PRONABEC.
+
+## Tabla Silver esperada
+
+```text
+silver.colegios_habiles
+```
+
+| Campo | Tipo esperado | Descripción | Uso analítico |
+| :--- | :--- | :--- | :--- |
+| source_row_id | STRING | Identificador técnico de la fila en la fuente | Trazabilidad |
+| nro_fila | INTEGER | Número de fila de origen | Trazabilidad |
+| ugel | STRING | Unidad de Gestión Educativa Local asociada | Identificación administrativa escolar |
+| institucion_educativa | STRING | Nombre de la institución educativa escolar | Clasificación escolar |
+| tipo_gestion | STRING | Tipo de gestión del colegio (público, privado) | Segmentación por gestión |
+| nivel_modalidad | STRING | Nivel o modalidad educativa de atención | Clasificación de oferta escolar |
+| forma_atencion | STRING | Forma de atención (ej. presencial) | Clasificación de oferta escolar |
+| centro_poblado | STRING | Centro poblado de ubicación geográfica | Análisis territorial fino |
+| distrito | STRING | Distrito de ubicación geográfica | Análisis territorial |
+| direccion | STRING | Dirección física de la institución | Trazabilidad de contacto |
+| telefono | STRING | Teléfono de contacto de la institución | Contacto administrativo |
+| fecha_carga | TIMESTAMP | Fecha y hora de carga reportada por la fuente | Auditoría |
+
+## Reglas de calidad iniciales
+
+- `institucion_educativa` no debe ser nulo.
+- `ugel` y `distrito` no deben ser nulos.
+- `telefono` no es obligatorio y debe conservarse como texto.
+- `fecha_carga` debe convertirse a `TIMESTAMP`.
+
+## Consideraciones de transformación
+
+- En la capa Bronze, todos los campos de este dataset se almacenan como `STRING` y `NULLABLE` para garantizar la trazabilidad y resiliencia ante cambios.
+- `telefono` se mantiene como `STRING` para evitar errores con caracteres especiales, guiones o valores no numéricos.
+- Los campos textuales pueden presentar espacios en blanco sobrantes que requieren limpieza (trimming).
+
 ---
 
-# 8. Dataset: presupuesto_mef
+# 9. Dataset: becarios_pais_estudio
+
+## Descripción
+
+Contiene la distribución de becarios clasificados por el país de estudio, modalidad, convocatoria y tipo de institución educativa.
+
+## Tabla Silver esperada
+
+```text
+silver.becarios_pais_estudio
+```
+
+| Campo | Tipo esperado | Descripción | Uso analítico |
+| :--- | :--- | :--- | :--- |
+| source_row_id | STRING | Identificador técnico de la fila en la fuente | Trazabilidad |
+| nro_fila | INTEGER | Número de fila de origen | Trazabilidad |
+| modalidad | STRING | Modalidad de la beca | Segmentación por tipo de beneficio |
+| convocatoria | STRING | Convocatoria del proceso de becas | Análisis temporal de convocatorias |
+| pais_estudio | STRING | País donde el becario realiza los estudios | Análisis de internacionalización |
+| tipo_institucion | STRING | Tipo de institución educativa superior | Clasificación del sector educativo |
+| institucion | STRING | Nombre de la institución educativa superior | Análisis de concentración escolar |
+| sexo | STRING | Sexo reportado por el becario | Segmentación demográfica |
+| fecha_carga | TIMESTAMP | Fecha y hora de carga reportada por la fuente | Auditoría |
+
+## Reglas de calidad iniciales
+
+- `pais_estudio` e `institucion` no deben ser nulos.
+- `modalidad` y `convocatoria` no deben ser nulos.
+- `fecha_carga` debe convertirse a `TIMESTAMP`.
+
+## Consideraciones de transformación
+
+- En la capa Bronze, todos los campos de este dataset se almacenan como `STRING` y `NULLABLE` para garantizar la trazabilidad y resiliencia ante cambios.
+- El campo `sexo` se conserva en su formato fuente y puede requerir estandarización en capas de reporting.
+
+---
+
+# 10. Dataset: convocatorias_carrera_sede
+
+## Descripción
+
+Dataset de alto volumen que contiene las convocatorias de PRONABEC desagregadas por carrera, institución educativa, sede y región.
+
+## Tabla Silver esperada
+
+```text
+silver.convocatorias_carrera_sede
+```
+
+| Campo | Tipo esperado | Descripción | Uso analítico |
+| :--- | :--- | :--- | :--- |
+| source_row_id | STRING | Identificador técnico de la fila en la fuente | Trazabilidad |
+| nro_fila | INTEGER | Número de fila de origen | Trazabilidad |
+| id_convocatoria | INTEGER | Identificador numérico de la convocatoria | Relación con hechos operativos |
+| convocatoria | STRING | Nombre de la convocatoria asociada | Descriptivo del proceso |
+| pais_origen | STRING | País de origen de la convocatoria o institución | Clasificación territorial |
+| nivel_educativo | STRING | Nivel educativo (pregrado, posgrado, técnico) | Clasificación de oferta |
+| tipo_institucion | STRING | Tipo de institución superior (universidad, instituto) | Clasificación del sector |
+| sede | STRING | Sede física de la institución educativa | Análisis geográfico de sedes |
+| institucion | STRING | Nombre de la institución educativa superior | Concentración institucional |
+| carrera | STRING | Nombre de la carrera o programa de estudio | Demanda y oferta de especialidades |
+| resolucion | STRING | Resolución administrativa que avala la oferta | Trazabilidad legal |
+| gestion | STRING | Tipo de gestión de la institución superior (pública, privada) | Segmentación por gestión |
+| abreviatura | STRING | Abreviatura o sigla de la institución | Descriptivo analítico |
+| region | STRING | Región geográfica donde se ubica la institución | Análisis territorial de oferta |
+| web | STRING | Sitio web oficial de la institución | Contacto institucional |
+| representante | STRING | Nombre del representante legal o institucional | Trazabilidad legal |
+| telefono | STRING | Teléfono de contacto de la sede o institución | Contacto administrativo |
+| ruc | STRING | Registro Único de Contribuyentes de la entidad | Trazabilidad fiscal |
+| email | STRING | Correo electrónico de contacto institucional | Contacto administrativo |
+| fecha_carga | TIMESTAMP | Fecha y hora de carga reportada por la fuente | Auditoría |
+
+## Reglas de calidad iniciales
+
+- `id_convocatoria` y `carrera` no deben ser nulos.
+- `ruc` debe conservarse como `STRING` para evitar la pérdida de ceros iniciales o problemas con formato numérico.
+- `telefono` debe conservarse como `STRING`.
+- Columnas opcionales como `resolucion`, `region`, `web`, `representante`, `telefono` y `email` pueden venir vacías y deben conservarse como nulos.
+- `fecha_carga` debe convertirse a `TIMESTAMP`.
+
+## Consideraciones de transformación
+
+- En la capa Bronze, todos los campos de este dataset se almacenan como `STRING` y `NULLABLE` para garantizar la trazabilidad y resiliencia ante cambios.
+- El alto volumen de este dataset requiere que el pipeline Dataflow maneje tolerancias adecuadas frente a valores nulos en columnas administrativas secundarias.
+
+---
+
+# 11. Dataset: nota_postulante_region
+
+## Descripción
+
+Contiene las notas promedio obtenidas por los postulantes a becas, segmentadas por región de origen, modalidad y convocatoria.
+
+## Tabla Silver esperada
+
+```text
+silver.nota_postulante_region
+```
+
+| Campo | Tipo esperado | Descripción | Uso analítico |
+| :--- | :--- | :--- | :--- |
+| source_row_id | STRING | Identificador técnico de la fila en la fuente | Trazabilidad |
+| nro_fila | INTEGER | Número de fila de origen | Trazabilidad |
+| region | STRING | Región o departamento de origen del postulante | Cobertura y procedencia territorial |
+| nota_promedio | NUMERIC | Nota promedio del postulante en el proceso | Rendimiento y admisión |
+| modalidad | STRING | Modalidad del concurso al que postuló | Segmentación por beneficio |
+| anio_convocatoria | INTEGER | Año correspondiente al proceso de convocatoria | Análisis temporal |
+| tipo_institucion | STRING | Tipo de institución elegida por el postulante | Preferencia del sector educativo |
+| institucion_educativa | STRING | Nombre de la institución educativa elegida | Preferencia escolar/universitaria |
+| semestre | STRING | Semestre académico del proceso de admisión | Segmentación temporal académica |
+| fecha_carga | TIMESTAMP | Fecha y hora de carga reportada por la fuente | Auditoría |
+
+## Reglas de calidad iniciales
+
+- `region` y `nota_promedio` no deben ser nulos.
+- `nota_promedio` debe validarse en el rango de 0 a 20.
+- `anio_convocatoria` debe convertirse a `INTEGER`.
+- `fecha_carga` debe convertirse a `TIMESTAMP`.
+
+## Consideraciones de transformación
+
+- En la capa Bronze, todos los campos de este dataset se almacenan como `STRING` y `NULLABLE` para garantizar la trazabilidad y resiliencia ante cambios.
+- `nota_promedio` viene con coma decimal y precisión excesiva (ej. `14,500000`) en Bronze (como `STRING`). Se requiere realizar un reemplazo de la coma por punto decimal y casteo a `NUMERIC` en la transformación.
+- `anio_convocatoria` se conserva en Bronze como `STRING` y debe ser transformado a `INTEGER` en la capa Silver.
+
+---
+
+# 12. Dataset: presupuesto_mef
 
 ## Descripción
 
@@ -412,7 +583,7 @@ silver.presupuesto_mef
 
 ---
 
-# 9. Campos derivados y enriquecimientos previstos
+# 13. Campos derivados y enriquecimientos previstos
 
 ## `tipo_beca_normalizado`
 
@@ -471,7 +642,7 @@ Debe controlarse división entre cero.
 
 ---
 
-# 10. Capas Gold esperadas
+# 14. Capas Gold esperadas
 
 Las vistas Gold estarán orientadas al consumo en Power BI.
 
@@ -495,7 +666,7 @@ Las vistas Gold estarán orientadas al consumo en Power BI.
 
 ---
 
-# 11. Actualización futura del diccionario
+# 15. Actualización futura del diccionario
 
 Este diccionario será actualizado conforme se implementen las capas Silver, Gold y ML. Las siguientes mejoras previstas son:
 
