@@ -227,69 +227,96 @@ El método principal de ingesta es mediante el modo de raspado real, habilitado 
 python -m pipelines.scrape_mef_budget --consulta-amigable [argumentos]
 ```
 
+### Método de Ingesta y Parámetros
+
+El método principal de ingesta es mediante el modo de raspado real, habilitado con el flag `--consulta-amigable`. El extractor de MEF se ejecuta mediante:
+
+```bash
+python -m pipelines.scrape_mef_budget --consulta-amigable [argumentos]
+```
+
 #### Parámetros del Scraper:
 * `--consulta-amigable`: Activa el modo de scraping interactivo directo contra el portal web de Consulta Amigable.
 * `--start-year` / `--end-year`: Especifican el rango de años fiscales a consultar.
 * `--extraction-date`: Registra de manera lógica la fecha de la foto de los datos (formato `YYYY-MM-DD`).
 * `--dry-run`: Habilita la ejecución local sin interacción de escritura contra Google Cloud Storage.
 * `--output-dir`: Especifica la ruta base local del sistema de archivos para guardar resultados cuando se usa `--dry-run`.
+* `--include-hierarchy`: Indica si se debe extraer la jerarquía presupuestal superior.
+* `--include-spending-breakdowns`: Indica si se debe extraer los desgloses de gasto presupuestal.
+* `--breakdown-slices`: Especifica la lista de slices a extraer (valores válidos: `producto`, `generica`, `fuente`, `rubro`, `departamento`, `temporal`).
 
 ### Salidas y Rutas en Bronze
 
-* **Ruta GCS en producción**:
-  ```text
-  gs://<bucket>/bronze/mef/presupuesto/extraction_date=YYYY-MM-DD/data.csv
-  ```
+A partir de la incorporación de las desagregaciones presupuestales, MEF cuenta con las siguientes salidas en formato CSV en la capa Bronze:
 
-* **Ruta Local en modo Dry-Run** (ej. usando `--output-dir tmp`):
-  Cuando se indica `--output-dir tmp`, las salidas quedan ordenadas de forma clara según la partición:
-  * Archivo de datos normalizado (CSV):
-    ```text
-    tmp/bronze/mef/presupuesto/extraction_date=YYYY-MM-DD/data.csv
-    ```
-  * Archivo de auditoría/metadatos (JSON):
-    ```text
-    tmp/bronze/mef/presupuesto/extraction_date=YYYY-MM-DD/extraction_metadata.json
-    ```
-  *(Nota: Si se usa `--output-dir tmp/local_bronze`, la estructura resultante se alojará bajo `tmp/local_bronze/bronze/...`).*
+#### 1. Presupuesto Base
+* **Rol**: Contiene el total anual asignado y ejecutado para la Unidad Ejecutora PRONABEC.
+* **Ruta GCS**: `gs://<bucket>/bronze/mef/presupuesto/extraction_date=YYYY-MM-DD/data.csv`
+* **Ruta local**: `tmp/bronze/mef/presupuesto/extraction_date=YYYY-MM-DD/data.csv`
+
+#### 2. Jerarquía Presupuestal (`presupuesto_hierarchy`)
+* **Rol**: Permite comparar el presupuesto de PRONABEC contra los niveles superiores del Gobierno Nacional (Sector, Pliego, etc.) para análisis ejecutivo.
+* **Ruta GCS**: `gs://<bucket>/bronze/mef/presupuesto_hierarchy/extraction_date=YYYY-MM-DD/data.csv`
+* **Valores observados en validación**:
+  * `NIVEL DE GOBIERNO, E, GOBIERNO NACIONAL`
+  * `SECTOR, 10, EDUCACION`
+  * `PLIEGO, 010, M. DE EDUCACION`
+  * `UNIDAD EJECUTORA, 117-1438, PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO`
+
+#### 3. Slices de Gasto (`presupuesto_producto` y `presupuesto_generica`)
+* **Rol**: Permite analizar la distribución del gasto de PRONABEC según los proyectos/productos públicos y las partidas genéricas presupuestales.
+* **Rutas GCS**:
+  * `gs://<bucket>/bronze/mef/presupuesto_producto/extraction_date=YYYY-MM-DD/data.csv`
+  * `gs://<bucket>/bronze/mef/presupuesto_generica/extraction_date=YYYY-MM-DD/data.csv`
+* **Valores observados en validación**:
+  * Producto: `3000885, ENTREGA DE BECA DE EDUCACION SUPERIOR A POBLACION CON ALTO RENDIMIENTO ACADEMICO`
+  * Genérica: `5-23, BIENES Y SERVICIOS`
+
+#### 4. Financiamiento y Geografía (`presupuesto_fuente`, `presupuesto_rubro` y `presupuesto_departamento`)
+* **Rol**: Identifica las fuentes de financiamiento, rubros contables oficiales y la distribución territorial asignada.
+* **Rutas GCS**:
+  * `gs://<bucket>/bronze/mef/presupuesto_fuente/extraction_date=YYYY-MM-DD/data.csv`
+  * `gs://<bucket>/bronze/mef/presupuesto_rubro/extraction_date=YYYY-MM-DD/data.csv`
+  * `gs://<bucket>/bronze/mef/presupuesto_departamento/extraction_date=YYYY-MM-DD/data.csv`
+* **Valores observados en validación**:
+  * Fuente: `1, RECURSOS ORDINARIOS`
+  * Rubro: `00, RECURSOS ORDINARIOS`
+  * Departamento: `15: LIMA`
+
+#### 5. Corte Temporal (`presupuesto_temporal`)
+* **Rol**: Permite analizar la evolución y ejecución mensual o trimestral de la ejecución presupuestal.
+* **Ruta GCS**: `gs://<bucket>/bronze/mef/presupuesto_temporal/extraction_date=YYYY-MM-DD/data.csv`
+* **Consideraciones de calidad**: Los valores de PIA, PIM o Avance pueden venir vacíos del portal para las filas de meses específicos. Se conservan como strings vacíos en Bronze para mantener consistencia.
+* **Ejemplo observado**: `2026,MENSUAL,2026-01,1,01,ENERO,,,"1,465,529,838","805,901,243","71,975,842","66,564,241","65,803,674",`
 
 ### Comando de Prueba Local Recomendado
 
-Para verificar el funcionamiento del scraper en un entorno local seguro de forma aislada, se aconseja ejecutar los siguientes comandos en PowerShell:
+Para realizar una validación local completa que extraiga el presupuesto base, la jerarquía y todas las desagregaciones presupuestales en dry-run:
 
-* **Prueba para un año individual (2026)**:
-  ```powershell
-  python -m pipelines.scrape_mef_budget `
-    --consulta-amigable `
-    --extraction-date 2026-06-14 `
-    --start-year 2026 `
-    --end-year 2026 `
-    --dry-run `
-    --output-dir tmp
-  ```
+```powershell
+python -m pipelines.scrape_mef_budget `
+  --consulta-amigable `
+  --extraction-date 2026-06-14 `
+  --start-year 2026 `
+  --end-year 2026 `
+  --include-hierarchy `
+  --include-spending-breakdowns `
+  --breakdown-slices producto,generica,fuente,rubro,departamento,temporal `
+  --dry-run `
+  --output-dir tmp
+```
 
-* **Prueba para rango de años (2024-2026)**:
-  ```powershell
-  python -m pipelines.scrape_mef_budget `
-    --consulta-amigable `
-    --extraction-date 2026-06-14 `
-    --start-year 2024 `
-    --end-year 2026 `
-    --dry-run `
-    --output-dir tmp
-  ```
+#### Comandos de Verificación de Resultados:
+```powershell
+# 1. Verificar la estructura física generada en tmp
+Get-ChildItem -Recurse tmp\bronze\mef
 
-* **Comandos de Verificación de Resultados**:
-  ```powershell
-  # 1. Verificar la estructura física generada en tmp
-  Get-ChildItem -Recurse tmp\bronze\mef
+# 2. Previsualizar las primeras líneas de un slice de desglose
+Get-Content tmp\bronze\mef\presupuesto_producto\extraction_date=2026-06-14\data.csv -TotalCount 5
 
-  # 2. Previsualizar las primeras líneas del archivo CSV
-  Get-Content tmp\bronze\mef\presupuesto\extraction_date=2026-06-14\data.csv -TotalCount 5
-
-  # 3. Leer el contenido de metadatos de auditoría
-  Get-Content tmp\bronze\mef\presupuesto\extraction_date=2026-06-14\extraction_metadata.json -TotalCount 30
-  ```
+# 3. Leer el contenido de metadatos de auditoría
+Get-Content tmp\bronze\mef\presupuesto_producto\extraction_date=2026-06-14\extraction_metadata.json -TotalCount 30
+```
 
 ### Riesgos y Mitigación
 

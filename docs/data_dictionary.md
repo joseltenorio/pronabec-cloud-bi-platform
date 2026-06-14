@@ -582,6 +582,206 @@ silver.presupuesto_mef
 - Los montos deben normalizarse y limpiarse de cualquier carácter extraño (comas, espacios) antes de materializarse en la tabla Silver.
 - El análisis presupuestal no requiere procesamiento en tiempo real.
 
+- El análisis presupuestal no requiere procesamiento en tiempo real.
+
+---
+
+## 12.1. Dataset: presupuesto_mef_hierarchy
+
+### Descripción
+Representa la jerarquía presupuestal superior, permitiendo contrastar la Unidad Ejecutora PRONABEC contra los totales del Sector Educación, del Pliego M. de Educación y del Nivel de Gobierno Nacional.
+
+### Tabla Silver esperada
+`silver.presupuesto_mef_hierarchy`
+
+| Campo | Tipo esperado | Descripción | Uso analítico |
+| :--- | :--- | :--- | :--- |
+| ano | INTEGER | Año fiscal consultado | Análisis temporal |
+| periodo_tipo | STRING | Tipo de periodo (ANUAL, MENSUAL, TRIMESTRAL) | Granularidad temporal |
+| periodo_valor | STRING | Valor específico del periodo (ej. 2026) | Granularidad temporal |
+| nivel_jerarquia | STRING | Nivel en la jerarquía presupuestal | Análisis jerárquico |
+| codigo | STRING | Código del nivel jerárquico | Trazabilidad |
+| descripcion | STRING | Descripción del nivel jerárquico | Visualización |
+| pia | NUMERIC | Presupuesto Institucional de Apertura | Presupuesto inicial |
+| pim | NUMERIC | Presupuesto Institucional Modificado | Presupuesto actualizado |
+| certificacion | NUMERIC | Monto certificado acumulado | Control presupuestal |
+| compromiso_anual | NUMERIC | Compromiso anual acumulado | Control presupuestal |
+| compromiso_mensual | NUMERIC | Compromiso mensual acumulado | Control presupuestal |
+| devengado | NUMERIC | Monto devengado acumulado | Ejecución presupuestal |
+| girado | NUMERIC | Monto girado acumulado | Ejecución financiera |
+| avance_porcentaje | NUMERIC | Porcentaje de avance | KPI de ejecución |
+| fecha_carga | TIMESTAMP | Fecha y hora de carga del registro | Auditoría |
+
+### Reglas de calidad iniciales
+- `ano` y `nivel_jerarquia` no deben ser nulos.
+- Los montos y porcentajes deben convertirse a `NUMERIC`.
+- `fecha_carga` debe convertirse a `TIMESTAMP`.
+
+---
+
+## 12.2. Dataset: presupuesto_mef_producto
+
+### Descripción
+Permite analizar la asignación y ejecución presupuestal distribuida por productos, actividades de inversión u obras de PRONABEC.
+
+### Tabla Silver esperada
+`silver.presupuesto_mef_producto`
+
+| Campo | Tipo esperado | Descripción | Uso analítico |
+| :--- | :--- | :--- | :--- |
+| ano | INTEGER | Año fiscal consultado | Análisis temporal |
+| periodo_tipo | STRING | Tipo de periodo | Granularidad temporal |
+| periodo_valor | STRING | Valor del periodo | Granularidad temporal |
+| codigo_producto | STRING | Código único del producto/proyecto | Relación de hechos |
+| producto_proyecto | STRING | Descripción de producto/proyecto | Clasificación del gasto |
+| pia | NUMERIC | Presupuesto de Apertura | Presupuesto inicial |
+| pim | NUMERIC | Presupuesto Modificado | Presupuesto actualizado |
+| certificacion | NUMERIC | Monto certificado | Control presupuestal |
+| compromiso_anual | NUMERIC | Compromiso anual | Control presupuestal |
+| compromiso_mensual | NUMERIC | Compromiso mensual | Control presupuestal |
+| devengado | NUMERIC | Monto devengado | Ejecución presupuestal |
+| girado | NUMERIC | Monto girado | Ejecución financiera |
+| avance_porcentaje | NUMERIC | Porcentaje de avance | KPI de ejecución |
+| fecha_carga | TIMESTAMP | Fecha y hora de carga | Auditoría |
+
+---
+
+## 12.3. Dataset: presupuesto_mef_generica
+
+### Descripción
+Contiene la clasificación del presupuesto según el nivel de genérica de gasto (ej. Bienes y Servicios, Donaciones y Transferencias, etc.).
+
+### Tabla Silver esperada
+`silver.presupuesto_mef_generica`
+
+| Campo | Tipo esperado | Descripción | Uso analítico |
+| :--- | :--- | :--- | :--- |
+| ano | INTEGER | Año fiscal | temporal |
+| periodo_tipo | STRING | Tipo de periodo | Granularidad |
+| periodo_valor | STRING | Valor del periodo | Granularidad |
+| codigo_generica | STRING | Código de la partida genérica de gasto | Relación |
+| generica | STRING | Descripción de la genérica | Clasificación contable |
+| pia | NUMERIC | Presupuesto de Apertura | Presupuesto inicial |
+| pim | NUMERIC | Presupuesto Modificado | Presupuesto modificado |
+| certificacion | NUMERIC | Monto certificado | Control |
+| compromiso_anual | NUMERIC | Compromiso anual | Control |
+| compromiso_mensual | NUMERIC | Compromiso mensual | Control |
+| devengado | NUMERIC | Monto devengado | Ejecución |
+| girado | NUMERIC | Monto girado | Ejecución |
+| avance_porcentaje | NUMERIC | Porcentaje de avance | KPI |
+| fecha_carga | TIMESTAMP | Fecha y hora de carga | Auditoría |
+
+---
+
+## 12.4. Dataset: presupuesto_mef_fuente
+
+### Descripción
+Clasificación presupuestal según la fuente de financiamiento oficial (ej. Recursos Ordinarios, Recursos Directamente Recaudados).
+
+### Tabla Silver esperada
+`silver.presupuesto_mef_fuente`
+
+| Campo | Tipo esperado | Descripción | Uso analítico |
+| :--- | :--- | :--- | :--- |
+| ano | INTEGER | Año fiscal | temporal |
+| periodo_tipo | STRING | Tipo de periodo | Granularidad |
+| periodo_valor | STRING | Valor del periodo | Granularidad |
+| codigo_fuente | STRING | Código de la fuente de financiamiento | Relación |
+| fuente_financiamiento | STRING | Descripción de la fuente | Clasificación financiera |
+| pia | NUMERIC | Presupuesto de Apertura | Presupuesto inicial |
+| pim | NUMERIC | Presupuesto Modificado | Presupuesto modificado |
+| certificacion | NUMERIC | Monto certificado | Control |
+| compromiso_anual | NUMERIC | Compromiso anual | Control |
+| compromiso_mensual | NUMERIC | Compromiso mensual | Control |
+| devengado | NUMERIC | Monto devengado | Ejecución |
+| girado | NUMERIC | Monto girado | Ejecución |
+| avance_porcentaje | NUMERIC | Porcentaje de avance | KPI |
+| fecha_carga | TIMESTAMP | Fecha y hora de carga | Auditoría |
+
+---
+
+## 12.5. Dataset: presupuesto_mef_rubro
+
+### Descripción
+Desglose presupuestal según el rubro de gasto bajo el cual se registran las transacciones oficiales.
+
+### Tabla Silver esperada
+`silver.presupuesto_mef_rubro`
+
+| Campo | Tipo esperado | Descripción | Uso analítico |
+| :--- | :--- | :--- | :--- |
+| ano | INTEGER | Año fiscal | temporal |
+| periodo_tipo | STRING | Tipo de periodo | Granularidad |
+| periodo_valor | STRING | Valor del periodo | Granularidad |
+| codigo_rubro | STRING | Código del rubro de gasto | Relación |
+| rubro | STRING | Descripción del rubro | Clasificación contable |
+| pia | NUMERIC | Presupuesto de Apertura | Presupuesto inicial |
+| pim | NUMERIC | Presupuesto Modificado | Presupuesto modificado |
+| certificacion | NUMERIC | Monto certificado | Control |
+| compromiso_anual | NUMERIC | Compromiso anual | Control |
+| compromiso_mensual | NUMERIC | Compromiso mensual | Control |
+| devengado | NUMERIC | Monto devengado | Ejecución |
+| girado | NUMERIC | Monto girado | Ejecución |
+| avance_porcentaje | NUMERIC | Porcentaje de avance | KPI |
+| fecha_carga | TIMESTAMP | Fecha y hora de carga | Auditoría |
+
+---
+
+## 12.6. Dataset: presupuesto_mef_departamento
+
+### Descripción
+Asignación presupuestal distribuida geográficamente a nivel de departamento/región.
+
+### Tabla Silver esperada
+`silver.presupuesto_mef_departamento`
+
+| Campo | Tipo esperado | Descripción | Uso analítico |
+| :--- | :--- | :--- | :--- |
+| ano | INTEGER | Año fiscal | temporal |
+| periodo_tipo | STRING | Tipo de periodo | Granularidad |
+| periodo_valor | STRING | Valor del periodo | Granularidad |
+| departamento | STRING | Nombre del departamento geográfico | Análisis geográfico |
+| pia | NUMERIC | Presupuesto de Apertura | Presupuesto inicial |
+| pim | NUMERIC | Presupuesto Modificado | Presupuesto modificado |
+| certificacion | NUMERIC | Monto certificado | Control |
+| compromiso_anual | NUMERIC | Compromiso anual | Control |
+| compromiso_mensual | NUMERIC | Compromiso mensual | Control |
+| devengado | NUMERIC | Monto devengado | Ejecución |
+| girado | NUMERIC | Monto girado | Ejecución |
+| avance_porcentaje | NUMERIC | Porcentaje de avance | KPI |
+| fecha_carga | TIMESTAMP | Fecha y hora de carga | Auditoría |
+
+---
+
+## 12.7. Dataset: presupuesto_mef_temporal
+
+### Descripción
+Proporciona los cortes de ejecución presupuestal a nivel de trimestre o mes.
+
+### Tabla Silver esperada
+`silver.presupuesto_mef_temporal`
+
+| Campo | Tipo esperado | Descripción | Uso analítico |
+| :--- | :--- | :--- | :--- |
+| ano | INTEGER | Año fiscal | temporal |
+| periodo_tipo | STRING | Tipo de periodo (MENSUAL o TRIMESTRAL) | Granularidad |
+| periodo_valor | STRING | Valor del periodo (ej. 2026-01) | Granularidad |
+| trimestre | STRING | Identificador de trimestre (ej. T1), cuando aplique | Temporal |
+| mes_numero | STRING | Número de mes (ej. 01), cuando aplique | Temporal |
+| mes_nombre | STRING | Nombre del mes (ej. ENERO), cuando aplique | Temporal |
+| pia | NUMERIC | Presupuesto de Apertura | Presupuesto inicial |
+| pim | NUMERIC | Presupuesto Modificado | Presupuesto modificado |
+| certificacion | NUMERIC | Monto certificado | Control |
+| compromiso_anual | NUMERIC | Compromiso anual | Control |
+| compromiso_mensual | NUMERIC | Compromiso mensual | Control |
+| devengado | NUMERIC | Monto devengado | Ejecución |
+| girado | NUMERIC | Monto girado | Ejecución |
+| avance_porcentaje | NUMERIC | Porcentaje de avance | KPI |
+| fecha_carga | TIMESTAMP | Fecha y hora de carga | Auditoría |
+
+### Consideraciones sobre nulos y valores vacíos
+En Bronze se conservan los strings vacíos que vengan del portal de origen sin alterar la respuesta. Durante la transformación Silver, se permitirá que las columnas de montos y avance en filas mensuales de este dataset se mantengan como `NULL` si el origen no devolvió valores acumulados mensuales para las mismas.
+
 ---
 
 # 13. Campos derivados y enriquecimientos previstos

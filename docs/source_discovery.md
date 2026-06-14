@@ -145,6 +145,45 @@ Durante la fase de discovery real en el portal Consulta Amigable, se constató q
 2. **Resiliencia / Fallbacks**: Como mitigación ante cambios de etiquetas en el portal, se definieron fallbacks que buscan en la tabla las palabras clave `BECAS + CREDITO` o `PRONABEC` si no se encuentra la ejecutora exacta `117-1438`.
 3. **Normalización del Contrato**: La salida se normaliza estructuralmente al contrato Bronze `presupuesto_mef` definido en [presupuesto_mef_schema.json](file:///c:/Users/Windows%2011/Desktop/Proyectos/pronabec-cloud-bi-platform/config/schemas/bronze/presupuesto_mef_schema.json), generando un archivo CSV alineado con los nombres estandarizados de columnas.
 
+## MEF Consulta Amigable - Breakdown Slices
+
+El portal de Consulta Amigable permite a su vez consultar desagregaciones (slices) adicionales dentro del contexto de PRONABEC una vez seleccionada la Unidad Ejecutora.
+
+### Hallazgos de Discovery y Proceso de Extracción
+* **Estructura Dinámica**: El portal no cuenta con una API limpia de entrega en JSON. Toda la navegación se realiza simulando el POST de formularios ASP.NET, manteniendo consistencia del estado del navegador virtual.
+* **Uso de BeautifulSoup**: El scraper realiza la navegación simulando clics del formulario y parseando las respuestas HTML resultantes con `BeautifulSoup`, prescindiendo completamente de Selenium.
+* **Separación de Granularidad**: Para evitar la mezcla de granularidades presupuestales diferentes en la misma tabla de hechos, el scraper guarda las salidas Bronze en rutas de Cloud Storage separadas físicamente para cada dimensión.
+* **Valores Vacíos**: Las celdas vacías devueltas por el portal (común en cortes mensuales donde no se reportan valores acumulados de PIA/PIM) se preservan como cadenas de texto vacías en la capa Bronze. No se realiza interpolación ni inferencia de valores en esta capa; la fuente cruda se preserva de manera fiel.
+
+### Comandos de Validación Local
+Para ejecutar y probar la descarga de todos los slices en dry-run local:
+
+```powershell
+python -m pipelines.scrape_mef_budget \
+  --consulta-amigable \
+  --extraction-date 2026-06-14 \
+  --start-year 2026 \
+  --end-year 2026 \
+  --include-hierarchy \
+  --include-spending-breakdowns \
+  --breakdown-slices producto,generica,fuente,rubro,departamento,temporal \
+  --dry-run \
+  --output-dir tmp
+```
+
+### Estructura de Rutas Esperadas en Dry-Run
+El comando anterior generará la siguiente estructura bajo el directorio local:
+
+```text
+tmp/bronze/mef/presupuesto_hierarchy/extraction_date=2026-06-14/data.csv
+tmp/bronze/mef/presupuesto_producto/extraction_date=2026-06-14/data.csv
+tmp/bronze/mef/presupuesto_generica/extraction_date=2026-06-14/data.csv
+tmp/bronze/mef/presupuesto_fuente/extraction_date=2026-06-14/data.csv
+tmp/bronze/mef/presupuesto_rubro/extraction_date=2026-06-14/data.csv
+tmp/bronze/mef/presupuesto_departamento/extraction_date=2026-06-14/data.csv
+tmp/bronze/mef/presupuesto_temporal/extraction_date=2026-06-14/data.csv
+```
+
 ## Salidas locales
 
 Los archivos generados se almacenan en:
