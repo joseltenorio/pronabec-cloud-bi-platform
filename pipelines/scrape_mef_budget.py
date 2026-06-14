@@ -43,6 +43,21 @@ from pipelines.common.validation import validate_required_columns
 DEFAULT_ENDPOINTS_CONFIG = "config/endpoints.yaml"
 DEFAULT_PIPELINE_CONFIG = "config/pipeline.yaml"
 DEFAULT_TIMEOUT_SECONDS = 90
+CONSULTA_AMIGABLE_BASE_URL = "https://apps5.mineco.gob.pe/transparencia/Navegador/"
+CONSULTA_AMIGABLE_DEFAULT_URL = CONSULTA_AMIGABLE_BASE_URL + "default.aspx"
+CONSULTA_AMIGABLE_NAVIGATE_URL = CONSULTA_AMIGABLE_BASE_URL + "Navegar.aspx"
+MEF_PRONABEC_EXECUTORA_NAME = (
+    "117-1483: PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO"
+)
+CONSULTA_AMIGABLE_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/125.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "es-PE,es;q=0.9,en;q=0.8",
+}
 
 
 class MEFExtractionError(Exception):
@@ -191,6 +206,286 @@ def clean_cell_value(value: Any) -> str:
     return cleaned
 
 
+def clean_mef_number(value: str | None) -> float:
+    """
+    Convierte valores numericos del portal MEF a float.
+    """
+    if value is None:
+        return 0.0
+
+    cleaned = clean_cell_value(value)
+    if cleaned in {"", "-"}:
+        return 0.0
+
+    cleaned = cleaned.replace("%", "")
+    cleaned = cleaned.replace(",", "")
+    cleaned = re.sub(r"[^0-9.\-]", "", cleaned)
+
+    if cleaned in {"", "-", "."}:
+        return 0.0
+
+    return float(cleaned)
+
+
+def build_mef_form_payload(soup: BeautifulSoup, next_button_name: str) -> dict[str, str]:
+    """
+    Extrae campos de formulario ASP.NET y agrega el boton que dispara el POST.
+    """
+    payload: dict[str, str] = {}
+
+    for field in soup.find_all(["input", "select", "textarea"]):
+        name = field.get("name")
+        if not name:
+            continue
+
+        tag_name = field.name
+        field_type = (field.get("type") or "").lower()
+
+        if tag_name == "input" and field_type in {"submit", "button", "image"}:
+            continue
+
+        if tag_name == "input" and field_type in {"radio", "checkbox"}:
+            if field.has_attr("checked"):
+                payload[name] = field.get("value", "on")
+            continue
+
+        if tag_name == "select":
+            selected_option = field.find("option", selected=True) or field.find("option")
+            payload[name] = selected_option.get("value", "") if selected_option else ""
+            continue
+
+        payload[name] = field.get("value", field.get_text("", strip=True))
+
+    payload[next_button_name] = ""
+    return payload
+
+
+def normalize_mef_text(value: str) -> str:
+    """
+    Normaliza texto para busquedas tolerantes en Consulta Amigable.
+    """
+    normalized = clean_cell_value(value).upper()
+    replacements = {
+        "Á": "A",
+        "É": "E",
+        "Í": "I",
+        "Ó": "O",
+        "Ú": "U",
+        "Ü": "U",
+        "Ñ": "N",
+    }
+    for source, target in replacements.items():
+        normalized = normalized.replace(source, target)
+    return normalized
+
+
+def text_matches_all_filters(value: str, text_filters: list[str]) -> bool:
+    normalized = normalize_mef_text(value)
+    return all(normalize_mef_text(text_filter) in normalized for text_filter in text_filters)
+
+
+def find_mef_grp1_value(
+    soup: BeautifulSoup,
+    text_filters: list[str],
+) -> tuple[str | None, str | None]:
+    """
+    Busca el valor de radio `grp1` cuyo texto asociado contiene los filtros.
+    """
+    for radio in soup.find_all("input", {"name": "grp1"}):
+        value = radio.get("value")
+        row = radio.find_parent("tr")
+        label = clean_cell_value(row.get_text(" ")) if row else ""
+
+        if label and text_matches_all_filters(label, text_filters):
+            return value, label
+
+    for label in soup.find_all("label"):
+        label_text = clean_cell_value(label.get_text(" "))
+        if not text_matches_all_filters(label_text, text_filters):
+            continue
+
+        radio_id = label.get("for")
+        radio = soup.find("input", {"id": radio_id}) if radio_id else None
+        if radio and radio.get("name") == "grp1":
+            return radio.get("value"), label_text
+
+    return None, None
+
+
+def extract_mef_budget_row(
+    soup: BeautifulSoup,
+    text_filters: list[str],
+) -> list[str] | None:
+    """
+    Extrae la fila presupuestal final desde tablas de Consulta Amigable.
+    """
+    tables = soup.find_all("table", class_="Data") or soup.find_all("table")
+
+    for table in tables:
+        for row in table.find_all("tr"):
+            cells = [
+                clean_cell_value(cell.get_text(" "))
+                for cell in row.find_all(["td", "th"])
+            ]
+            if len(cells) < 9:
+                continue
+
+            row_text = " ".join(cells)
+            if text_matches_all_filters(row_text, text_filters):
+                return cells
+
+    return None
+
+
+def post_mef_navigation(
+    session: requests.Session,
+    soup: BeautifulSoup,
+    url: str,
+    button_name: str,
+    timeout: int,
+    grp1_value: str | None = None,
+) -> BeautifulSoup:
+    payload = build_mef_form_payload(soup, button_name)
+    if grp1_value is not None:
+        payload["grp1"] = grp1_value
+
+    response = session.post(url, data=payload, timeout=timeout)
+    response.raise_for_status()
+    return BeautifulSoup(response.text, "html.parser")
+
+
+def choose_mef_grp1_or_raise(
+    soup: BeautifulSoup,
+    text_filters: list[str],
+    step_name: str,
+) -> str:
+    value, _ = find_mef_grp1_value(soup, text_filters)
+    if not value:
+        raise MEFExtractionError(
+            f"No se encontro opcion MEF para {step_name}: {text_filters}"
+        )
+    return value
+
+
+def scrape_consulta_amigable_year(year: int, timeout: int = 60) -> dict[str, Any] | None:
+    """
+    Extrae presupuesto PRONABEC de Consulta Amigable para un anio fiscal.
+    """
+    params = {"y": str(year), "ap": "ActProy"}
+
+    with requests.Session() as session:
+        session.headers.update(CONSULTA_AMIGABLE_HEADERS)
+
+        default_response = session.get(
+            CONSULTA_AMIGABLE_DEFAULT_URL,
+            params=params,
+            timeout=timeout,
+        )
+        default_response.raise_for_status()
+
+        navigate_response = session.get(
+            CONSULTA_AMIGABLE_NAVIGATE_URL,
+            params=params,
+            timeout=timeout,
+        )
+        navigate_response.raise_for_status()
+        navigate_url = navigate_response.url
+        soup = BeautifulSoup(navigate_response.text, "html.parser")
+
+        soup = post_mef_navigation(
+            session=session,
+            soup=soup,
+            url=navigate_url,
+            button_name="ctl00$CPH1$BtnTipoGobierno",
+            timeout=timeout,
+        )
+        gobierno_value = choose_mef_grp1_or_raise(
+            soup,
+            ["GOBIERNO NACIONAL"],
+            "Nivel de Gobierno",
+        )
+
+        soup = post_mef_navigation(
+            session=session,
+            soup=soup,
+            url=navigate_url,
+            button_name="ctl00$CPH1$BtnSector",
+            timeout=timeout,
+            grp1_value=gobierno_value,
+        )
+        sector_value = choose_mef_grp1_or_raise(soup, ["EDUCACION"], "Sector")
+
+        soup = post_mef_navigation(
+            session=session,
+            soup=soup,
+            url=navigate_url,
+            button_name="ctl00$CPH1$BtnPliego",
+            timeout=timeout,
+            grp1_value=sector_value,
+        )
+        pliego_value = choose_mef_grp1_or_raise(
+            soup,
+            ["010", "M. DE EDUCACION"],
+            "Pliego",
+        )
+
+        soup = post_mef_navigation(
+            session=session,
+            soup=soup,
+            url=navigate_url,
+            button_name="ctl00$CPH1$BtnEjecutora",
+            timeout=timeout,
+            grp1_value=pliego_value,
+        )
+
+        row = (
+            extract_mef_budget_row(
+                soup,
+                ["117-1483", "PROGRAMA NACIONAL DE BECAS", "CREDITO EDUCATIVO"],
+            )
+            or extract_mef_budget_row(soup, ["BECAS", "CREDITO"])
+            or extract_mef_budget_row(soup, ["PRONABEC"])
+        )
+
+    if not row:
+        return None
+
+    budget_values = row[-8:]
+    descriptive_cells = row[: -len(budget_values)]
+    ejecutora_nombre = next((cell for cell in descriptive_cells if cell), "")
+
+    return {
+        "ano": year,
+        "ejecutora_nombre": ejecutora_nombre or MEF_PRONABEC_EXECUTORA_NAME,
+        "pia": clean_mef_number(budget_values[0]),
+        "pim": clean_mef_number(budget_values[1]),
+        "certificacion": clean_mef_number(budget_values[2]),
+        "compromiso_anual": clean_mef_number(budget_values[3]),
+        "compromiso_mensual": clean_mef_number(budget_values[4]),
+        "devengado": clean_mef_number(budget_values[5]),
+        "girado": clean_mef_number(budget_values[6]),
+        "avance_porcentaje": clean_mef_number(budget_values[7]),
+    }
+
+
+def scrape_consulta_amigable_range(
+    start_year: int,
+    end_year: int,
+    timeout: int = 60,
+) -> list[dict[str, Any]]:
+    """
+    Extrae presupuesto PRONABEC para un rango inclusivo de anios fiscales.
+    """
+    records: list[dict[str, Any]] = []
+
+    for year in range(start_year, end_year + 1):
+        record = scrape_consulta_amigable_year(year, timeout=timeout)
+        if record:
+            records.append(record)
+
+    return records
+
+
 def read_csv_records_from_text(content: str) -> list[dict[str, Any]]:
     """
     Lee registros CSV desde texto.
@@ -302,8 +597,8 @@ def fetch_mef_records(
 
     if not source_url:
         raise ConfigError(
-            "No se definió fuente MEF. Usa --source-url, --source-file "
-            "o configura MEF_SOURCE_URL."
+            "No se definió fuente MEF. Usa --consulta-amigable, --source-url, "
+            "--source-file o configura MEF_SOURCE_URL."
         )
 
     parsed_url = urlparse(source_url)
@@ -488,6 +783,7 @@ def write_mef_to_local(
     source_url: str | None,
     source_file: str | None,
     logger,
+    source_mode: str = "external",
 ) -> dict[str, str]:
     """
     Escribe data.csv y extraction_metadata.json localmente.
@@ -515,6 +811,7 @@ def write_mef_to_local(
         },
         extra_metadata={
             "mode": "dry_run",
+            "source_mode": source_mode,
             "source_url": source_url,
             "source_file": source_file,
         },
@@ -577,8 +874,18 @@ def run_extraction(args: argparse.Namespace) -> None:
     mef_config = endpoints_config["mef"]
     expected_columns = get_mef_expected_columns(endpoints_config)
 
-    source_url = args.source_url or get_env_var("MEF_SOURCE_URL")
-    source_file = args.source_file
+    if args.consulta_amigable:
+        source_mode = "consulta_amigable"
+        source_url = CONSULTA_AMIGABLE_BASE_URL
+        source_file = None
+    elif args.source_file:
+        source_mode = "source_file"
+        source_url = args.source_url or get_env_var("MEF_SOURCE_URL")
+        source_file = args.source_file
+    else:
+        source_mode = "source_url"
+        source_url = args.source_url or get_env_var("MEF_SOURCE_URL")
+        source_file = None
     extraction_date = args.extraction_date or date.today().isoformat()
     run_id = args.run_id or generate_run_id("mef_extraction")
 
@@ -608,19 +915,36 @@ def run_extraction(args: argparse.Namespace) -> None:
         start_year=start_year,
         end_year=end_year,
         text_filter=text_filter,
+        source_mode=source_mode,
     )
 
     started_at = datetime.utcnow()
 
     try:
-        raw_records = fetch_mef_records(
-            source_url=source_url,
-            source_file=source_file,
-            timeout=args.timeout,
-            table_index=args.table_index,
-        )
+        if args.consulta_amigable:
+            if start_year is None or end_year is None:
+                raise ConfigError(
+                    "--consulta-amigable requiere --start-year y --end-year "
+                    "o MEF_START_YEAR/MEF_END_YEAR."
+                )
 
-        filtered_records = filter_records_by_text(raw_records, text_filter)
+            raw_records = scrape_consulta_amigable_range(
+                start_year=start_year,
+                end_year=end_year,
+                timeout=args.timeout,
+            )
+        else:
+            raw_records = fetch_mef_records(
+                source_url=source_url,
+                source_file=source_file,
+                timeout=args.timeout,
+                table_index=args.table_index,
+            )
+
+        if args.consulta_amigable:
+            filtered_records = raw_records
+        else:
+            filtered_records = filter_records_by_text(raw_records, text_filter)
         normalized_records = normalize_mef_records(filtered_records, expected_columns)
         normalized_records = filter_records_by_year(
             normalized_records,
@@ -643,6 +967,7 @@ def run_extraction(args: argparse.Namespace) -> None:
                 records_read=len(raw_records),
                 source_url=source_url,
                 source_file=source_file,
+                source_mode=source_mode,
                 logger=logger,
             )
             output_uri = output_result["output_uri"]
@@ -671,6 +996,7 @@ def run_extraction(args: argparse.Namespace) -> None:
             records_written=len(normalized_records),
             metadata={
                 "output_uri": output_uri,
+                "source_mode": source_mode,
                 "source_url": source_url,
                 "source_file": source_file,
                 "records_after_text_filter": len(filtered_records),
@@ -704,6 +1030,7 @@ def run_extraction(args: argparse.Namespace) -> None:
             metadata={
                 "source_url": source_url,
                 "source_file": source_file,
+                "source_mode": source_mode,
                 "started_at": started_at.isoformat(),
                 "finished_at": datetime.utcnow().isoformat(),
             },
@@ -745,6 +1072,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--source-file",
         help="Archivo CSV local controlado para carga MEF.",
+    )
+    parser.add_argument(
+        "--consulta-amigable",
+        action="store_true",
+        help="Scrapea directamente el Navegador MEF de Consulta Amigable.",
     )
     parser.add_argument(
         "--bucket",
