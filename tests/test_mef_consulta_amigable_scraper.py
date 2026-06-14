@@ -9,11 +9,14 @@ from pipelines.scrape_mef_budget import (
     MEF_HIERARCHY_FIELDNAMES,
     build_mef_form_payload,
     clean_mef_number,
+    extract_mef_breakdown_rows,
     extract_mef_hierarchy_rows,
     extract_mef_budget_row,
     find_mef_grp1_value,
+    parse_breakdown_slices,
     scrape_consulta_amigable_year,
     split_mef_code_description,
+    write_mef_breakdown_to_local,
     write_mef_hierarchy_to_local,
     write_mef_to_local,
 )
@@ -139,6 +142,43 @@ def hierarchy_table() -> str:
     )
 
 
+def breakdown_table(*labels: str) -> str:
+    rows = "\n".join(
+        f"""
+        <tr>
+          <td>{label}</td>
+          <td>1,000</td>
+          <td>2,000</td>
+          <td>1,900</td>
+          <td>1,500</td>
+          <td>1,100</td>
+          <td>1,000</td>
+          <td>900</td>
+          <td>50.0</td>
+        </tr>
+        """
+        for label in labels
+    )
+    return base_form(
+        f"""
+        <table class="Data">
+          <tr>
+            <th>Descripcion</th>
+            <th>PIA</th>
+            <th>PIM</th>
+            <th>Certificacion</th>
+            <th>Compromiso Anual</th>
+            <th>Atencion de Compromiso Mensual</th>
+            <th>Devengado</th>
+            <th>Girado</th>
+            <th>Avance %</th>
+          </tr>
+          {rows}
+        </table>
+        """
+    )
+
+
 def test_clean_mef_number_handles_portal_formats() -> None:
     assert clean_mef_number("1,429,676,488") == 1429676488.0
     assert clean_mef_number("41.2") == 41.2
@@ -220,6 +260,17 @@ def test_split_mef_code_description_handles_hierarchy_labels() -> None:
         "PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO",
     )
     assert split_mef_code_description("TOTAL") == ("", "TOTAL")
+    assert split_mef_code_description(
+        "3000885: ENTREGA DE BECA DE EDUCACION SUPERIOR"
+    ) == (
+        "3000885",
+        "ENTREGA DE BECA DE EDUCACION SUPERIOR",
+    )
+    assert split_mef_code_description("2.3: BIENES Y SERVICIOS") == (
+        "2.3",
+        "BIENES Y SERVICIOS",
+    )
+    assert split_mef_code_description("SIN CODIGO") == ("", "SIN CODIGO")
 
 
 def test_extract_mef_hierarchy_rows_from_fake_html() -> None:
@@ -257,6 +308,72 @@ def test_extract_mef_hierarchy_rows_from_fake_html() -> None:
     assert records[2]["descripcion"] == (
         "PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO"
     )
+
+
+def test_extract_mef_producto_breakdown_rows_from_fake_html() -> None:
+    soup = soup_from_html(
+        breakdown_table(
+            "3000885: ENTREGA DE BECA DE EDUCACION SUPERIOR A POBLACION CON ALTO RENDIMIENTO ACADEMICO",
+            "SIN CODIGO PRODUCTO",
+        )
+    )
+
+    records = extract_mef_breakdown_rows(
+        soup=soup,
+        ano=2026,
+        slice_name="producto",
+        periodo_tipo="ANUAL",
+        periodo_valor="2026",
+    )
+
+    assert records[0] == {
+        "ano": "2026",
+        "periodo_tipo": "ANUAL",
+        "periodo_valor": "2026",
+        "codigo_producto": "3000885",
+        "producto_proyecto": (
+            "ENTREGA DE BECA DE EDUCACION SUPERIOR A POBLACION CON ALTO "
+            "RENDIMIENTO ACADEMICO"
+        ),
+        "pia": "1,000",
+        "pim": "2,000",
+        "certificacion": "1,900",
+        "compromiso_anual": "1,500",
+        "compromiso_mensual": "1,100",
+        "devengado": "1,000",
+        "girado": "900",
+        "avance_porcentaje": "50.0",
+    }
+    assert records[1]["codigo_producto"] == ""
+    assert records[1]["producto_proyecto"] == "SIN CODIGO PRODUCTO"
+
+
+def test_extract_mef_generica_breakdown_rows_from_fake_html() -> None:
+    soup = soup_from_html(
+        breakdown_table(
+            "2.3: BIENES Y SERVICIOS",
+            "2.5: OTROS GASTOS",
+        )
+    )
+
+    records = extract_mef_breakdown_rows(
+        soup=soup,
+        ano=2026,
+        slice_name="generica",
+    )
+
+    assert len(records) == 2
+    assert records[0]["codigo_generica"] == "2.3"
+    assert records[0]["generica"] == "BIENES Y SERVICIOS"
+    assert records[1]["codigo_generica"] == "2.5"
+    assert records[1]["generica"] == "OTROS GASTOS"
+
+
+def test_parse_breakdown_slices_defaults_cli_and_env_values() -> None:
+    assert parse_breakdown_slices(None) == ["producto", "generica"]
+    assert parse_breakdown_slices("") == ["producto", "generica"]
+    assert parse_breakdown_slices("producto,generica") == ["producto", "generica"]
+    assert parse_breakdown_slices(" generica ") == ["generica"]
 
 
 class FakeResponse:
@@ -438,6 +555,68 @@ def test_write_mef_hierarchy_to_local_includes_metadata(tmp_path: Path) -> None:
     assert metadata["metadata"]["source_system"] == "MEF"
     assert metadata["metadata"]["source_dataset"] == "presupuesto_hierarchy"
     assert metadata["metadata"]["source_mode"] == "consulta_amigable"
+
+
+def test_write_mef_breakdown_to_local_includes_metadata(tmp_path: Path) -> None:
+    logger_mock = type("MockLogger", (), {"log": lambda *args, **kwargs: None})()
+    producto_records = extract_mef_breakdown_rows(
+        soup_from_html(breakdown_table("3000885: ENTREGA DE BECA")),
+        ano=2026,
+        slice_name="producto",
+    )
+    generica_records = extract_mef_breakdown_rows(
+        soup_from_html(breakdown_table("2.3: BIENES Y SERVICIOS")),
+        ano=2026,
+        slice_name="generica",
+    )
+
+    producto_result = write_mef_breakdown_to_local(
+        records=producto_records,
+        extraction_date="2026-06-14",
+        output_dir=tmp_path,
+        run_id="test_run",
+        records_read=len(producto_records),
+        source_url=CONSULTA_AMIGABLE_BASE_URL,
+        slice_name="producto",
+        logger=logger_mock,
+        source_mode="consulta_amigable",
+    )
+    generica_result = write_mef_breakdown_to_local(
+        records=generica_records,
+        extraction_date="2026-06-14",
+        output_dir=tmp_path,
+        run_id="test_run",
+        records_read=len(generica_records),
+        source_url=CONSULTA_AMIGABLE_BASE_URL,
+        slice_name="generica",
+        logger=logger_mock,
+        source_mode="consulta_amigable",
+    )
+
+    producto_csv = Path(producto_result["output_uri"])
+    generica_csv = Path(generica_result["output_uri"])
+
+    assert str(producto_csv.parent).replace("\\", "/").endswith(
+        "bronze/mef/presupuesto_producto/extraction_date=2026-06-14"
+    )
+    assert str(generica_csv.parent).replace("\\", "/").endswith(
+        "bronze/mef/presupuesto_generica/extraction_date=2026-06-14"
+    )
+    assert producto_csv.exists()
+    assert generica_csv.exists()
+
+    producto_metadata = json.loads(
+        Path(producto_result["metadata_path"]).read_text(encoding="utf-8")
+    )
+    generica_metadata = json.loads(
+        Path(generica_result["metadata_path"]).read_text(encoding="utf-8")
+    )
+
+    assert producto_metadata["source_dataset"] == "presupuesto_producto"
+    assert producto_metadata["metadata"]["breakdown_slice"] == "producto"
+    assert generica_metadata["source_dataset"] == "presupuesto_generica"
+    assert generica_metadata["metadata"]["breakdown_slice"] == "generica"
+    assert producto_metadata["metadata"]["source_system"] == "MEF"
 
 
 def test_mef_scraper_parametrization_cli_vs_env(monkeypatch) -> None:
@@ -661,7 +840,7 @@ def test_run_extraction_with_include_hierarchy_writes_hierarchy_output(
     monkeypatch.setattr(
         scrape_mef_budget,
         "scrape_consulta_amigable_range_snapshot",
-        lambda start_year, end_year, timeout, include_hierarchy: {
+        lambda start_year, end_year, timeout, include_hierarchy, breakdown_slices: {
             "budget_records": [
                 {
                     "ano": 2026,
@@ -680,6 +859,7 @@ def test_run_extraction_with_include_hierarchy_writes_hierarchy_output(
                 soup_from_html(hierarchy_table()),
                 ano=2026,
             ),
+            "breakdown_records": {},
         },
     )
 
@@ -715,6 +895,229 @@ def test_run_extraction_with_include_hierarchy_writes_hierarchy_output(
     assert metadata["source_dataset"] == "presupuesto_hierarchy"
     assert metadata["metadata"]["source_mode"] == "consulta_amigable"
     assert metadata["records_written"] == 3
+
+
+def test_run_extraction_without_spending_breakdowns_skips_slice_outputs(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.delenv("MEF_INCLUDE_SPENDING_BREAKDOWNS", raising=False)
+    monkeypatch.delenv("MEF_BREAKDOWN_SLICES", raising=False)
+    monkeypatch.setenv("GCS_BUCKET_NAME", "dummy-bucket")
+
+    monkeypatch.setattr(
+        scrape_mef_budget,
+        "get_pipeline_settings",
+        lambda config: {
+            "pipeline_name": "test",
+            "environment": "test",
+            "log_level": "INFO",
+            "bucket_name": "dummy-bucket",
+            "gcs_paths": {"mef_bronze": "mef_bronze"},
+        },
+    )
+    monkeypatch.setattr(
+        scrape_mef_budget,
+        "load_yaml_config",
+        lambda config: {
+            "mef": {
+                "expected_columns": [
+                    "ano",
+                    "ejecutora_nombre",
+                    "pia",
+                    "pim",
+                    "certificacion",
+                    "compromiso_anual",
+                    "compromiso_mensual",
+                    "devengado",
+                    "girado",
+                    "avance_porcentaje",
+                ]
+            }
+        },
+    )
+    monkeypatch.setattr(
+        scrape_mef_budget,
+        "scrape_consulta_amigable_range",
+        lambda start_year, end_year, timeout: [
+            {
+                "ano": 2026,
+                "ejecutora_nombre": PRONABEC_EXECUTORA,
+                "pia": 1429676488.0,
+                "pim": 1607711495.0,
+                "certificacion": 1590100549.0,
+                "compromiso_anual": 1138467562.0,
+                "compromiso_mensual": 675591756.0,
+                "devengado": 662693665.0,
+                "girado": 660194362.0,
+                "avance_porcentaje": 41.2,
+            }
+        ],
+    )
+
+    args = scrape_mef_budget.parse_args(
+        [
+            "--consulta-amigable",
+            "--extraction-date",
+            "2026-06-14",
+            "--start-year",
+            "2026",
+            "--end-year",
+            "2026",
+            "--dry-run",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+    scrape_mef_budget.run_extraction(args)
+
+    assert not (
+        tmp_path
+        / "bronze"
+        / "mef"
+        / "presupuesto_producto"
+        / "extraction_date=2026-06-14"
+        / "data.csv"
+    ).exists()
+    assert not (
+        tmp_path
+        / "bronze"
+        / "mef"
+        / "presupuesto_generica"
+        / "extraction_date=2026-06-14"
+        / "data.csv"
+    ).exists()
+
+
+def test_run_extraction_with_spending_breakdowns_writes_selected_slices(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("GCS_BUCKET_NAME", "dummy-bucket")
+
+    monkeypatch.setattr(
+        scrape_mef_budget,
+        "get_pipeline_settings",
+        lambda config: {
+            "pipeline_name": "test",
+            "environment": "test",
+            "log_level": "INFO",
+            "bucket_name": "dummy-bucket",
+            "gcs_paths": {"mef_bronze": "mef_bronze"},
+        },
+    )
+    monkeypatch.setattr(
+        scrape_mef_budget,
+        "load_yaml_config",
+        lambda config: {
+            "mef": {
+                "expected_columns": [
+                    "ano",
+                    "ejecutora_nombre",
+                    "pia",
+                    "pim",
+                    "certificacion",
+                    "compromiso_anual",
+                    "compromiso_mensual",
+                    "devengado",
+                    "girado",
+                    "avance_porcentaje",
+                ]
+            }
+        },
+    )
+
+    captured_slices = []
+
+    def fake_range_snapshot(
+        start_year,
+        end_year,
+        timeout,
+        include_hierarchy,
+        breakdown_slices,
+    ):
+        captured_slices.extend(breakdown_slices)
+        return {
+            "budget_records": [
+                {
+                    "ano": 2026,
+                    "ejecutora_nombre": PRONABEC_EXECUTORA,
+                    "pia": 1429676488.0,
+                    "pim": 1607711495.0,
+                    "certificacion": 1590100549.0,
+                    "compromiso_anual": 1138467562.0,
+                    "compromiso_mensual": 675591756.0,
+                    "devengado": 662693665.0,
+                    "girado": 660194362.0,
+                    "avance_porcentaje": 41.2,
+                }
+            ],
+            "hierarchy_records": [],
+            "breakdown_records": {
+                "producto": extract_mef_breakdown_rows(
+                    soup_from_html(breakdown_table("3000885: ENTREGA DE BECA")),
+                    ano=2026,
+                    slice_name="producto",
+                ),
+                "generica": extract_mef_breakdown_rows(
+                    soup_from_html(breakdown_table("2.3: BIENES Y SERVICIOS")),
+                    ano=2026,
+                    slice_name="generica",
+                ),
+            },
+        }
+
+    monkeypatch.setattr(
+        scrape_mef_budget,
+        "scrape_consulta_amigable_range_snapshot",
+        fake_range_snapshot,
+    )
+
+    args = scrape_mef_budget.parse_args(
+        [
+            "--consulta-amigable",
+            "--extraction-date",
+            "2026-06-14",
+            "--start-year",
+            "2026",
+            "--end-year",
+            "2026",
+            "--include-spending-breakdowns",
+            "--breakdown-slices",
+            "producto,generica",
+            "--dry-run",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+    scrape_mef_budget.run_extraction(args)
+
+    assert captured_slices == ["producto", "generica"]
+    producto_path = (
+        tmp_path
+        / "bronze"
+        / "mef"
+        / "presupuesto_producto"
+        / "extraction_date=2026-06-14"
+    )
+    generica_path = (
+        tmp_path
+        / "bronze"
+        / "mef"
+        / "presupuesto_generica"
+        / "extraction_date=2026-06-14"
+    )
+
+    assert (producto_path / "data.csv").exists()
+    assert (generica_path / "data.csv").exists()
+    producto_metadata = json.loads(
+        (producto_path / "extraction_metadata.json").read_text(encoding="utf-8")
+    )
+    generica_metadata = json.loads(
+        (generica_path / "extraction_metadata.json").read_text(encoding="utf-8")
+    )
+    assert producto_metadata["metadata"]["breakdown_slice"] == "producto"
+    assert generica_metadata["metadata"]["breakdown_slice"] == "generica"
 
 
 def test_mef_scraper_parametrization_executora_and_base_url(monkeypatch) -> None:
