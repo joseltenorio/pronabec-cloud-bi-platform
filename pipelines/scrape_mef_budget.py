@@ -43,6 +43,22 @@ from pipelines.common.validation import validate_required_columns
 DEFAULT_ENDPOINTS_CONFIG = "config/endpoints.yaml"
 DEFAULT_PIPELINE_CONFIG = "config/pipeline.yaml"
 DEFAULT_TIMEOUT_SECONDS = 90
+MEF_HIERARCHY_FIELDNAMES = [
+    "ano",
+    "periodo_tipo",
+    "periodo_valor",
+    "nivel_jerarquia",
+    "codigo",
+    "descripcion",
+    "pia",
+    "pim",
+    "certificacion",
+    "compromiso_anual",
+    "compromiso_mensual",
+    "devengado",
+    "girado",
+    "avance_porcentaje",
+]
 CONSULTA_AMIGABLE_BASE_URL = "https://apps5.mineco.gob.pe/transparencia/Navegador/"
 CONSULTA_AMIGABLE_HEADERS = {
     "User-Agent": (
@@ -86,6 +102,22 @@ def get_mef_pronabec_executora_name() -> str:
     code = os.getenv("MEF_PRONABEC_EXECUTORA_CODE", "117-1438")
     name = os.getenv("MEF_PRONABEC_EXECUTORA_NAME", "PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO")
     return f"{code}: {name}"
+
+
+def parse_bool_env(value: str | None, default: bool = False) -> bool:
+    """
+    Convierte una variable de entorno booleana comun a bool.
+    """
+    if value is None or value == "":
+        return default
+
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "t", "yes", "y", "si", "sí"}:
+        return True
+    if normalized in {"0", "false", "f", "no", "n"}:
+        return False
+
+    raise ConfigError(f"Valor booleano no valido: {value}")
 
 
 class MEFExtractionError(Exception):
@@ -365,6 +397,173 @@ def extract_mef_budget_row(
     return None
 
 
+def split_mef_code_description(value: str) -> tuple[str, str]:
+    """
+    Separa textos tipo `010: M. DE EDUCACION` en codigo y descripcion.
+    """
+    cleaned = clean_cell_value(value)
+    match = re.match(r"^([^:]+):\s*(.+)$", cleaned)
+    if not match:
+        return "", cleaned
+
+    return clean_cell_value(match.group(1)), clean_cell_value(match.group(2))
+
+
+def parse_mef_hierarchy_descriptor(
+    explicit_level: str,
+    label: str,
+) -> tuple[str, str, str]:
+    """
+    Obtiene nivel, codigo y descripcion desde una etiqueta de jerarquia MEF.
+    """
+    cleaned_level = clean_cell_value(explicit_level)
+    cleaned_label = clean_cell_value(label)
+    prefixed_match = re.match(
+        r"^(Nivel de Gobierno|Sector|Pliego|Unidad Ejecutora|Funci[oó]n|"
+        r"Divisi[oó]n Funcional|Grupo Funcional|Producto/Proyecto|"
+        r"Actividad/Acci[oó]n|Categor[ií]a Presupuestal|Meta)\s+([^:]+):\s*(.+)$",
+        cleaned_label,
+        flags=re.IGNORECASE,
+    )
+
+    if prefixed_match:
+        return (
+            normalize_mef_text(prefixed_match.group(1)),
+            clean_cell_value(prefixed_match.group(2)),
+            clean_cell_value(prefixed_match.group(3)),
+        )
+
+    code, description = split_mef_code_description(cleaned_label)
+    level = cleaned_level or infer_mef_hierarchy_level(cleaned_label)
+
+    if not level and text_matches_all_filters(
+        description,
+        ["PROGRAMA NACIONAL DE BECAS", "CREDITO EDUCATIVO"],
+    ):
+        level = "UNIDAD EJECUTORA"
+
+    return level, code, description
+
+
+def infer_mef_hierarchy_level(description: str) -> str:
+    """
+    Infere un nivel de jerarquia para filas sin columna explicita de nivel.
+    """
+    normalized = normalize_mef_text(description)
+
+    if normalized == "TOTAL":
+        return "TOTAL"
+    if "GOBIERNO" in normalized:
+        return "NIVEL DE GOBIERNO"
+    if normalized.startswith("10:") or normalized == "EDUCACION":
+        return "SECTOR"
+    if "M. DE EDUCACION" in normalized:
+        return "PLIEGO"
+    if "PROGRAMA NACIONAL DE BECAS" in normalized or "PRONABEC" in normalized:
+        return "UNIDAD EJECUTORA"
+
+    return ""
+
+
+def build_mef_hierarchy_record(
+    descriptor_cells: list[str],
+    budget_values: list[str],
+    ano: int | str,
+    periodo_tipo: str,
+    periodo_valor: str,
+) -> dict[str, str] | None:
+    """
+    Normaliza una fila de jerarquia MEF al contrato Bronze conservador.
+    """
+    descriptors = [cell for cell in descriptor_cells if cell]
+    if not descriptors or len(budget_values) < 8:
+        return None
+
+    explicit_level = descriptors[0] if len(descriptors) >= 2 else ""
+    label = descriptors[1] if len(descriptors) >= 2 else descriptors[0]
+    nivel_jerarquia, codigo, descripcion = parse_mef_hierarchy_descriptor(
+        explicit_level=explicit_level,
+        label=label,
+    )
+
+    if not nivel_jerarquia:
+        return None
+
+    return {
+        "ano": str(ano),
+        "periodo_tipo": periodo_tipo,
+        "periodo_valor": periodo_valor,
+        "nivel_jerarquia": nivel_jerarquia,
+        "codigo": codigo,
+        "descripcion": descripcion,
+        "pia": budget_values[0],
+        "pim": budget_values[1],
+        "certificacion": budget_values[2],
+        "compromiso_anual": budget_values[3],
+        "compromiso_mensual": budget_values[4],
+        "devengado": budget_values[5],
+        "girado": budget_values[6],
+        "avance_porcentaje": budget_values[7],
+    }
+
+
+def extract_mef_hierarchy_rows(
+    soup: BeautifulSoup,
+    ano: int | str,
+    periodo_tipo: str = "ANUAL",
+    periodo_valor: str | None = None,
+) -> list[dict[str, str]]:
+    """
+    Extrae filas de la tabla superior de jerarquia presupuestal MEF.
+    """
+    resolved_periodo_valor = periodo_valor or str(ano)
+    records: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+
+    candidate_tables = soup.find_all("table", class_=["Hierarchy", "History", "MapTable"])
+    candidate_tables.extend(soup.find_all("table"))
+
+    for table in candidate_tables:
+        for row in table.find_all("tr"):
+            cells = [
+                clean_cell_value(cell.get_text(" "))
+                for cell in row.find_all(["td", "th"])
+            ]
+
+            if len(cells) < 9:
+                continue
+
+            budget_values = cells[-8:]
+            descriptor_cells = cells[: -len(budget_values)]
+            if not any(descriptor_cells):
+                continue
+            if not any(re.search(r"\d", value) for value in budget_values):
+                continue
+
+            record = build_mef_hierarchy_record(
+                descriptor_cells=descriptor_cells,
+                budget_values=budget_values,
+                ano=ano,
+                periodo_tipo=periodo_tipo,
+                periodo_valor=resolved_periodo_valor,
+            )
+            if not record:
+                continue
+
+            key = (
+                record["nivel_jerarquia"],
+                record["codigo"],
+                record["descripcion"],
+            )
+            if key in seen:
+                continue
+
+            seen.add(key)
+            records.append(record)
+
+    return records
+
+
 def post_mef_navigation(
     session: requests.Session,
     soup: BeautifulSoup,
@@ -395,9 +594,12 @@ def choose_mef_grp1_or_raise(
     return value
 
 
-def scrape_consulta_amigable_year(year: int, timeout: int = 60) -> dict[str, Any] | None:
+def navigate_consulta_amigable_to_pronabec(
+    year: int,
+    timeout: int = 60,
+) -> BeautifulSoup:
     """
-    Extrae presupuesto PRONABEC de Consulta Amigable para un anio fiscal.
+    Navega Consulta Amigable hasta la vista de Unidad Ejecutora PRONABEC.
     """
     params = {"y": str(year), "ap": "ActProy"}
 
@@ -466,16 +668,33 @@ def scrape_consulta_amigable_year(year: int, timeout: int = 60) -> dict[str, Any
             grp1_value=pliego_value,
         )
 
-        executora_code = os.getenv("MEF_PRONABEC_EXECUTORA_CODE", "117-1438")
-        executora_name = os.getenv("MEF_PRONABEC_EXECUTORA_NAME", "PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO")
-        name_parts = [p.strip() for p in re.split(r'\s+[yY]\s+', executora_name) if p.strip()]
-        primary_filters = [executora_code] + name_parts
+    return soup
 
-        row = (
-            extract_mef_budget_row(soup, primary_filters)
-            or extract_mef_budget_row(soup, ["BECAS", "CREDITO"])
-            or extract_mef_budget_row(soup, ["PRONABEC"])
-        )
+
+def extract_mef_budget_record_from_soup(
+    soup: BeautifulSoup,
+    year: int,
+) -> dict[str, Any] | None:
+    """
+    Extrae el registro anual PRONABEC desde la vista final de Consulta Amigable.
+    """
+    executora_code = os.getenv("MEF_PRONABEC_EXECUTORA_CODE", "117-1438")
+    executora_name = os.getenv(
+        "MEF_PRONABEC_EXECUTORA_NAME",
+        "PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO",
+    )
+    name_parts = [
+        part.strip()
+        for part in re.split(r"\s+[yY]\s+", executora_name)
+        if part.strip()
+    ]
+    primary_filters = [executora_code] + name_parts
+
+    row = (
+        extract_mef_budget_row(soup, primary_filters)
+        or extract_mef_budget_row(soup, ["BECAS", "CREDITO"])
+        or extract_mef_budget_row(soup, ["PRONABEC"])
+    )
 
     if not row:
         return None
@@ -498,6 +717,41 @@ def scrape_consulta_amigable_year(year: int, timeout: int = 60) -> dict[str, Any
     }
 
 
+def scrape_consulta_amigable_year(year: int, timeout: int = 60) -> dict[str, Any] | None:
+    """
+    Extrae presupuesto PRONABEC de Consulta Amigable para un anio fiscal.
+    """
+    soup = navigate_consulta_amigable_to_pronabec(year=year, timeout=timeout)
+    return extract_mef_budget_record_from_soup(soup=soup, year=year)
+
+
+def scrape_consulta_amigable_year_snapshot(
+    year: int,
+    timeout: int = 60,
+    include_hierarchy: bool = False,
+) -> dict[str, Any]:
+    """
+    Extrae presupuesto anual y, opcionalmente, snapshot jerarquico MEF.
+    """
+    soup = navigate_consulta_amigable_to_pronabec(year=year, timeout=timeout)
+    budget_record = extract_mef_budget_record_from_soup(soup=soup, year=year)
+    hierarchy_records = (
+        extract_mef_hierarchy_rows(
+            soup=soup,
+            ano=year,
+            periodo_tipo="ANUAL",
+            periodo_valor=str(year),
+        )
+        if include_hierarchy
+        else []
+    )
+
+    return {
+        "budget_record": budget_record,
+        "hierarchy_records": hierarchy_records,
+    }
+
+
 def scrape_consulta_amigable_range(
     start_year: int,
     end_year: int,
@@ -514,6 +768,35 @@ def scrape_consulta_amigable_range(
             records.append(record)
 
     return records
+
+
+def scrape_consulta_amigable_range_snapshot(
+    start_year: int,
+    end_year: int,
+    timeout: int = 60,
+    include_hierarchy: bool = False,
+) -> dict[str, list[dict[str, Any]]]:
+    """
+    Extrae presupuesto anual y hierarchy para un rango inclusivo de anios.
+    """
+    budget_records: list[dict[str, Any]] = []
+    hierarchy_records: list[dict[str, Any]] = []
+
+    for year in range(start_year, end_year + 1):
+        snapshot = scrape_consulta_amigable_year_snapshot(
+            year=year,
+            timeout=timeout,
+            include_hierarchy=include_hierarchy,
+        )
+        budget_record = snapshot["budget_record"]
+        if budget_record:
+            budget_records.append(budget_record)
+        hierarchy_records.extend(snapshot["hierarchy_records"])
+
+    return {
+        "budget_records": budget_records,
+        "hierarchy_records": hierarchy_records,
+    }
 
 
 def read_csv_records_from_text(content: str) -> list[dict[str, Any]]:
@@ -775,6 +1058,27 @@ def build_local_mef_output_paths(
     }
 
 
+def build_local_mef_hierarchy_output_paths(
+    output_dir: str | Path,
+    extraction_date: str,
+) -> dict[str, Path]:
+    """
+    Construye rutas locales equivalentes a Bronze para hierarchy MEF.
+    """
+    base_path = (
+        Path(output_dir)
+        / "bronze"
+        / "mef"
+        / "presupuesto_hierarchy"
+        / f"extraction_date={extraction_date}"
+    )
+
+    return {
+        "csv_path": base_path / "data.csv",
+        "metadata_path": base_path / "extraction_metadata.json",
+    }
+
+
 def build_extraction_metadata(
     source_name: str,
     source_dataset: str,
@@ -862,6 +1166,76 @@ def write_mef_to_local(
         "output_uri": str(paths["csv_path"]),
         "metadata_path": str(paths["metadata_path"]),
     }
+
+
+def write_mef_hierarchy_to_local(
+    records: list[dict[str, Any]],
+    extraction_date: str,
+    output_dir: str | Path,
+    run_id: str,
+    records_read: int,
+    source_url: str | None,
+    logger,
+    source_mode: str = "consulta_amigable",
+) -> dict[str, str]:
+    """
+    Escribe data.csv y metadata local para presupuesto_hierarchy.
+    """
+    paths = build_local_mef_hierarchy_output_paths(
+        output_dir=output_dir,
+        extraction_date=extraction_date,
+    )
+
+    write_csv_file(
+        path=paths["csv_path"],
+        records=records,
+        fieldnames=MEF_HIERARCHY_FIELDNAMES,
+    )
+
+    metadata = build_extraction_metadata(
+        source_name="MEF",
+        source_dataset="presupuesto_hierarchy",
+        extraction_date=extraction_date,
+        run_id=run_id,
+        records_read=records_read,
+        records_written=len(records),
+        output_paths={
+            "csv_path": str(paths["csv_path"]),
+        },
+        extra_metadata={
+            "mode": "dry_run",
+            "source_system": "MEF",
+            "source_dataset": "presupuesto_hierarchy",
+            "source_mode": source_mode,
+            "source_url": source_url,
+        },
+    )
+
+    write_json_file(paths["metadata_path"], metadata)
+
+    log_event(
+        logger,
+        "INFO",
+        "Archivo MEF hierarchy escrito en modo dry-run",
+        csv_path=str(paths["csv_path"]),
+        metadata_path=str(paths["metadata_path"]),
+        records_written=len(records),
+    )
+
+    return {
+        "output_uri": str(paths["csv_path"]),
+        "metadata_path": str(paths["metadata_path"]),
+    }
+
+
+def build_mef_hierarchy_bronze_path(extraction_date: str) -> str:
+    """
+    Construye ruta GCS Bronze para presupuesto_hierarchy.
+    """
+    return (
+        "bronze/mef/presupuesto_hierarchy/"
+        f"extraction_date={extraction_date}/data.csv"
+    )
 
 
 def get_mef_expected_columns(endpoints_config: dict[str, Any]) -> list[str]:
@@ -987,6 +1361,15 @@ def run_extraction(args: argparse.Namespace) -> None:
         else:
             timeout = DEFAULT_TIMEOUT_SECONDS
 
+    include_hierarchy = args.include_hierarchy or parse_bool_env(
+        os.getenv("MEF_INCLUDE_HIERARCHY"),
+        default=False,
+    )
+    if include_hierarchy and source_mode != "consulta_amigable":
+        raise ConfigError(
+            "--include-hierarchy requiere source_mode=consulta_amigable."
+        )
+
     log_event(
         logger,
         "INFO",
@@ -1000,11 +1383,14 @@ def run_extraction(args: argparse.Namespace) -> None:
         end_year=end_year,
         text_filter=text_filter,
         source_mode=source_mode,
+        include_hierarchy=include_hierarchy,
     )
 
     started_at = datetime.utcnow()
 
     try:
+        hierarchy_records: list[dict[str, Any]] = []
+
         if source_mode == "consulta_amigable":
             if start_year is None or end_year is None:
                 raise ConfigError(
@@ -1012,11 +1398,21 @@ def run_extraction(args: argparse.Namespace) -> None:
                     "o MEF_START_YEAR/MEF_END_YEAR."
                 )
 
-            raw_records = scrape_consulta_amigable_range(
-                start_year=start_year,
-                end_year=end_year,
-                timeout=timeout,
-            )
+            if include_hierarchy:
+                snapshot = scrape_consulta_amigable_range_snapshot(
+                    start_year=start_year,
+                    end_year=end_year,
+                    timeout=timeout,
+                    include_hierarchy=True,
+                )
+                raw_records = snapshot["budget_records"]
+                hierarchy_records = snapshot["hierarchy_records"]
+            else:
+                raw_records = scrape_consulta_amigable_range(
+                    start_year=start_year,
+                    end_year=end_year,
+                    timeout=timeout,
+                )
         else:
             raw_records = fetch_mef_records(
                 source_url=source_url,
@@ -1055,6 +1451,20 @@ def run_extraction(args: argparse.Namespace) -> None:
                 logger=logger,
             )
             output_uri = output_result["output_uri"]
+
+            hierarchy_output_uri = None
+            if include_hierarchy:
+                hierarchy_output = write_mef_hierarchy_to_local(
+                    records=hierarchy_records,
+                    extraction_date=extraction_date,
+                    output_dir=args.output_dir,
+                    run_id=run_id,
+                    records_read=len(hierarchy_records),
+                    source_url=source_url,
+                    source_mode=source_mode,
+                    logger=logger,
+                )
+                hierarchy_output_uri = hierarchy_output["output_uri"]
         else:
             object_path = build_mef_bronze_path(
                 pipeline_settings["gcs_paths"]["mef_bronze"],
@@ -1068,6 +1478,17 @@ def run_extraction(args: argparse.Namespace) -> None:
                 fieldnames=expected_columns,
             )
 
+            hierarchy_output_uri = None
+            if include_hierarchy:
+                hierarchy_output_uri = upload_csv(
+                    bucket_name=bucket_name,
+                    object_path=build_mef_hierarchy_bronze_path(
+                        extraction_date=extraction_date,
+                    ),
+                    records=hierarchy_records,
+                    fieldnames=MEF_HIERARCHY_FIELDNAMES,
+                )
+
         audit_event = create_extraction_audit_event(
             pipeline_name=pipeline_settings["pipeline_name"],
             source_name=mef_config.get("source_name", "MEF Consulta Amigable"),
@@ -1080,6 +1501,9 @@ def run_extraction(args: argparse.Namespace) -> None:
             records_written=len(normalized_records),
             metadata={
                 "output_uri": output_uri,
+                "hierarchy_output_uri": hierarchy_output_uri,
+                "hierarchy_records_written": len(hierarchy_records),
+                "include_hierarchy": include_hierarchy,
                 "source_mode": source_mode,
                 "source_url": source_url,
                 "source_file": source_file,
@@ -1096,8 +1520,10 @@ def run_extraction(args: argparse.Namespace) -> None:
             "INFO",
             "Extracción MEF completada",
             output_uri=output_uri,
+            hierarchy_output_uri=hierarchy_output_uri,
             records_read=len(raw_records),
             records_written=len(normalized_records),
+            hierarchy_records_written=len(hierarchy_records),
             audit_event=audit_event.to_dict(),
         )
 
@@ -1115,6 +1541,7 @@ def run_extraction(args: argparse.Namespace) -> None:
                 "source_url": source_url,
                 "source_file": source_file,
                 "source_mode": source_mode,
+                "include_hierarchy": include_hierarchy,
                 "started_at": started_at.isoformat(),
                 "finished_at": datetime.utcnow().isoformat(),
             },
@@ -1161,6 +1588,11 @@ def parse_args(args_list: list[str] | None = None) -> argparse.Namespace:
         "--consulta-amigable",
         action="store_true",
         help="Scrapea directamente el Navegador MEF de Consulta Amigable.",
+    )
+    parser.add_argument(
+        "--include-hierarchy",
+        action="store_true",
+        help="Incluye snapshot Bronze de jerarquia presupuestal MEF.",
     )
     parser.add_argument(
         "--bucket",

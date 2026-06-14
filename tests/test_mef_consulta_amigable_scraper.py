@@ -6,11 +6,15 @@ from bs4 import BeautifulSoup
 from pipelines import scrape_mef_budget
 from pipelines.scrape_mef_budget import (
     CONSULTA_AMIGABLE_BASE_URL,
+    MEF_HIERARCHY_FIELDNAMES,
     build_mef_form_payload,
     clean_mef_number,
+    extract_mef_hierarchy_rows,
     extract_mef_budget_row,
     find_mef_grp1_value,
     scrape_consulta_amigable_year,
+    split_mef_code_description,
+    write_mef_hierarchy_to_local,
     write_mef_to_local,
 )
 
@@ -63,6 +67,63 @@ def final_budget_table() -> str:
             <th>Avance %</th>
           </tr>
           <tr>
+            <td>{PRONABEC_EXECUTORA}</td>
+            <td>1,429,676,488</td>
+            <td>1,607,711,495</td>
+            <td>1,590,100,549</td>
+            <td>1,138,467,562</td>
+            <td>675,591,756</td>
+            <td>662,693,665</td>
+            <td>660,194,362</td>
+            <td>41.2</td>
+          </tr>
+        </table>
+        """
+    )
+
+
+def hierarchy_table() -> str:
+    return base_form(
+        f"""
+        <table class="History">
+          <tr>
+            <th>Nivel</th>
+            <th>Descripcion</th>
+            <th>PIA</th>
+            <th>PIM</th>
+            <th>Certificacion</th>
+            <th>Compromiso Anual</th>
+            <th>Atencion de Compromiso Mensual</th>
+            <th>Devengado</th>
+            <th>Girado</th>
+            <th>Avance %</th>
+          </tr>
+          <tr>
+            <td>TOTAL</td>
+            <td>TOTAL</td>
+            <td>10,000</td>
+            <td>11,000</td>
+            <td>9,000</td>
+            <td>8,000</td>
+            <td>7,000</td>
+            <td>6,000</td>
+            <td>5,000</td>
+            <td>54.5</td>
+          </tr>
+          <tr>
+            <td>PLIEGO</td>
+            <td>010: M. DE EDUCACION</td>
+            <td>1,429,676,488</td>
+            <td>1,607,711,495</td>
+            <td>1,590,100,549</td>
+            <td>1,138,467,562</td>
+            <td>675,591,756</td>
+            <td>662,693,665</td>
+            <td>660,194,362</td>
+            <td>41.2</td>
+          </tr>
+          <tr>
+            <td>UNIDAD EJECUTORA</td>
             <td>{PRONABEC_EXECUTORA}</td>
             <td>1,429,676,488</td>
             <td>1,607,711,495</td>
@@ -147,6 +208,55 @@ def test_extract_mef_budget_row_finds_pronabec_primary_and_fallback() -> None:
         "660,194,362",
         "41.2",
     ]
+
+
+def test_split_mef_code_description_handles_hierarchy_labels() -> None:
+    assert split_mef_code_description("010: M. DE EDUCACION") == (
+        "010",
+        "M. DE EDUCACION",
+    )
+    assert split_mef_code_description(PRONABEC_EXECUTORA) == (
+        "117-1438",
+        "PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO",
+    )
+    assert split_mef_code_description("TOTAL") == ("", "TOTAL")
+
+
+def test_extract_mef_hierarchy_rows_from_fake_html() -> None:
+    soup = soup_from_html(hierarchy_table())
+
+    records = extract_mef_hierarchy_rows(
+        soup=soup,
+        ano=2026,
+        periodo_tipo="ANUAL",
+        periodo_valor="2026",
+    )
+
+    assert len(records) == 3
+    assert records[0] == {
+        "ano": "2026",
+        "periodo_tipo": "ANUAL",
+        "periodo_valor": "2026",
+        "nivel_jerarquia": "TOTAL",
+        "codigo": "",
+        "descripcion": "TOTAL",
+        "pia": "10,000",
+        "pim": "11,000",
+        "certificacion": "9,000",
+        "compromiso_anual": "8,000",
+        "compromiso_mensual": "7,000",
+        "devengado": "6,000",
+        "girado": "5,000",
+        "avance_porcentaje": "54.5",
+    }
+    assert records[1]["nivel_jerarquia"] == "PLIEGO"
+    assert records[1]["codigo"] == "010"
+    assert records[1]["descripcion"] == "M. DE EDUCACION"
+    assert records[2]["nivel_jerarquia"] == "UNIDAD EJECUTORA"
+    assert records[2]["codigo"] == "117-1438"
+    assert records[2]["descripcion"] == (
+        "PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO"
+    )
 
 
 class FakeResponse:
@@ -292,6 +402,44 @@ def test_write_mef_to_local_includes_consulta_amigable_metadata(
     }
 
 
+def test_write_mef_hierarchy_to_local_includes_metadata(tmp_path: Path) -> None:
+    logger_mock = type("MockLogger", (), {"log": lambda *args, **kwargs: None})()
+    records = extract_mef_hierarchy_rows(soup_from_html(hierarchy_table()), ano=2026)
+
+    result = write_mef_hierarchy_to_local(
+        records=records,
+        extraction_date="2026-06-14",
+        output_dir=tmp_path,
+        run_id="test_run",
+        records_read=len(records),
+        source_url=CONSULTA_AMIGABLE_BASE_URL,
+        logger=logger_mock,
+        source_mode="consulta_amigable",
+    )
+
+    csv_path = Path(result["output_uri"])
+    metadata_path = Path(result["metadata_path"])
+
+    assert str(csv_path.parent).replace("\\", "/").endswith(
+        "bronze/mef/presupuesto_hierarchy/extraction_date=2026-06-14"
+    )
+    assert csv_path.exists()
+    assert metadata_path.exists()
+
+    with csv_path.open("r", encoding="utf-8", newline="") as file:
+        header = file.readline().strip().split(",")
+
+    assert header == MEF_HIERARCHY_FIELDNAMES
+
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert metadata["source_name"] == "MEF"
+    assert metadata["source_dataset"] == "presupuesto_hierarchy"
+    assert metadata["records_written"] == 3
+    assert metadata["metadata"]["source_system"] == "MEF"
+    assert metadata["metadata"]["source_dataset"] == "presupuesto_hierarchy"
+    assert metadata["metadata"]["source_mode"] == "consulta_amigable"
+
+
 def test_mef_scraper_parametrization_cli_vs_env(monkeypatch) -> None:
     monkeypatch.setenv("MEF_SOURCE_MODE", "source_url")
     monkeypatch.setenv("MEF_SOURCE_URL", "https://example.com/test.csv")
@@ -380,6 +528,193 @@ def test_mef_scraper_parametrization_cli_vs_env(monkeypatch) -> None:
     scrape_mef_budget.run_extraction(args_timeout)
     assert resolved_timeouts == [45]
     resolved_timeouts.clear()
+
+
+def test_run_extraction_without_include_hierarchy_skips_hierarchy_output(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.delenv("MEF_INCLUDE_HIERARCHY", raising=False)
+    monkeypatch.setenv("GCS_BUCKET_NAME", "dummy-bucket")
+
+    monkeypatch.setattr(
+        scrape_mef_budget,
+        "get_pipeline_settings",
+        lambda config: {
+            "pipeline_name": "test",
+            "environment": "test",
+            "log_level": "INFO",
+            "bucket_name": "dummy-bucket",
+            "gcs_paths": {"mef_bronze": "mef_bronze"},
+        },
+    )
+    monkeypatch.setattr(
+        scrape_mef_budget,
+        "load_yaml_config",
+        lambda config: {
+            "mef": {
+                "expected_columns": [
+                    "ano",
+                    "ejecutora_nombre",
+                    "pia",
+                    "pim",
+                    "certificacion",
+                    "compromiso_anual",
+                    "compromiso_mensual",
+                    "devengado",
+                    "girado",
+                    "avance_porcentaje",
+                ]
+            }
+        },
+    )
+    monkeypatch.setattr(
+        scrape_mef_budget,
+        "scrape_consulta_amigable_range",
+        lambda start_year, end_year, timeout: [
+            {
+                "ano": 2026,
+                "ejecutora_nombre": PRONABEC_EXECUTORA,
+                "pia": 1429676488.0,
+                "pim": 1607711495.0,
+                "certificacion": 1590100549.0,
+                "compromiso_anual": 1138467562.0,
+                "compromiso_mensual": 675591756.0,
+                "devengado": 662693665.0,
+                "girado": 660194362.0,
+                "avance_porcentaje": 41.2,
+            }
+        ],
+    )
+
+    args = scrape_mef_budget.parse_args(
+        [
+            "--consulta-amigable",
+            "--extraction-date",
+            "2026-06-14",
+            "--start-year",
+            "2026",
+            "--end-year",
+            "2026",
+            "--dry-run",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+    scrape_mef_budget.run_extraction(args)
+
+    assert (
+        tmp_path
+        / "bronze"
+        / "mef"
+        / "presupuesto"
+        / "extraction_date=2026-06-14"
+        / "data.csv"
+    ).exists()
+    assert not (
+        tmp_path
+        / "bronze"
+        / "mef"
+        / "presupuesto_hierarchy"
+        / "extraction_date=2026-06-14"
+        / "data.csv"
+    ).exists()
+
+
+def test_run_extraction_with_include_hierarchy_writes_hierarchy_output(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("GCS_BUCKET_NAME", "dummy-bucket")
+
+    monkeypatch.setattr(
+        scrape_mef_budget,
+        "get_pipeline_settings",
+        lambda config: {
+            "pipeline_name": "test",
+            "environment": "test",
+            "log_level": "INFO",
+            "bucket_name": "dummy-bucket",
+            "gcs_paths": {"mef_bronze": "mef_bronze"},
+        },
+    )
+    monkeypatch.setattr(
+        scrape_mef_budget,
+        "load_yaml_config",
+        lambda config: {
+            "mef": {
+                "expected_columns": [
+                    "ano",
+                    "ejecutora_nombre",
+                    "pia",
+                    "pim",
+                    "certificacion",
+                    "compromiso_anual",
+                    "compromiso_mensual",
+                    "devengado",
+                    "girado",
+                    "avance_porcentaje",
+                ]
+            }
+        },
+    )
+    monkeypatch.setattr(
+        scrape_mef_budget,
+        "scrape_consulta_amigable_range_snapshot",
+        lambda start_year, end_year, timeout, include_hierarchy: {
+            "budget_records": [
+                {
+                    "ano": 2026,
+                    "ejecutora_nombre": PRONABEC_EXECUTORA,
+                    "pia": 1429676488.0,
+                    "pim": 1607711495.0,
+                    "certificacion": 1590100549.0,
+                    "compromiso_anual": 1138467562.0,
+                    "compromiso_mensual": 675591756.0,
+                    "devengado": 662693665.0,
+                    "girado": 660194362.0,
+                    "avance_porcentaje": 41.2,
+                }
+            ],
+            "hierarchy_records": extract_mef_hierarchy_rows(
+                soup_from_html(hierarchy_table()),
+                ano=2026,
+            ),
+        },
+    )
+
+    args = scrape_mef_budget.parse_args(
+        [
+            "--consulta-amigable",
+            "--extraction-date",
+            "2026-06-14",
+            "--start-year",
+            "2026",
+            "--end-year",
+            "2026",
+            "--include-hierarchy",
+            "--dry-run",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+    scrape_mef_budget.run_extraction(args)
+
+    hierarchy_path = (
+        tmp_path
+        / "bronze"
+        / "mef"
+        / "presupuesto_hierarchy"
+        / "extraction_date=2026-06-14"
+    )
+
+    assert (hierarchy_path / "data.csv").exists()
+    metadata = json.loads(
+        (hierarchy_path / "extraction_metadata.json").read_text(encoding="utf-8")
+    )
+    assert metadata["source_dataset"] == "presupuesto_hierarchy"
+    assert metadata["metadata"]["source_mode"] == "consulta_amigable"
+    assert metadata["records_written"] == 3
 
 
 def test_mef_scraper_parametrization_executora_and_base_url(monkeypatch) -> None:
