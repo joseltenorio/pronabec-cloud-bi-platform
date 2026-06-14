@@ -1,0 +1,22 @@
+[
+  { "name": "source_row_id", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "nro_fila", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "id_convocatoria", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "convocatoria", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "pais_origen", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "nivel_educativo", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "tipo_institucion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "sede", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "institucion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "carrera", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "resolucion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "gestion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "abreviatura", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "region", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "web", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "representante", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "telefono", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "ruc", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "email", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "fecha_carga", "type": "STRING", "mode": "NULLABLE" }
+]

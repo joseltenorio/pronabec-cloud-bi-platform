@@ -1,0 +1,11 @@
+[
+  { "name": "source_row_id", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "nro_fila", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "modalidad", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "convocatoria", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "pais_estudio", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "tipo_institucion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "institucion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "sexo", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "fecha_carga", "type": "STRING", "mode": "NULLABLE" }
+]

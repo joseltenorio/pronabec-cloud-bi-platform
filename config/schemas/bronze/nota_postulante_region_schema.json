@@ -1,0 +1,12 @@
+[
+  { "name": "source_row_id", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "nro_fila", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "region", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "nota_promedio", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "modalidad", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "anio_convocatoria", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "tipo_institucion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "institucion_educativa", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "semestre", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "fecha_carga", "type": "STRING", "mode": "NULLABLE" }
+]

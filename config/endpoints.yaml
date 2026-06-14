@@ -141,10 +141,10 @@ pronabec:
         - telefono
         - fecha_carga
 
-        - name: becarios_pais_estudio
+    - name: becarios_pais_estudio
       path: BecariosPorPaisDeEstudio
       description: "Becarios registrados por país de estudio, modalidad, convocatoria, tipo de institución, institución y sexo."
-      enabled: false
+      enabled: true
       expected_columns:
         - nro_fila
         - modalidad
@@ -158,7 +158,7 @@ pronabec:
     - name: convocatorias_carrera_sede
       path: ConvocatoriaPorCarreraSede
       description: "Convocatorias por carrera, sede, institución educativa y datos administrativos de oferta académica."
-      enabled: false
+      enabled: true
       expected_columns:
         - nro_fila
         - id_convocatoria
@@ -183,7 +183,7 @@ pronabec:
     - name: nota_postulante_region
       path: NotaPromedioDelPostulantePorRegion
       description: "Nota promedio de postulantes por región, modalidad, año de convocatoria, tipo de institución, institución educativa y semestre."
-      enabled: false
+      enabled: true
       expected_columns:
         - nro_fila
         - region

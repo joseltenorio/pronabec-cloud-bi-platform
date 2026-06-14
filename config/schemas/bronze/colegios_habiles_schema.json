@@ -1,0 +1,14 @@
+[
+  { "name": "source_row_id", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "nro_fila", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "ugel", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "institucion_educativa", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "tipo_gestion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "nivel_modalidad", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "forma_atencion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "centro_poblado", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "distrito", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "direccion", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "telefono", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "fecha_carga", "type": "STRING", "mode": "NULLABLE" }
+]
