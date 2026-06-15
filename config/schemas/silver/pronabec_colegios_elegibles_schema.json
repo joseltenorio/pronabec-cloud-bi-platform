@@ -1,0 +1,74 @@
+[
+  {
+    "name": "source_row_id",
+    "type": "INTEGER",
+    "mode": "NULLABLE",
+    "description": "Identificador técnico único de fila de la fuente Bronze."
+  },
+  {
+    "name": "ugel",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Unidad de Gestión Educativa Local asociada al colegio."
+  },
+  {
+    "name": "institucion_educativa",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Nombre de la institución educativa."
+  },
+  {
+    "name": "tipo_gestion_colegio",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Tipo de gestión del colegio (Pública o Privada)."
+  },
+  {
+    "name": "nivel_modalidad",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Nivel y modalidad educativa del colegio."
+  },
+  {
+    "name": "forma_atencion",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Forma de atención que brinda el colegio."
+  },
+  {
+    "name": "distrito",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Distrito donde se ubica el colegio."
+  },
+  {
+    "name": "source_system",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Sistema origen de los datos (ej. PRONABEC)."
+  },
+  {
+    "name": "source_dataset",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Dataset de origen de la información."
+  },
+  {
+    "name": "extraction_date",
+    "type": "DATE",
+    "mode": "NULLABLE",
+    "description": "Fecha de extracción de la información."
+  },
+  {
+    "name": "ingestion_timestamp",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE",
+    "description": "Momento de la ingesta en la capa Silver."
+  },
+  {
+    "name": "pipeline_run_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "ID único de ejecución del pipeline."
+  }
+]

@@ -1,0 +1,68 @@
+[
+  {
+    "name": "source_row_id",
+    "type": "INTEGER",
+    "mode": "NULLABLE",
+    "description": "Identificador técnico único de fila de la fuente Bronze."
+  },
+  {
+    "name": "convocatoria",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Nombre de la convocatoria (ej. BECA PERMANENCIA - CONVOCATORIA 2023)."
+  },
+  {
+    "name": "modalidad",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Modalidad de postulación del becario."
+  },
+  {
+    "name": "pais_estudio",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "País donde se realizan los estudios."
+  },
+  {
+    "name": "institucion",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Institución de educación superior correspondiente."
+  },
+  {
+    "name": "sexo",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Género o sexo registrado del becario."
+  },
+  {
+    "name": "source_system",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Sistema origen de los datos (ej. PRONABEC)."
+  },
+  {
+    "name": "source_dataset",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Dataset de origen de la información."
+  },
+  {
+    "name": "extraction_date",
+    "type": "DATE",
+    "mode": "NULLABLE",
+    "description": "Fecha de extracción de la información."
+  },
+  {
+    "name": "ingestion_timestamp",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE",
+    "description": "Momento de la ingesta en la capa Silver."
+  },
+  {
+    "name": "pipeline_run_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "ID único de ejecución del pipeline."
+  }
+]

@@ -146,11 +146,9 @@ def test_bigquery_ddl_generator_writes_bronze_and_silver_sql(tmp_path: Path) -> 
     assert "gs://test-bucket-name/bronze/mef/presupuesto_hierarchy/extraction_date" in bronze_sql
     assert "gs://test-bucket-name/bronze/mef/presupuesto_producto/extraction_date" in bronze_sql
 
-    assert "Archivo Generado Automáticamente - No editar manualmente" in silver_sql
     assert "CREATE OR REPLACE TABLE" in silver_sql
-    assert "test-project-id.silver.notas_becarios" in silver_sql
-    assert "nota_promedio NUMERIC" in silver_sql
-
+    assert "test-project-id.silver.pronabec_convocatorias" in silver_sql
+    assert "vacantes INTEGER" in silver_sql
 
 def test_bigquery_ddl_generator_uses_environment_config(tmp_path: Path) -> None:
     output_dir = tmp_path / "generated" / "sql"

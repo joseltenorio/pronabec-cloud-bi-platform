@@ -1,0 +1,74 @@
+[
+  {
+    "name": "source_row_id",
+    "type": "INTEGER",
+    "mode": "NULLABLE",
+    "description": "Identificador técnico único de fila de la fuente Bronze."
+  },
+  {
+    "name": "id_convocatoria",
+    "type": "INTEGER",
+    "mode": "NULLABLE",
+    "description": "Clave única de negocio de la convocatoria."
+  },
+  {
+    "name": "codigo_anual",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Código anual asignado a la convocatoria (ej. 2021-02)."
+  },
+  {
+    "name": "descripcion_convocatoria",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Descripción formal de la convocatoria."
+  },
+  {
+    "name": "modalidad",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Modalidad de postulación asociada."
+  },
+  {
+    "name": "programa",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Programa de beca correspondiente."
+  },
+  {
+    "name": "vacantes",
+    "type": "INTEGER",
+    "mode": "NULLABLE",
+    "description": "Número de vacantes disponibles en la convocatoria."
+  },
+  {
+    "name": "source_system",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Sistema origen de los datos (ej. PRONABEC)."
+  },
+  {
+    "name": "source_dataset",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Dataset de origen de la información."
+  },
+  {
+    "name": "extraction_date",
+    "type": "DATE",
+    "mode": "NULLABLE",
+    "description": "Fecha de extracción de la información."
+  },
+  {
+    "name": "ingestion_timestamp",
+    "type": "TIMESTAMP",
+    "mode": "NULLABLE",
+    "description": "Momento de la ingesta en la capa Silver."
+  },
+  {
+    "name": "pipeline_run_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "ID único de ejecución del pipeline."
+  }
+]
