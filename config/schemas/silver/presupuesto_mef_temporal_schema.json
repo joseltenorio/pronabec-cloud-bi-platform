@@ -1,14 +1,74 @@
 [
-  { "name": "ano", "type": "INT64", "mode": "REQUIRED" },
-  { "name": "periodo_tipo", "type": "STRING", "mode": "REQUIRED" },
-  { "name": "periodo_valor", "type": "STRING", "mode": "REQUIRED" },
-  { "name": "trimestre", "type": "INT64", "mode": "NULLABLE" },
-  { "name": "mes_numero", "type": "INT64", "mode": "NULLABLE" },
-  { "name": "mes_nombre", "type": "STRING", "mode": "NULLABLE" },
-  { "name": "devengado", "type": "NUMERIC", "mode": "NULLABLE" },
-  { "name": "source_system", "type": "STRING", "mode": "REQUIRED" },
-  { "name": "source_dataset", "type": "STRING", "mode": "REQUIRED" },
-  { "name": "extraction_date", "type": "DATE", "mode": "REQUIRED" },
-  { "name": "ingestion_timestamp", "type": "TIMESTAMP", "mode": "REQUIRED" },
-  { "name": "pipeline_run_id", "type": "STRING", "mode": "REQUIRED" }
+  {
+    "name": "ano",
+    "type": "INT64",
+    "mode": "REQUIRED",
+    "description": "Año fiscal asociado al registro presupuestal."
+  },
+  {
+    "name": "periodo_tipo",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Tipo de periodo representado por el registro: anual, mensual o trimestral."
+  },
+  {
+    "name": "periodo_valor",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Valor normalizado del periodo presupuestal. Se conserva como texto para soportar formatos anuales, mensuales y trimestrales."
+  },
+  {
+    "name": "trimestre",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "Número de trimestre fiscal asociado al registro, cuando aplica."
+  },
+  {
+    "name": "mes_numero",
+    "type": "INT64",
+    "mode": "NULLABLE",
+    "description": "Número de mes fiscal asociado al registro, cuando aplica."
+  },
+  {
+    "name": "mes_nombre",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Nombre del mes asociado al registro, when aplica."
+  },
+  {
+    "name": "devengado",
+    "type": "NUMERIC",
+    "mode": "NULLABLE",
+    "description": "Monto devengado reportado por MEF como principal métrica de ejecución presupuestal."
+  },
+  {
+    "name": "source_system",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Sistema origen de los datos."
+  },
+  {
+    "name": "source_dataset",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Dataset Bronze de origen utilizado para construir la tabla Silver."
+  },
+  {
+    "name": "extraction_date",
+    "type": "DATE",
+    "mode": "REQUIRED",
+    "description": "Fecha lógica de extracción de la información desde la fuente."
+  },
+  {
+    "name": "ingestion_timestamp",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Momento de ingesta o escritura del registro en la capa Silver."
+  },
+  {
+    "name": "pipeline_run_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Identificador único de ejecución del pipeline que generó el registro."
+  }
 ]

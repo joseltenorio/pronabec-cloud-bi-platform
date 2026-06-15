@@ -1,16 +1,86 @@
 [
-  { "name": "ano", "type": "INT64", "mode": "REQUIRED" },
-  { "name": "codigo_producto", "type": "STRING", "mode": "REQUIRED" },
-  { "name": "producto", "type": "STRING", "mode": "REQUIRED" },
-  { "name": "codigo_actividad", "type": "STRING", "mode": "REQUIRED" },
-  { "name": "actividad", "type": "STRING", "mode": "REQUIRED" },
-  { "name": "pia", "type": "NUMERIC", "mode": "NULLABLE" },
-  { "name": "pim", "type": "NUMERIC", "mode": "NULLABLE" },
-  { "name": "devengado", "type": "NUMERIC", "mode": "NULLABLE" },
-  { "name": "avance_porcentaje", "type": "NUMERIC", "mode": "NULLABLE" },
-  { "name": "source_system", "type": "STRING", "mode": "REQUIRED" },
-  { "name": "source_dataset", "type": "STRING", "mode": "REQUIRED" },
-  { "name": "extraction_date", "type": "DATE", "mode": "REQUIRED" },
-  { "name": "ingestion_timestamp", "type": "TIMESTAMP", "mode": "REQUIRED" },
-  { "name": "pipeline_run_id", "type": "STRING", "mode": "REQUIRED" }
+  {
+    "name": "ano",
+    "type": "INT64",
+    "mode": "REQUIRED",
+    "description": "Año fiscal asociado al registro presupuestal."
+  },
+  {
+    "name": "codigo_producto",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Código presupuestal del producto o proyecto."
+  },
+  {
+    "name": "producto",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Nombre del producto o proyecto presupuestal."
+  },
+  {
+    "name": "codigo_actividad",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Código presupuestal de la actividad, acción de inversión u obra."
+  },
+  {
+    "name": "actividad",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Nombre de la actividad, acción de inversión u obra asociada al producto presupuestal."
+  },
+  {
+    "name": "pia",
+    "type": "NUMERIC",
+    "mode": "NULLABLE",
+    "description": "Presupuesto Institucional de Apertura reportado por MEF."
+  },
+  {
+    "name": "pim",
+    "type": "NUMERIC",
+    "mode": "NULLABLE",
+    "description": "Presupuesto Institucional Modificado reportado por MEF."
+  },
+  {
+    "name": "devengado",
+    "type": "NUMERIC",
+    "mode": "NULLABLE",
+    "description": "Monto devengado reportado por MEF como principal métrica de ejecución presupuestal."
+  },
+  {
+    "name": "avance_porcentaje",
+    "type": "NUMERIC",
+    "mode": "NULLABLE",
+    "description": "Porcentaje de avance de ejecución presupuestal reportado por MEF."
+  },
+  {
+    "name": "source_system",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Sistema origen de los datos."
+  },
+  {
+    "name": "source_dataset",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Dataset Bronze de origen utilizado para construir la tabla Silver."
+  },
+  {
+    "name": "extraction_date",
+    "type": "DATE",
+    "mode": "REQUIRED",
+    "description": "Fecha lógica de extracción de la información desde la fuente."
+  },
+  {
+    "name": "ingestion_timestamp",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Momento de ingesta o escritura del registro en la capa Silver."
+  },
+  {
+    "name": "pipeline_run_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Identificador único de ejecución del pipeline que generó el registro."
+  }
 ]
