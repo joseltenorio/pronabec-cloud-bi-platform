@@ -272,6 +272,35 @@ MEF_BREAKDOWN_CONFIG = {
             "avance_porcentaje",
         ],
     },
+    "generica_temporal": {
+        "button_name": "ctl00$CPH1$BtnMes",
+        "button_names": [
+            "ctl00$CPH1$BtnMes",
+            "ctl00$CPH1$BtnTrimestre",
+            "ctl00$CPH1$BtnPeriodo",
+        ],
+        "source_dataset": "presupuesto_generica_temporal",
+        "code_field": None,
+        "description_field": None,
+        "fieldnames": [
+            "ano",
+            "periodo_tipo",
+            "periodo_valor",
+            "trimestre",
+            "mes_numero",
+            "mes_nombre",
+            "codigo_generica",
+            "generica",
+            "pia",
+            "pim",
+            "certificacion",
+            "compromiso_anual",
+            "compromiso_mensual",
+            "devengado",
+            "girado",
+            "avance_porcentaje",
+        ],
+    },
 }
 DEFAULT_MEF_BREAKDOWN_SLICES = ["producto", "generica"]
 MEF_MONTHS = {
@@ -1428,6 +1457,48 @@ def scrape_consulta_amigable_breakdown_snapshot(
                         rec["actividad"] = desc_act
                         act_temp_records.append(rec)
             records_by_slice[slice_name] = act_temp_records
+
+        elif slice_name == "generica_temporal":
+            generica_soup = post_mef_navigation(
+                session=session,
+                soup=base_soup,
+                url=navigate_url,
+                button_name="ctl00$CPH1$BtnGenerica",
+                timeout=timeout,
+                grp1_value=pronabec_grp1_value,
+            )
+            generica_radios = generica_soup.find_all("input", {"name": "grp1"})
+            generica_records = []
+            for radio in generica_radios:
+                grp1_val = radio.get("value")
+                row = radio.find_parent("tr")
+                if not row:
+                    continue
+                cells = row.find_all(["td", "th"])
+                label = clean_cell_value(cells[1].get_text(" ")) if len(cells) > 1 else ""
+                if not label:
+                    continue
+                code_gen, desc_gen = split_mef_code_description(label)
+                
+                temporal_btn = resolve_mef_breakdown_button_name(generica_soup, "temporal")
+                temporal_soup = post_mef_navigation(
+                    session=session,
+                    soup=generica_soup,
+                    url=navigate_url,
+                    button_name=temporal_btn,
+                    timeout=timeout,
+                    grp1_value=grp1_val,
+                )
+                slice_records = extract_mef_breakdown_rows(
+                    soup=temporal_soup,
+                    ano=year,
+                    slice_name="temporal",
+                )
+                for rec in slice_records:
+                    rec["codigo_generica"] = code_gen
+                    rec["generica"] = desc_gen
+                    generica_records.append(rec)
+            records_by_slice[slice_name] = generica_records
 
         else:
             slice_soup = post_mef_navigation(

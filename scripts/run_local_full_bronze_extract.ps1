@@ -39,9 +39,10 @@ $MefSlices = @(
   "presupuesto_temporal",
   "presupuesto_producto_temporal",
   "presupuesto_actividad",
-  "presupuesto_actividad_temporal"
+  "presupuesto_actividad_temporal",
+  "presupuesto_generica_temporal"
 )
-$BreakdownSlices = "producto,generica,fuente,rubro,departamento,temporal,producto_temporal,actividad,actividad_temporal"
+$BreakdownSlices = "producto,generica,fuente,rubro,departamento,temporal,producto_temporal,actividad,actividad_temporal,generica_temporal"
 $PronabecTimeoutSeconds = "180"
 
 if ($Mode -eq "Quick") {
