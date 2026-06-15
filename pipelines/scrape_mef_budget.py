@@ -220,6 +220,58 @@ MEF_BREAKDOWN_CONFIG = {
             "avance_porcentaje",
         ],
     },
+    "actividad": {
+        "button_name": "ctl00$CPH1$BtnActProyObra",
+        "source_dataset": "presupuesto_actividad",
+        "code_field": "codigo_actividad",
+        "description_field": "actividad",
+        "fieldnames": [
+            "ano",
+            "codigo_producto",
+            "producto",
+            "codigo_actividad",
+            "actividad",
+            "pia",
+            "pim",
+            "certificacion",
+            "compromiso_anual",
+            "compromiso_mensual",
+            "devengado",
+            "girado",
+            "avance_porcentaje",
+        ],
+    },
+    "actividad_temporal": {
+        "button_name": "ctl00$CPH1$BtnMes",
+        "button_names": [
+            "ctl00$CPH1$BtnMes",
+            "ctl00$CPH1$BtnTrimestre",
+            "ctl00$CPH1$BtnPeriodo",
+        ],
+        "source_dataset": "presupuesto_actividad_temporal",
+        "code_field": None,
+        "description_field": None,
+        "fieldnames": [
+            "ano",
+            "periodo_tipo",
+            "periodo_valor",
+            "trimestre",
+            "mes_numero",
+            "mes_nombre",
+            "codigo_producto",
+            "producto",
+            "codigo_actividad",
+            "actividad",
+            "pia",
+            "pim",
+            "certificacion",
+            "compromiso_anual",
+            "compromiso_mensual",
+            "devengado",
+            "girado",
+            "avance_porcentaje",
+        ],
+    },
 }
 DEFAULT_MEF_BREAKDOWN_SLICES = ["producto", "generica"]
 MEF_MONTHS = {
@@ -1270,6 +1322,112 @@ def scrape_consulta_amigable_breakdown_snapshot(
                     rec["producto"] = desc_prod
                     product_records.append(rec)
             records_by_slice[slice_name] = product_records
+
+        elif slice_name == "actividad":
+            product_soup = post_mef_navigation(
+                session=session,
+                soup=base_soup,
+                url=navigate_url,
+                button_name="ctl00$CPH1$BtnProdProy",
+                timeout=timeout,
+                grp1_value=pronabec_grp1_value,
+            )
+            product_radios = product_soup.find_all("input", {"name": "grp1"})
+            actividad_records = []
+            for radio in product_radios:
+                grp1_val = radio.get("value")
+                row = radio.find_parent("tr")
+                if not row:
+                    continue
+                cells = row.find_all(["td", "th"])
+                label = clean_cell_value(cells[1].get_text(" ")) if len(cells) > 1 else ""
+                if not label:
+                    continue
+                code_prod, desc_prod = split_mef_code_description(label)
+                
+                activity_soup = post_mef_navigation(
+                    session=session,
+                    soup=product_soup,
+                    url=navigate_url,
+                    button_name="ctl00$CPH1$BtnActProyObra",
+                    timeout=timeout,
+                    grp1_value=grp1_val,
+                )
+                slice_records = extract_mef_breakdown_rows(
+                    soup=activity_soup,
+                    ano=year,
+                    slice_name="actividad",
+                )
+                for rec in slice_records:
+                    rec["codigo_producto"] = code_prod
+                    rec["producto"] = desc_prod
+                    actividad_records.append(rec)
+            records_by_slice[slice_name] = actividad_records
+
+        elif slice_name == "actividad_temporal":
+            product_soup = post_mef_navigation(
+                session=session,
+                soup=base_soup,
+                url=navigate_url,
+                button_name="ctl00$CPH1$BtnProdProy",
+                timeout=timeout,
+                grp1_value=pronabec_grp1_value,
+            )
+            product_radios = product_soup.find_all("input", {"name": "grp1"})
+            act_temp_records = []
+            for radio in product_radios:
+                grp1_val = radio.get("value")
+                row = radio.find_parent("tr")
+                if not row:
+                    continue
+                cells = row.find_all(["td", "th"])
+                label = clean_cell_value(cells[1].get_text(" ")) if len(cells) > 1 else ""
+                if not label:
+                    continue
+                code_prod, desc_prod = split_mef_code_description(label)
+                
+                activity_soup = post_mef_navigation(
+                    session=session,
+                    soup=product_soup,
+                    url=navigate_url,
+                    button_name="ctl00$CPH1$BtnActProyObra",
+                    timeout=timeout,
+                    grp1_value=grp1_val,
+                )
+                
+                activity_radios = activity_soup.find_all("input", {"name": "grp1"})
+                for act_radio in activity_radios:
+                    act_grp1_val = act_radio.get("value")
+                    act_row = act_radio.find_parent("tr")
+                    if not act_row:
+                        continue
+                    act_cells = act_row.find_all(["td", "th"])
+                    act_label = clean_cell_value(act_cells[1].get_text(" ")) if len(act_cells) > 1 else ""
+                    if not act_label:
+                        continue
+                    code_act, desc_act = split_mef_code_description(act_label)
+                    
+                    temporal_btn = resolve_mef_breakdown_button_name(activity_soup, "temporal")
+                    temporal_soup = post_mef_navigation(
+                        session=session,
+                        soup=activity_soup,
+                        url=navigate_url,
+                        button_name=temporal_btn,
+                        timeout=timeout,
+                        grp1_value=act_grp1_val,
+                    )
+                    slice_records = extract_mef_breakdown_rows(
+                        soup=temporal_soup,
+                        ano=year,
+                        slice_name="temporal",
+                    )
+                    for rec in slice_records:
+                        rec["codigo_producto"] = code_prod
+                        rec["producto"] = desc_prod
+                        rec["codigo_actividad"] = code_act
+                        rec["actividad"] = desc_act
+                        act_temp_records.append(rec)
+            records_by_slice[slice_name] = act_temp_records
 
         else:
             slice_soup = post_mef_navigation(
