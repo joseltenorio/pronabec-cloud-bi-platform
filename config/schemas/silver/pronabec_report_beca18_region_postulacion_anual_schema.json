@@ -1,0 +1,80 @@
+[
+  {
+    "name": "ano_convocatoria",
+    "type": "INT64",
+    "mode": "REQUIRED",
+    "description": "Año de convocatoria de la beca."
+  },
+  {
+    "name": "grupo_region",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Agrupación regional o ámbito geográfico."
+  },
+  {
+    "name": "porcentaje_becarios",
+    "type": "NUMERIC",
+    "mode": "NULLABLE",
+    "description": "Porcentaje de becarios respecto al total."
+  },
+  {
+    "name": "source_document_file",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Nombre del archivo del documento fuente original."
+  },
+  {
+    "name": "source_document_title",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Título del documento fuente oficial."
+  },
+  {
+    "name": "source_page",
+    "type": "INT64",
+    "mode": "REQUIRED",
+    "description": "Número de página del documento fuente donde se encuentra la información."
+  },
+  {
+    "name": "source_figure",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Identificador de la figura, gráfico o tabla en el documento fuente."
+  },
+  {
+    "name": "extraction_method",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Método utilizado para extraer los datos desde el documento."
+  },
+  {
+    "name": "source_system",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Sistema origen de los datos."
+  },
+  {
+    "name": "source_dataset",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Dataset Bronze de origen utilizado para construir la tabla Silver."
+  },
+  {
+    "name": "extraction_date",
+    "type": "DATE",
+    "mode": "REQUIRED",
+    "description": "Fecha lógica de extracción de la información desde la fuente."
+  },
+  {
+    "name": "ingestion_timestamp",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Momento de ingesta o escritura del registro en la capa Silver."
+  },
+  {
+    "name": "pipeline_run_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Identificador único de ejecución del pipeline que generó el registro."
+  }
+]
