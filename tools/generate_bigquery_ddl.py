@@ -152,6 +152,14 @@ def render_bronze_table(
   uris = ['{source_uri}'],
   skip_leading_rows = 1
 )"""
+    elif dataset.startswith("report_"):
+        table_name = f"{project_id}.bronze.pronabec_{dataset}_raw"
+        source_uri = f"gs://{bucket}/bronze/pronabec_reports/{dataset}/extraction_date=*/data.csv"
+        options = f"""OPTIONS (
+  format = 'CSV',
+  uris = ['{source_uri}'],
+  skip_leading_rows = 1
+)"""
     else:
         table_name = f"{project_id}.bronze.pronabec_{dataset}_raw"
         source_uri = (

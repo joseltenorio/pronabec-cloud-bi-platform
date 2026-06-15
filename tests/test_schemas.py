@@ -153,7 +153,10 @@ def test_bigquery_ddl_generator_writes_bronze_and_silver_sql(tmp_path: Path) -> 
     assert "gs://test-bucket-name/bronze/mef/presupuesto_actividad/extraction_date=*/year=*/data.csv" in bronze_sql
     assert "gs://test-bucket-name/bronze/mef/presupuesto_actividad_temporal/extraction_date=*/year=*/data.csv" in bronze_sql
     assert "gs://test-bucket-name/bronze/mef/presupuesto_generica_temporal/extraction_date=*/year=*/data.csv" in bronze_sql
-
+    
+    # Validate pronabec_report family generates as CSV external tables
+    assert "test-project-id.bronze.pronabec_report_beca18_sexo_anual_raw" in bronze_sql
+    assert "gs://test-bucket-name/bronze/pronabec_reports/report_beca18_sexo_anual/extraction_date=*/data.csv" in bronze_sql
     assert "CREATE OR REPLACE TABLE" in silver_sql
     assert "test-project-id.silver.pronabec_convocatorias" in silver_sql
     assert "vacantes INTEGER" in silver_sql

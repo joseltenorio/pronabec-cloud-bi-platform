@@ -1,0 +1,42 @@
+[
+  {
+    "name": "periodo",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "region",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "porcentaje_acumulado",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "source_document_file",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "source_document_title",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "source_page",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "source_figure",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "extraction_method",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  }
+]

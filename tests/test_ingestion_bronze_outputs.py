@@ -241,6 +241,14 @@ def test_gcs_paths_consistency_with_ddl(tmp_path: Path) -> None:
 
             expected = f"bronze/mef/{slice_name}/extraction_date=*/year=*/data.csv"
             assert relative_path == expected, f"DDL path '{relative_path}' mismatch with expected '{expected}'"
+        elif "bronze/pronabec_reports/" in relative_path:
+            # Format is bronze/pronabec_reports/{dataset}/extraction_date=*/data.csv
+            match = re.match(r"bronze/pronabec_reports/([^/]+)/extraction_date=\*/data\.csv", relative_path)
+            assert match, f"DDL PRONABEC Reports path structure is invalid: {relative_path}"
+            dataset_name = match.group(1)
+
+            expected = pipeline_settings["gcs_paths"]["pronabec_reports_bronze_csv"].format(dataset=dataset_name, extraction_date="*")
+            assert relative_path == expected, f"DDL path '{relative_path}' mismatch with pipeline.yaml expected '{expected}'"
         else:
             pytest.fail(f"Unknown bronze folder in external table DDL: {relative_path}")
 

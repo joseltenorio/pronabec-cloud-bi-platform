@@ -1,0 +1,52 @@
+[
+  {
+    "name": "periodo",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "region",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "total_becarios_primera_generacion",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "total_becarios_encuestados",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "ratio_primera_generacion",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "source_document_file",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "source_document_title",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "source_page",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "source_figure",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "extraction_method",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  }
+]
