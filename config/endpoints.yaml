@@ -333,3 +333,27 @@ pronabec_reports:
           page: 31
           figure: "2"
           format: "csv"
+
+    - document_id: "beca18_universitarios_2012_2026"
+      file_name: "8170922-beca-18-cantidad-de-becarios-segun-universidad-de-estudio-2012-2026.pdf"
+      title: "Beca 18: Cantidad de becarios universitarios"
+      year: 2026
+      institution: "PRONABEC"
+      storage_prefix: "bronze/pronabec_reports"
+      documents:
+        - file_name: "8170922-beca-18-cantidad-de-becarios-segun-universidad-de-estudio-2012-2026.pdf"
+          title: "Beca 18 - cantidad de becarios según universidad de estudio 2012-2026"
+          document_storage_path: "bronze/pronabec_reports/_documents/8170922-beca-18-cantidad-de-becarios-segun-universidad-de-estudio-2012-2026.pdf"
+        - file_name: "8170922-beca-18-cantidad-de-becarios-en-universidades-segun-carrera-de-estudio-2012-2026.pdf"
+          title: "Beca 18 - cantidad de becarios en universidades según carrera de estudio 2012-2026"
+          document_storage_path: "bronze/pronabec_reports/_documents/8170922-beca-18-cantidad-de-becarios-en-universidades-segun-carrera-de-estudio-2012-2026.pdf"
+      datasets:
+        - name: "report_beca18_universitarios_universidad_anual"
+          file_name: "pronabec_report_beca18_universitarios_universidad_anual.csv"
+          table: "Cantidad de becarios según universidad de estudio, 2012-2026"
+          format: "csv"
+        - name: "report_beca18_universitarios_carrera_anual"
+          file_name: "pronabec_report_beca18_universitarios_carrera_anual.csv"
+          table: "Cantidad de becarios en universidades según carrera de estudio, 2012-2026"
+          format: "csv"
+
