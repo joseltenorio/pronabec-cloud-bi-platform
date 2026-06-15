@@ -213,3 +213,123 @@ mef:
     - devengado
     - girado
     - avance_porcentaje
+
+pronabec_reports:
+  source_name: "Panorama de Estudios Sociales del Pronabec"
+  source_type: "official_report"
+  extraction_method: "pdf_table_extraction"
+  enabled: true
+  documents:
+    - document_id: "pes_2025_volumen_i"
+      file_name: "7219175-panorama-de-estudios-sociales-pronabec.pdf"
+      title: "Panorama de Estudios Sociales del Pronabec - Volumen I"
+      year: 2025
+      institution: "PRONABEC"
+      storage_prefix: "bronze/pronabec_reports"
+      document_storage_path: "bronze/pronabec_reports/_documents/7219175-panorama-de-estudios-sociales-pronabec.pdf"
+      datasets:
+        - name: "report_beca18_region_postulacion_anual"
+          file_name: "report_beca18_region_postulacion_anual.csv"
+          page: 8
+          figure: "3"
+          format: "csv"
+        - name: "report_beca18_becas_otorgadas_modalidad_anual"
+          file_name: "report_beca18_becas_otorgadas_modalidad_anual.csv"
+          page: 7
+          figure: "1"
+          format: "csv"
+        - name: "report_beca18_sexo_anual"
+          file_name: "report_beca18_sexo_anual.csv"
+          page: 7
+          figure: "2"
+          format: "csv"
+        - name: "report_beca18_region_postulacion_acumulada"
+          file_name: "report_beca18_region_postulacion_acumulada.csv"
+          page: 8
+          figure: "4"
+          format: "csv"
+        - name: "report_beca18_migracion_region_anual"
+          file_name: "report_beca18_migracion_region_anual.csv"
+          page: 9
+          figure: "6"
+          format: "csv"
+        - name: "report_beca18_migracion_region_acumulada"
+          file_name: "report_beca18_migracion_region_acumulada.csv"
+          page: 10
+          figure: "7"
+          format: "csv"
+        - name: "report_beca18_colegio_gestion_2025"
+          file_name: "report_beca18_colegio_gestion_2025.csv"
+          page: 14
+          figure: "1"
+          format: "csv"
+        - name: "report_beca18_padres_nivel_educativo_2025"
+          file_name: "report_beca18_padres_nivel_educativo_2025.csv"
+          page: 14
+          figure: "2"
+          format: "csv"
+        - name: "report_beca18_primera_generacion_region"
+          file_name: "report_beca18_primera_generacion_region.csv"
+          page: 15
+          figure: "3"
+          format: "csv"
+        - name: "report_beca18_region_postulacion_2025"
+          file_name: "report_beca18_region_postulacion_2025.csv"
+          page: 16
+          figure: "4"
+          format: "csv"
+        - name: "report_beca18_enp_promedio_caracteristica_2025"
+          file_name: "report_beca18_enp_promedio_caracteristica_2025.csv"
+          page: 19
+          figure: "1"
+          format: "csv"
+        - name: "report_beca18_enp_promedio_region_2025"
+          file_name: "report_beca18_enp_promedio_region_2025.csv"
+          page: 20
+          figure: "3"
+          format: "csv"
+        - name: "report_beca18_lengua_materna_modalidad_2025"
+          file_name: "report_beca18_lengua_materna_modalidad_2025.csv"
+          page: 22
+          figure: "1"
+          format: "csv"
+        - name: "report_beca18_autoidentificacion_etnica_modalidad_2025"
+          file_name: "report_beca18_autoidentificacion_etnica_modalidad_2025.csv"
+          page: 22
+          figure: "2"
+          format: "csv"
+        - name: "report_beca18_no_continuaria_sin_beca_caracteristica_2025"
+          file_name: "report_beca18_no_continuaria_sin_beca_caracteristica_2025.csv"
+          page: 25
+          figure: "1"
+          format: "csv"
+        - name: "report_beca18_periodo_ingreso_ies_genero_2025"
+          file_name: "report_beca18_periodo_ingreso_ies_genero_2025.csv"
+          page: 25
+          figure: "2"
+          format: "csv"
+        - name: "report_beca18_razones_eleccion_carrera_gestion_ies_2025"
+          file_name: "report_beca18_razones_eleccion_carrera_gestion_ies_2025.csv"
+          page: 28
+          figure: "1"
+          format: "csv"
+        - name: "report_beca18_razones_eleccion_carrera_sexo_2025"
+          file_name: "report_beca18_razones_eleccion_carrera_sexo_2025.csv"
+          page: 28
+          figure: "2"
+          format: "csv"
+        - name: "report_beca18_razones_eleccion_ies_gestion_2025"
+          file_name: "report_beca18_razones_eleccion_ies_gestion_2025.csv"
+          page: 29
+          figure: "3"
+          format: "csv"
+        - name: "report_beca18_preparacion_ies_tipo_2025"
+          file_name: "report_beca18_preparacion_ies_tipo_2025.csv"
+          page: 31
+          figure: "1"
+          format: "csv"
+        - name: "report_beca18_preparacion_ies_meses_caracteristica_2025"
+          file_name: "report_beca18_preparacion_ies_meses_caracteristica_2025.csv"
+          page: 31
+          figure: "2"
+          format: "csv"
