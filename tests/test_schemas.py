@@ -145,6 +145,14 @@ def test_bigquery_ddl_generator_writes_bronze_and_silver_sql(tmp_path: Path) -> 
     assert "gs://test-bucket-name/bronze/mef/presupuesto/extraction_date" in bronze_sql
     assert "gs://test-bucket-name/bronze/mef/presupuesto_hierarchy/extraction_date" in bronze_sql
     assert "gs://test-bucket-name/bronze/mef/presupuesto_producto/extraction_date" in bronze_sql
+    assert "test-project-id.bronze.mef_presupuesto_producto_temporal_raw" in bronze_sql
+    assert "test-project-id.bronze.mef_presupuesto_actividad_raw" in bronze_sql
+    assert "test-project-id.bronze.mef_presupuesto_actividad_temporal_raw" in bronze_sql
+    assert "test-project-id.bronze.mef_presupuesto_generica_temporal_raw" in bronze_sql
+    assert "gs://test-bucket-name/bronze/mef/presupuesto_producto_temporal/extraction_date=*/year=*/data.csv" in bronze_sql
+    assert "gs://test-bucket-name/bronze/mef/presupuesto_actividad/extraction_date=*/year=*/data.csv" in bronze_sql
+    assert "gs://test-bucket-name/bronze/mef/presupuesto_actividad_temporal/extraction_date=*/year=*/data.csv" in bronze_sql
+    assert "gs://test-bucket-name/bronze/mef/presupuesto_generica_temporal/extraction_date=*/year=*/data.csv" in bronze_sql
 
     assert "CREATE OR REPLACE TABLE" in silver_sql
     assert "test-project-id.silver.pronabec_convocatorias" in silver_sql
@@ -240,3 +248,62 @@ def test_bigquery_ddl_generator_requires_project_and_bucket(tmp_path: Path) -> N
     assert result.returncode != 0
     assert "Falta configuración requerida" in result.stderr
     assert "--project-id" in result.stderr
+
+
+def test_mef_expanded_budget_schemas_integrity() -> None:
+    # 1. Verify files exist
+    expected_schemas = [
+        "presupuesto_mef_producto_temporal_schema.json",
+        "presupuesto_mef_actividad_schema.json",
+        "presupuesto_mef_actividad_temporal_schema.json",
+        "presupuesto_mef_generica_temporal_schema.json",
+    ]
+    for s in expected_schemas:
+        path = BRONZE_SCHEMAS_DIR / s
+        assert path.exists(), f"Schema file {s} does not exist"
+
+    # 2. Check all fields in all MEF Bronze schemas are STRING and NULLABLE
+    mef_schemas = sorted(BRONZE_SCHEMAS_DIR.glob("presupuesto_mef*.json"))
+    for path in mef_schemas:
+        schema = load_schema(path)
+        for field in schema:
+            assert field["type"] == "STRING", f"Field {field['name']} in {path.name} is not STRING"
+            assert field["mode"] == "NULLABLE", f"Field {field['name']} in {path.name} is not NULLABLE"
+
+    # 3. Base schema contains ejecutora_codigo and ejecutora_nombre
+    base_schema = load_schema(BRONZE_SCHEMAS_DIR / "presupuesto_mef_schema.json")
+    base_fields = field_names(base_schema)
+    assert "ejecutora_codigo" in base_fields
+    assert "ejecutora_nombre" in base_fields
+
+    # 4. Temporal general schema contains temporal fields
+    temp_general = load_schema(BRONZE_SCHEMAS_DIR / "presupuesto_mef_temporal_schema.json")
+    temp_general_fields = field_names(temp_general)
+    temporal_fields = {"periodo_tipo", "periodo_valor", "trimestre", "mes_numero", "mes_nombre"}
+    assert temporal_fields.issubset(temp_general_fields)
+
+    # 5. Producto temporal schema contains product fields and temporal fields
+    prod_temp = load_schema(BRONZE_SCHEMAS_DIR / "presupuesto_mef_producto_temporal_schema.json")
+    prod_temp_fields = field_names(prod_temp)
+    assert {"codigo_producto", "producto"}.issubset(prod_temp_fields)
+    assert temporal_fields.issubset(prod_temp_fields)
+
+    # 6. Actividad schema contains product and activity fields
+    act = load_schema(BRONZE_SCHEMAS_DIR / "presupuesto_mef_actividad_schema.json")
+    act_fields = field_names(act)
+    assert {"codigo_producto", "producto", "codigo_actividad", "actividad"}.issubset(act_fields)
+    # verify it does not contain temporal slice columns (periodo_tipo, periodo_valor)
+    assert "periodo_tipo" not in act_fields
+    assert "periodo_valor" not in act_fields
+
+    # 7. Actividad temporal schema contains activity, product, and temporal fields
+    act_temp = load_schema(BRONZE_SCHEMAS_DIR / "presupuesto_mef_actividad_temporal_schema.json")
+    act_temp_fields = field_names(act_temp)
+    assert {"codigo_producto", "producto", "codigo_actividad", "actividad"}.issubset(act_temp_fields)
+    assert temporal_fields.issubset(act_temp_fields)
+
+    # 8. Generica temporal schema contains generic expense and temporal fields
+    gen_temp = load_schema(BRONZE_SCHEMAS_DIR / "presupuesto_mef_generica_temporal_schema.json")
+    gen_temp_fields = field_names(gen_temp)
+    assert {"codigo_generica", "generica"}.issubset(gen_temp_fields)
+    assert temporal_fields.issubset(gen_temp_fields)
