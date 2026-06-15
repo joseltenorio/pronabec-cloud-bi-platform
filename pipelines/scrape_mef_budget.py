@@ -191,6 +191,35 @@ MEF_BREAKDOWN_CONFIG = {
             "avance_porcentaje",
         ],
     },
+    "producto_temporal": {
+        "button_name": "ctl00$CPH1$BtnMes",
+        "button_names": [
+            "ctl00$CPH1$BtnMes",
+            "ctl00$CPH1$BtnTrimestre",
+            "ctl00$CPH1$BtnPeriodo",
+        ],
+        "source_dataset": "presupuesto_producto_temporal",
+        "code_field": None,
+        "description_field": None,
+        "fieldnames": [
+            "ano",
+            "periodo_tipo",
+            "periodo_valor",
+            "trimestre",
+            "mes_numero",
+            "mes_nombre",
+            "codigo_producto",
+            "producto",
+            "pia",
+            "pim",
+            "certificacion",
+            "compromiso_anual",
+            "compromiso_mensual",
+            "devengado",
+            "girado",
+            "avance_porcentaje",
+        ],
+    },
 }
 DEFAULT_MEF_BREAKDOWN_SLICES = ["producto", "generica"]
 MEF_MONTHS = {
@@ -1200,21 +1229,64 @@ def scrape_consulta_amigable_breakdown_snapshot(
     records_by_slice: dict[str, list[dict[str, str]]] = {}
 
     for slice_name in breakdown_slices:
-        slice_soup = post_mef_navigation(
-            session=session,
-            soup=base_soup,
-            url=navigate_url,
-            button_name=resolve_mef_breakdown_button_name(base_soup, slice_name),
-            timeout=timeout,
-            grp1_value=pronabec_grp1_value,
-        )
-        records_by_slice[slice_name] = extract_mef_breakdown_rows(
-            soup=slice_soup,
-            ano=year,
-            slice_name=slice_name,
-            periodo_tipo="ANUAL",
-            periodo_valor=str(year),
-        )
+        if slice_name == "producto_temporal":
+            product_soup = post_mef_navigation(
+                session=session,
+                soup=base_soup,
+                url=navigate_url,
+                button_name="ctl00$CPH1$BtnProdProy",
+                timeout=timeout,
+                grp1_value=pronabec_grp1_value,
+            )
+            product_radios = product_soup.find_all("input", {"name": "grp1"})
+            product_records = []
+            for radio in product_radios:
+                grp1_val = radio.get("value")
+                row = radio.find_parent("tr")
+                if not row:
+                    continue
+                cells = row.find_all(["td", "th"])
+                label = clean_cell_value(cells[1].get_text(" ")) if len(cells) > 1 else ""
+                if not label:
+                    continue
+                code_prod, desc_prod = split_mef_code_description(label)
+                
+                temporal_btn = resolve_mef_breakdown_button_name(product_soup, "temporal")
+                temporal_soup = post_mef_navigation(
+                    session=session,
+                    soup=product_soup,
+                    url=navigate_url,
+                    button_name=temporal_btn,
+                    timeout=timeout,
+                    grp1_value=grp1_val,
+                )
+                slice_records = extract_mef_breakdown_rows(
+                    soup=temporal_soup,
+                    ano=year,
+                    slice_name="temporal",
+                )
+                for rec in slice_records:
+                    rec["codigo_producto"] = code_prod
+                    rec["producto"] = desc_prod
+                    product_records.append(rec)
+            records_by_slice[slice_name] = product_records
+
+        else:
+            slice_soup = post_mef_navigation(
+                session=session,
+                soup=base_soup,
+                url=navigate_url,
+                button_name=resolve_mef_breakdown_button_name(base_soup, slice_name),
+                timeout=timeout,
+                grp1_value=pronabec_grp1_value,
+            )
+            records_by_slice[slice_name] = extract_mef_breakdown_rows(
+                soup=slice_soup,
+                ano=year,
+                slice_name=slice_name,
+                periodo_tipo="ANUAL",
+                periodo_valor=str(year),
+            )
 
     return records_by_slice
 
