@@ -146,6 +146,26 @@ A continuación se detalla el diseño de grano, dimensiones y métricas para cad
 * **Dimensiones:** `ano_encuesta` (INT64), `grupo_caracteristica` (STRING), `caracteristica` (STRING).
 * **Uso:** Comparar el tiempo promedio en meses dedicado a la preparación previa según perfiles de becarios.
 
+## Publicación Beca 18: Cantidad de becarios universitarios, 2012-2026
+
+### 22. `pronabec_report_beca18_universitarios_universidad_anual`
+* **Grano:** Universidad de estudio + Año de convocatoria.
+* **Métrica principal:** `cantidad_becarios` (INT64, conteo de becarios universitarios).
+* **Dimensiones:** `universidad` (STRING), `ano_convocatoria` (INT64), `es_anio_preliminar` (BOOL).
+* **Uso:** Analizar la evolución histórica y el ranking de universidades receptoras de becarios Beca 18.
+* **Decisiones Silver:**
+  - Se eliminan la columna `total` y la fila `Total general`.
+  - El año 2026 se marca con `es_anio_preliminar = TRUE`.
+
+### 23. `pronabec_report_beca18_universitarios_carrera_anual`
+* **Grano:** Carrera de estudio + Año de convocatoria.
+* **Métrica principal:** `cantidad_becarios` (INT64, conteo de becarios universitarios).
+* **Dimensiones:** `carrera_estudio` (STRING), `ano_convocatoria` (INT64), `es_anio_preliminar` (BOOL).
+* **Uso:** Evaluar la tendencia de carreras de estudio seleccionadas por becarios Beca 18 a nivel universitario.
+* **Decisiones Silver:**
+  - Se eliminan la columna `total` y la fila `Total general`.
+  - El año 2026 se marca con `es_anio_preliminar = TRUE`.
+
 ## 4. Diferencia con fuentes PRONABEC API
 * **Ruta Bronze:**
   * Endpoints API JSON: `bronze/pronabec/<dataset>/` (formato JSONL)
