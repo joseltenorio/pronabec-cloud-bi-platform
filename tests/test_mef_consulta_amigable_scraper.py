@@ -1607,6 +1607,23 @@ def test_mef_scraper_parametrization_executora_and_base_url(monkeypatch) -> None
     assert primary_filters == ["999-9999", "UNIDAD PRUEBA DE BECAS", "FINANCIAMIENTO"]
 
 
+def radio_breakdown_row(value: str, label: str) -> str:
+    return f"""
+    <tr>
+      <td><input type="radio" name="grp1" value="{value}" /></td>
+      <td>{label}</td>
+      <td>1,000</td>
+      <td>2,000</td>
+      <td>1,900</td>
+      <td>1,500</td>
+      <td>1,100</td>
+      <td>1,000</td>
+      <td>900</td>
+      <td>50.0</td>
+    </tr>
+    """
+
+
 class FakeNestedSession:
     def __init__(self) -> None:
         self.headers: dict[str, str] = {}
@@ -1631,11 +1648,34 @@ class FakeNestedSession:
                 </table>
                 """
             )
+        elif "BtnActProyObra" in button:
+            if grp1 == "P1":
+                html = base_form(
+                    f"""
+                    <input type="submit" name="ctl00$CPH1$BtnMes" value="Mes" />
+                    <table>
+                      {radio_breakdown_row("A1", "5006319: APLICACION DE MECANISMOS")}
+                    </table>
+                    """
+                )
+            else:
+                html = base_form(
+                    f"""
+                    <input type="submit" name="ctl00$CPH1$BtnMes" value="Mes" />
+                    <table>
+                      {radio_breakdown_row("A2", "5006318: SEGUIMIENTO")}
+                    </table>
+                    """
+                )
         elif any(b in button for b in ("BtnMes", "BtnTrimestre", "BtnPeriodo")):
             if grp1 == "P1":
                 html = breakdown_table("ENERO")
             elif grp1 == "P2":
                 html = breakdown_table("FEBRERO")
+            elif grp1 == "A1":
+                html = breakdown_table("MARZO")
+            elif grp1 == "A2":
+                html = breakdown_table("ABRIL")
             else:
                 html = breakdown_table("TOTAL ANUAL")
         else:
@@ -1651,7 +1691,7 @@ def test_scrape_consulta_amigable_breakdown_snapshot_nested_slices() -> None:
         "html.parser",
     )
     
-    slices = ["producto_temporal"]
+    slices = ["producto_temporal", "actividad", "actividad_temporal"]
     res = scrape_mef_budget.scrape_consulta_amigable_breakdown_snapshot(
         session=session,
         base_soup=base_soup,
@@ -1672,4 +1712,33 @@ def test_scrape_consulta_amigable_breakdown_snapshot_nested_slices() -> None:
     assert prod_temp[1]["periodo_valor"] == "2026-02"
     assert prod_temp[1]["codigo_producto"] == "3000001"
     assert prod_temp[1]["producto"] == "ACCIONES COMUNES"
+
+    # 2. Verify actividad
+    act = res["actividad"]
+    assert len(act) == 2
+    assert act[0]["codigo_producto"] == "3000885"
+    assert act[0]["producto"] == "ENTREGA DE BECA"
+    assert act[0]["codigo_actividad"] == "5006319"
+    assert act[0]["actividad"] == "APLICACION DE MECANISMOS"
+    assert act[1]["codigo_producto"] == "3000001"
+    assert act[1]["producto"] == "ACCIONES COMUNES"
+    assert act[1]["codigo_actividad"] == "5006318"
+    assert act[1]["actividad"] == "SEGUIMIENTO"
+
+    # 3. Verify actividad_temporal
+    act_temp = res["actividad_temporal"]
+    assert len(act_temp) == 2
+    assert act_temp[0]["periodo_tipo"] == "MENSUAL"
+    assert act_temp[0]["periodo_valor"] == "2026-03"
+    assert act_temp[0]["codigo_producto"] == "3000885"
+    assert act_temp[0]["producto"] == "ENTREGA DE BECA"
+    assert act_temp[0]["codigo_actividad"] == "5006319"
+    assert act_temp[0]["actividad"] == "APLICACION DE MECANISMOS"
+    assert act_temp[1]["periodo_tipo"] == "MENSUAL"
+    assert act_temp[1]["periodo_valor"] == "2026-04"
+    assert act_temp[1]["codigo_producto"] == "3000001"
+    assert act_temp[1]["producto"] == "ACCIONES COMUNES"
+    assert act_temp[1]["codigo_actividad"] == "5006318"
+    assert act_temp[1]["actividad"] == "SEGUIMIENTO"
+
 

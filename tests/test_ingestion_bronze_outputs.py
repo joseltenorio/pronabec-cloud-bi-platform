@@ -348,5 +348,84 @@ def test_mef_new_slices_outputs_validation(tmp_path: Path) -> None:
     assert csv1.exists()
     assert meta1.exists()
 
+    # 2. Actividad records
+    actividad_records = [
+        {
+            "ano": "2026",
+            "codigo_producto": "3000885",
+            "producto": "ENTREGA DE BECA",
+            "codigo_actividad": "5006319",
+            "actividad": "APLICACION DE MECANISMOS",
+            "pia": "1000",
+            "pim": "2000",
+            "certificacion": "1900",
+            "compromiso_anual": "1500",
+            "compromiso_mensual": "1100",
+            "devengado": "1000",
+            "girado": "900",
+            "avance_porcentaje": "50.0",
+        }
+    ]
+
+    # 3. Actividad temporal records
+    act_temp_records = [
+        {
+            "ano": "2026",
+            "periodo_tipo": "MENSUAL",
+            "periodo_valor": "2026-01",
+            "trimestre": "1",
+            "mes_numero": "01",
+            "mes_nombre": "ENERO",
+            "codigo_producto": "3000885",
+            "producto": "ENTREGA DE BECA",
+            "codigo_actividad": "5006319",
+            "actividad": "APLICACION DE MECANISMOS",
+            "pia": "1000",
+            "pim": "2000",
+            "certificacion": "1900",
+            "compromiso_anual": "1500",
+            "compromiso_mensual": "1100",
+            "devengado": "1000",
+            "girado": "900",
+            "avance_porcentaje": "50.0",
+        }
+    ]
+
+    # Write actividad
+    res2 = write_mef_breakdown_to_local(
+        records=actividad_records,
+        extraction_date="2026-06-10",
+        output_dir=tmp_path,
+        run_id="test_run_123",
+        records_read=len(actividad_records),
+        source_url="http://test/url",
+        slice_name="actividad",
+        logger=logger_mock,
+        fiscal_year="2026",
+    )
+    csv2 = Path(res2["output_uri"])
+    meta2 = Path(res2["metadata_path"])
+    assert str(csv2.parent).replace("\\", "/").endswith("bronze/mef/presupuesto_actividad/extraction_date=2026-06-10/year=2026")
+    assert csv2.exists()
+    assert meta2.exists()
+
+    # Write actividad_temporal
+    res3 = write_mef_breakdown_to_local(
+        records=act_temp_records,
+        extraction_date="2026-06-10",
+        output_dir=tmp_path,
+        run_id="test_run_123",
+        records_read=len(act_temp_records),
+        source_url="http://test/url",
+        slice_name="actividad_temporal",
+        logger=logger_mock,
+        fiscal_year="2026",
+    )
+    csv3 = Path(res3["output_uri"])
+    meta3 = Path(res3["metadata_path"])
+    assert str(csv3.parent).replace("\\", "/").endswith("bronze/mef/presupuesto_actividad_temporal/extraction_date=2026-06-10/year=2026")
+    assert csv3.exists()
+    assert meta3.exists()
+
 
 
