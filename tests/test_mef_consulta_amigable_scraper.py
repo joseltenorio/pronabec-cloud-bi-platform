@@ -1605,3 +1605,71 @@ def test_mef_scraper_parametrization_executora_and_base_url(monkeypatch) -> None
     name_parts = [p.strip() for p in re.split(r'\s+[yY]\s+', executora_name) if p.strip()]
     primary_filters = [executora_code] + name_parts
     assert primary_filters == ["999-9999", "UNIDAD PRUEBA DE BECAS", "FINANCIAMIENTO"]
+
+
+class FakeNestedSession:
+    def __init__(self) -> None:
+        self.headers: dict[str, str] = {}
+        self.post_calls: list[dict[str, object]] = []
+
+    def post(self, url: str, data: dict[str, str], timeout: int) -> FakeResponse:
+        self.post_calls.append({"url": url, "data": data, "timeout": timeout})
+        button = data.get("__EVENTTARGET") or ""
+        if not button:
+            for k in data.keys():
+                if "Btn" in k:
+                    button = k
+                    break
+        grp1 = data.get("grp1") or ""
+
+        if "BtnProdProy" in button:
+            html = base_form(
+                f"""
+                <table>
+                  {radio_row("P1", "3000885: ENTREGA DE BECA")}
+                  {radio_row("P2", "3000001: ACCIONES COMUNES")}
+                </table>
+                """
+            )
+        elif any(b in button for b in ("BtnMes", "BtnTrimestre", "BtnPeriodo")):
+            if grp1 == "P1":
+                html = breakdown_table("ENERO")
+            elif grp1 == "P2":
+                html = breakdown_table("FEBRERO")
+            else:
+                html = breakdown_table("TOTAL ANUAL")
+        else:
+            html = breakdown_table("TOTAL ANUAL")
+
+        return FakeResponse(html, url=url)
+
+
+def test_scrape_consulta_amigable_breakdown_snapshot_nested_slices() -> None:
+    session = FakeNestedSession()
+    base_soup = BeautifulSoup(
+        base_form("<table>" + radio_row("U1", "117-1438: PRONABEC") + "</table>"),
+        "html.parser",
+    )
+    
+    slices = ["producto_temporal"]
+    res = scrape_mef_budget.scrape_consulta_amigable_breakdown_snapshot(
+        session=session,
+        base_soup=base_soup,
+        navigate_url="https://example.test/Navegar.aspx",
+        year=2026,
+        timeout=10,
+        breakdown_slices=slices,
+    )
+
+    # 1. Verify producto_temporal
+    prod_temp = res["producto_temporal"]
+    assert len(prod_temp) == 2
+    assert prod_temp[0]["periodo_tipo"] == "MENSUAL"
+    assert prod_temp[0]["periodo_valor"] == "2026-01"
+    assert prod_temp[0]["codigo_producto"] == "3000885"
+    assert prod_temp[0]["producto"] == "ENTREGA DE BECA"
+    assert prod_temp[1]["periodo_tipo"] == "MENSUAL"
+    assert prod_temp[1]["periodo_valor"] == "2026-02"
+    assert prod_temp[1]["codigo_producto"] == "3000001"
+    assert prod_temp[1]["producto"] == "ACCIONES COMUNES"
+

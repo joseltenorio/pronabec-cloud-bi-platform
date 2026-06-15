@@ -305,3 +305,48 @@ def test_mef_temporal_slice_outputs_validation(tmp_path: Path) -> None:
     assert meta_file.exists()
 
 
+def test_mef_new_slices_outputs_validation(tmp_path: Path) -> None:
+    # 1. Product temporal records
+    prod_temp_records = [
+        {
+            "ano": "2026",
+            "periodo_tipo": "MENSUAL",
+            "periodo_valor": "2026-01",
+            "trimestre": "1",
+            "mes_numero": "01",
+            "mes_nombre": "ENERO",
+            "codigo_producto": "3000885",
+            "producto": "ENTREGA DE BECA",
+            "pia": "1000",
+            "pim": "2000",
+            "certificacion": "1900",
+            "compromiso_anual": "1500",
+            "compromiso_mensual": "1100",
+            "devengado": "1000",
+            "girado": "900",
+            "avance_porcentaje": "50.0",
+        }
+    ]
+
+    logger_mock = type("MockLogger", (), {"log": lambda *a, **k: None})()
+
+    # Write producto_temporal
+    res1 = write_mef_breakdown_to_local(
+        records=prod_temp_records,
+        extraction_date="2026-06-10",
+        output_dir=tmp_path,
+        run_id="test_run_123",
+        records_read=len(prod_temp_records),
+        source_url="http://test/url",
+        slice_name="producto_temporal",
+        logger=logger_mock,
+        fiscal_year="2026",
+    )
+    csv1 = Path(res1["output_uri"])
+    meta1 = Path(res1["metadata_path"])
+    assert str(csv1.parent).replace("\\", "/").endswith("bronze/mef/presupuesto_producto_temporal/extraction_date=2026-06-10/year=2026")
+    assert csv1.exists()
+    assert meta1.exists()
+
+
+
