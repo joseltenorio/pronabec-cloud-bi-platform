@@ -468,4 +468,69 @@ def test_mef_new_slices_outputs_validation(tmp_path: Path) -> None:
     assert meta4.exists()
 
 
+def test_mef_breakdown_fields_alignment(tmp_path: Path) -> None:
+    from pipelines.scrape_mef_budget import build_mef_breakdown_record, write_csv_file
+
+    # 1. Test that build_mef_breakdown_record for 'actividad' does NOT contain 'periodo_tipo' or 'periodo_valor'
+    act_record = build_mef_breakdown_record(
+        descriptor_cells=["5006319: APLICACION DE MECANISMOS"],
+        budget_values=["1000", "2000", "1900", "1500", "1100", "1000", "900", "50.0"],
+        ano="2026",
+        slice_name="actividad",
+        periodo_tipo="ANUAL",
+        periodo_valor="2026",
+    )
+    assert act_record is not None
+    assert "periodo_tipo" not in act_record
+    assert "periodo_valor" not in act_record
+    assert "codigo_actividad" in act_record
+    assert act_record["codigo_actividad"] == "5006319"
+    assert act_record["actividad"] == "APLICACION DE MECANISMOS"
+
+    # 2. Test that 'actividad_temporal' records (which use build_mef_temporal_record) indeed contain 'periodo_tipo' and 'periodo_valor'
+    from pipelines.scrape_mef_budget import build_mef_temporal_record
+    temp_record = build_mef_temporal_record(
+        descriptor_cells=["ENERO"],
+        budget_values=["1000", "2000", "1900", "1500", "1100", "1000", "900", "50.0"],
+        ano="2026",
+    )
+    assert temp_record is not None
+    assert "periodo_tipo" in temp_record
+    assert temp_record["periodo_tipo"] == "MENSUAL"
+    assert "periodo_valor" in temp_record
+    assert temp_record["periodo_valor"] == "2026-01"
+
+    # 3. Test that writing to CSV fails if a record contains extra fields not defined in the slice's fieldnames
+    record_with_extras = {
+        "ano": "2026",
+        "codigo_producto": "3000885",
+        "producto": "ENTREGA DE BECA",
+        "codigo_actividad": "5006319",
+        "actividad": "APLICACION DE MECANISMOS",
+        "pia": "1000",
+        "pim": "2000",
+        "certificacion": "1900",
+        "compromiso_anual": "1500",
+        "compromiso_mensual": "1100",
+        "devengado": "1000",
+        "girado": "900",
+        "avance_porcentaje": "50.0",
+        "periodo_tipo": "ANUAL",       # Extra field for 'actividad' slice
+        "periodo_valor": "2026",       # Extra field for 'actividad' slice
+    }
+
+    from pipelines.scrape_mef_budget import MEF_BREAKDOWN_CONFIG
+    fieldnames = MEF_BREAKDOWN_CONFIG["actividad"]["fieldnames"]
+
+    csv_path = tmp_path / "test_extras_fail.csv"
+    with pytest.raises(ValueError) as excinfo:
+        write_csv_file(
+            path=csv_path,
+            records=[record_with_extras],
+            fieldnames=fieldnames,
+        )
+    assert "dict contains fields not in fieldnames" in str(excinfo.value)
+
+
+
 

@@ -912,7 +912,11 @@ def build_mef_breakdown_record(
     if code_field:
         record[code_field] = code
 
-    return record
+    # Filter keys to only keep fields present in fieldnames config
+    fieldnames_set = set(config["fieldnames"])
+    filtered_record = {k: v for k, v in record.items() if k in fieldnames_set}
+
+    return filtered_record
 
 
 def parse_mef_temporal_period(label: str, ano: int | str) -> dict[str, str]:
