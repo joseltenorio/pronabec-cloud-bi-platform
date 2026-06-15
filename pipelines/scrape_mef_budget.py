@@ -408,6 +408,11 @@ def resolve_column_mapping(
                 mapping[expected_column] = normalized_actual[alias]
                 break
 
+    if "ejecutora_codigo" in expected_columns and "ejecutora_codigo" not in mapping:
+        nombre_col = mapping.get("ejecutora_nombre")
+        if nombre_col:
+            mapping["ejecutora_codigo"] = nombre_col
+
     return mapping
 
 
@@ -425,6 +430,17 @@ def normalize_record(
         source_column = column_mapping.get(expected_column)
         value = record.get(source_column) if source_column else None
         normalized[expected_column] = clean_cell_value(value)
+
+    if "ejecutora_nombre" in normalized:
+        label = normalized["ejecutora_nombre"]
+        code, description = split_mef_code_description(label)
+        if code:
+            if not normalized.get("ejecutora_codigo") or normalized.get("ejecutora_codigo") == label:
+                normalized["ejecutora_codigo"] = code
+                normalized["ejecutora_nombre"] = description
+        else:
+            if normalized.get("ejecutora_codigo") == label:
+                normalized["ejecutora_codigo"] = ""
 
     return normalized
 
@@ -1104,11 +1120,23 @@ def extract_mef_budget_record_from_soup(
 
     budget_values = row[-8:]
     descriptive_cells = row[: -len(budget_values)]
-    ejecutora_nombre = next((cell for cell in descriptive_cells if cell), "")
+    ejecutora_label = next((cell for cell in descriptive_cells if cell), "")
+
+    if ejecutora_label:
+        code, description = split_mef_code_description(ejecutora_label)
+    else:
+        fallback_label = get_mef_pronabec_executora_name()
+        code, description = split_mef_code_description(fallback_label)
+
+    if not code:
+        code = executora_code
+    if not description:
+        description = ejecutora_name
 
     return {
         "ano": year,
-        "ejecutora_nombre": ejecutora_nombre or get_mef_pronabec_executora_name(),
+        "ejecutora_codigo": code,
+        "ejecutora_nombre": description,
         "pia": clean_mef_number(budget_values[0]),
         "pim": clean_mef_number(budget_values[1]),
         "certificacion": clean_mef_number(budget_values[2]),

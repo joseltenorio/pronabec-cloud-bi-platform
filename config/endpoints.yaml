@@ -203,6 +203,7 @@ mef:
   end_year_env_var: MEF_END_YEAR
   expected_columns:
     - ano
+    - ejecutora_codigo
     - ejecutora_nombre
     - pia
     - pim
