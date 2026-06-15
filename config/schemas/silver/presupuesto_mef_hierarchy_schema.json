@@ -1,6 +1,7 @@
 [
   { "name": "ano", "type": "INT64", "mode": "REQUIRED" },
-  { "name": "codigo_entidad", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "nivel_jerarquia", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "codigo_entidad", "type": "STRING", "mode": "NULLABLE" },
   { "name": "nombre_entidad", "type": "STRING", "mode": "REQUIRED" },
   { "name": "pia", "type": "NUMERIC", "mode": "NULLABLE" },
   { "name": "pim", "type": "NUMERIC", "mode": "NULLABLE" },

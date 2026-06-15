@@ -1,7 +1,7 @@
 [
   { "name": "ano", "type": "INT64", "mode": "REQUIRED" },
-  { "name": "codigo_entidad", "type": "STRING", "mode": "REQUIRED" },
-  { "name": "nombre_entidad", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "codigo_generica", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "generica", "type": "STRING", "mode": "REQUIRED" },
   { "name": "pia", "type": "NUMERIC", "mode": "NULLABLE" },
   { "name": "pim", "type": "NUMERIC", "mode": "NULLABLE" },
   { "name": "devengado", "type": "NUMERIC", "mode": "NULLABLE" },

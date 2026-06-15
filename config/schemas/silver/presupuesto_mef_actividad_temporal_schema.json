@@ -1,0 +1,18 @@
+[
+  { "name": "ano", "type": "INT64", "mode": "REQUIRED" },
+  { "name": "periodo_tipo", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "periodo_valor", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "trimestre", "type": "INT64", "mode": "NULLABLE" },
+  { "name": "mes_numero", "type": "INT64", "mode": "NULLABLE" },
+  { "name": "mes_nombre", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "codigo_producto", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "producto", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "codigo_actividad", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "actividad", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "devengado", "type": "NUMERIC", "mode": "NULLABLE" },
+  { "name": "source_system", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "source_dataset", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "extraction_date", "type": "DATE", "mode": "REQUIRED" },
+  { "name": "ingestion_timestamp", "type": "TIMESTAMP", "mode": "REQUIRED" },
+  { "name": "pipeline_run_id", "type": "STRING", "mode": "REQUIRED" }
+]
