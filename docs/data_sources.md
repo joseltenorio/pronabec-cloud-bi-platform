@@ -247,47 +247,68 @@ python -m pipelines.scrape_mef_budget --consulta-amigable [argumentos]
 
 ### Salidas y Rutas en Bronze
 
-A partir de la incorporación de las desagregaciones presupuestales, MEF cuenta con las siguientes salidas en formato CSV en la capa Bronze:
+A partir de la incorporación de las desagregaciones presupuestales ampliadas, MEF cuenta con las siguientes salidas en formato CSV en la capa Bronze (guardadas dinámicamente bajo `gs://<bucket>/bronze/mef/<slice_name>/extraction_date=YYYY-MM-DD/year=YYYY/data.csv`):
 
-#### 1. Presupuesto Base
-* **Rol**: Contiene el total anual asignado y ejecutado para la Unidad Ejecutora PRONABEC.
-* **Ruta GCS**: `gs://<bucket>/bronze/mef/presupuesto/extraction_date=YYYY-MM-DD/data.csv`
-* **Ruta local**: `tmp/bronze/mef/presupuesto/extraction_date=YYYY-MM-DD/data.csv`
+#### 1. Presupuesto Base (`presupuesto`)
+* **Rol**: Fila anual de la Unidad Ejecutora PRONABEC.
+* **Características**: Contiene la ejecución total consolidada anual de la institución. Incluye `ejecutora_codigo` ("117-1438") y `ejecutora_nombre` ("PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO").
+* **Ruta**: `bronze/mef/presupuesto/extraction_date=YYYY-MM-DD/year=YYYY/data.csv`
 
-#### 2. Jerarquía Presupuestal (`presupuesto_hierarchy`)
-* **Rol**: Permite comparar el presupuesto de PRONABEC contra los niveles superiores del Gobierno Nacional (Sector, Pliego, etc.) para análisis ejecutivo.
-* **Ruta GCS**: `gs://<bucket>/bronze/mef/presupuesto_hierarchy/extraction_date=YYYY-MM-DD/data.csv`
-* **Valores observados en validación**:
-  * `NIVEL DE GOBIERNO, E, GOBIERNO NACIONAL`
-  * `SECTOR, 10, EDUCACION`
-  * `PLIEGO, 010, M. DE EDUCACION`
-  * `UNIDAD EJECUTORA, 117-1438, PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO`
+#### 2. Corte Temporal General (`presupuesto_temporal`)
+* **Rol**: Temporalidad general de ejecución presupuestal de PRONABEC.
+* **Características**: Representa la temporalidad mensual, trimestral o anual de ejecución institucional usando `periodo_tipo`, `periodo_valor`, `trimestre`, `mes_numero` y `mes_nombre`.
+* **Ruta**: `bronze/mef/presupuesto_temporal/extraction_date=YYYY-MM-DD/year=YYYY/data.csv`
 
-#### 3. Slices de Gasto (`presupuesto_producto` y `presupuesto_generica`)
-* **Rol**: Permite analizar la distribución del gasto de PRONABEC según los proyectos/productos públicos y las partidas genéricas presupuestales.
-* **Rutas GCS**:
-  * `gs://<bucket>/bronze/mef/presupuesto_producto/extraction_date=YYYY-MM-DD/data.csv`
-  * `gs://<bucket>/bronze/mef/presupuesto_generica/extraction_date=YYYY-MM-DD/data.csv`
-* **Valores observados en validación**:
-  * Producto: `3000885, ENTREGA DE BECA DE EDUCACION SUPERIOR A POBLACION CON ALTO RENDIMIENTO ACADEMICO`
-  * Genérica: `5-23, BIENES Y SERVICIOS`
+#### 3. Producto Anual (`presupuesto_producto`)
+* **Rol**: Distribución anual del presupuesto por Producto/Proyecto de gasto.
+* **Características**: Contiene `codigo_producto` y `producto_proyecto`.
+* **Ruta**: `bronze/mef/presupuesto_producto/extraction_date=YYYY-MM-DD/year=YYYY/data.csv`
 
-#### 4. Financiamiento y Geografía (`presupuesto_fuente`, `presupuesto_rubro` y `presupuesto_departamento`)
-* **Rol**: Identifica las fuentes de financiamiento, rubros contables oficiales y la distribución territorial asignada.
-* **Rutas GCS**:
-  * `gs://<bucket>/bronze/mef/presupuesto_fuente/extraction_date=YYYY-MM-DD/data.csv`
-  * `gs://<bucket>/bronze/mef/presupuesto_rubro/extraction_date=YYYY-MM-DD/data.csv`
-  * `gs://<bucket>/bronze/mef/presupuesto_departamento/extraction_date=YYYY-MM-DD/data.csv`
-* **Valores observados en validación**:
-  * Fuente: `1, RECURSOS ORDINARIOS`
-  * Rubro: `00, RECURSOS ORDINARIOS`
-  * Departamento: `15: LIMA`
+#### 4. Producto Temporal (`presupuesto_producto_temporal`)
+* **Rol**: Temporalidad de ejecución por Producto/Proyecto.
+* **Características**: Contiene `codigo_producto`, `producto` y campos de temporalidad (`periodo_tipo`, `periodo_valor`, `trimestre`, `mes_numero`, `mes_nombre`).
+* **Ruta**: `bronze/mef/presupuesto_producto_temporal/extraction_date=YYYY-MM-DD/year=YYYY/data.csv`
 
-#### 5. Corte Temporal (`presupuesto_temporal`)
-* **Rol**: Permite analizar la evolución y ejecución mensual o trimestral de la ejecución presupuestal.
-* **Ruta GCS**: `gs://<bucket>/bronze/mef/presupuesto_temporal/extraction_date=YYYY-MM-DD/data.csv`
-* **Consideraciones de calidad**: Los valores de PIA, PIM o Avance pueden venir vacíos del portal para las filas de meses específicos. Se conservan como strings vacíos en Bronze para mantener consistencia.
-* **Ejemplo observado**: `2026,MENSUAL,2026-01,1,01,ENERO,,,"1,465,529,838","805,901,243","71,975,842","66,564,241","65,803,674",`
+#### 5. Actividad Anual (`presupuesto_actividad`)
+* **Rol**: Presupuesto anual por Actividad / Acción de Inversión / Obra.
+* **Características**: Vincula cada actividad a su producto padre, conservando `codigo_producto`, `producto`, `codigo_actividad` y `actividad`.
+* **Ruta**: `bronze/mef/presupuesto_actividad/extraction_date=YYYY-MM-DD/year=YYYY/data.csv`
+
+#### 6. Actividad Temporal (`presupuesto_actividad_temporal`)
+* **Rol**: Temporalidad por actividad dentro de producto.
+* **Características**: Contiene la temporalidad para la combinación producto/actividad (`codigo_producto`, `producto`, `codigo_actividad`, `actividad` y campos temporales).
+* **Ruta**: `bronze/mef/presupuesto_actividad_temporal/extraction_date=YYYY-MM-DD/year=YYYY/data.csv`
+
+#### 7. Genérica de Gasto Anual (`presupuesto_generica`)
+* **Rol**: Clasificación anual por Genérica de Gasto (ej. Bienes y Servicios, Personal, etc.).
+* **Características**: Contiene `codigo_generica` y `generica`.
+* **Ruta**: `bronze/mef/presupuesto_generica/extraction_date=YYYY-MM-DD/year=YYYY/data.csv`
+
+#### 8. Genérica de Gasto Temporal (`presupuesto_generica_temporal`)
+* **Rol**: Temporalidad por genérica de gasto.
+* **Características**: Contiene la clasificación por genérica de gasto a nivel mensual, trimestral o anual (`codigo_generica`, `generica` y campos temporales).
+* **Ruta**: `bronze/mef/presupuesto_generica_temporal/extraction_date=YYYY-MM-DD/year=YYYY/data.csv`
+
+#### Otros Slices Preservados (`presupuesto_hierarchy`, `presupuesto_fuente`, `presupuesto_rubro`, `presupuesto_departamento`, `presupuesto_categoria` y `presupuesto_subgenerica`)
+* Se mantienen en Bronze y son extraídos de forma anual/estructural según corresponda (por ejemplo, `presupuesto_hierarchy` permite comparar con niveles de Gobierno Nacional superiores y `presupuesto_departamento` detalla la distribución geográfica del gasto).
+
+---
+
+### Advertencias Metodológicas y de Calidad
+
+> [!IMPORTANT]
+> **Consistencia del Grano**: No se deben sumar granularidades incompatibles en consultas agregadas. Por ejemplo, sumar registros de cortes anuales con registros mensuales/trimestrales duplicará artificialmente la ejecución presupuestal. Asimismo, mezclar los slices de `producto` y `actividad` sin controlar el nivel jerárquico duplicará el presupuesto.
+
+> [!WARNING]
+> **Montos y PIA/PIM Vacíos**: El portal de Consulta Amigable no reporta valores acumulados de PIA/PIM para ciertos cortes mensuales intermedios, por lo que estas columnas pueden venir vacías en la capa Bronze. No se deben rellenar artificialmente con cero en Bronze para conservar la fidelidad del reporte original.
+
+> [!NOTE]
+> **Montos Negativos**: Los montos negativos reportados en la ejecución (ej. compromiso o devengado negativo) representan rebajas, anulaciones o ajustes oficiales del MEF y deben ser conservados rigurosamente sin alteración.
+
+> [!CAUTION]
+> **Región Geográfica**: El slice `presupuesto_departamento` representa la asignación territorial oficial del presupuesto según el clasificador geográfico del MEF y no debe confundirse ni asociarse directamente con la procedencia regional de los becarios de PRONABEC.
+
+---
 
 ### Comando de Prueba Local Recomendado
 

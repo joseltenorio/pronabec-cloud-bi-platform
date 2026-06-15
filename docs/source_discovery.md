@@ -172,16 +172,21 @@ python -m pipelines.scrape_mef_budget \
 ```
 
 ### Estructura de Rutas Esperadas en Dry-Run
-El comando anterior generará la siguiente estructura bajo el directorio local:
+El comando anterior generará la siguiente estructura bajo el directorio local (organizada por fecha de extracción y año fiscal):
 
 ```text
-tmp/bronze/mef/presupuesto_hierarchy/extraction_date=2026-06-14/data.csv
-tmp/bronze/mef/presupuesto_producto/extraction_date=2026-06-14/data.csv
-tmp/bronze/mef/presupuesto_generica/extraction_date=2026-06-14/data.csv
-tmp/bronze/mef/presupuesto_fuente/extraction_date=2026-06-14/data.csv
-tmp/bronze/mef/presupuesto_rubro/extraction_date=2026-06-14/data.csv
-tmp/bronze/mef/presupuesto_departamento/extraction_date=2026-06-14/data.csv
-tmp/bronze/mef/presupuesto_temporal/extraction_date=2026-06-14/data.csv
+tmp/bronze/mef/presupuesto/extraction_date=2026-06-14/year=2026/data.csv
+tmp/bronze/mef/presupuesto_hierarchy/extraction_date=2026-06-14/year=2026/data.csv
+tmp/bronze/mef/presupuesto_producto/extraction_date=2026-06-14/year=2026/data.csv
+tmp/bronze/mef/presupuesto_producto_temporal/extraction_date=2026-06-14/year=2026/data.csv
+tmp/bronze/mef/presupuesto_actividad/extraction_date=2026-06-14/year=2026/data.csv
+tmp/bronze/mef/presupuesto_actividad_temporal/extraction_date=2026-06-14/year=2026/data.csv
+tmp/bronze/mef/presupuesto_generica/extraction_date=2026-06-14/year=2026/data.csv
+tmp/bronze/mef/presupuesto_generica_temporal/extraction_date=2026-06-14/year=2026/data.csv
+tmp/bronze/mef/presupuesto_fuente/extraction_date=2026-06-14/year=2026/data.csv
+tmp/bronze/mef/presupuesto_rubro/extraction_date=2026-06-14/year=2026/data.csv
+tmp/bronze/mef/presupuesto_departamento/extraction_date=2026-06-14/year=2026/data.csv
+tmp/bronze/mef/presupuesto_temporal/extraction_date=2026-06-14/year=2026/data.csv
 ```
 
 ## Salidas locales
