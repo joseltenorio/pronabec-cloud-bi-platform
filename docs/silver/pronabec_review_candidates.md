@@ -1,19 +1,22 @@
-# PRONABEC Silver Review Candidates
+# Datasets PRONABEC candidatos para Silver
 
-This document details candidate PRONABEC datasets that are promoted to the Silver layer with specific warnings, as they contain potentially useful information but suffer from interpretation risks or restricted scope.
+Este documento detalla los datasets PRONABEC que pasan a la capa Silver como candidatos de revisión. Estos datasets contienen información potencialmente útil, pero presentan restricciones de cobertura, riesgos de interpretación o alcance histórico limitado.
 
-## Candidate Selection Criteria
+## Criterios de selección como candidato
 
-A dataset is classified as a "Candidate" (under review) when:
-1. **Limited Temporal or Geographical Coverage**: The dataset represents a historical snapshot or specific subset rather than a complete, ongoing registry.
-2. **Aggregated Formats**: The dataset mixes multiple levels of aggregation (e.g. details, regional totals, national totals) in the same file.
-3. **Restricted Scope**: Interpretation of its columns requires business domain context to avoid misleading conclusions.
+Un dataset se clasifica como candidato cuando cumple una o más de las siguientes condiciones:
 
-Promoting these datasets to Silver ensures they have structured contracts, but they should not be treated as central analytical facts without reading the associated warnings.
+1. **Cobertura temporal o geográfica limitada**: representa una fotografía histórica, un subconjunto específico o una cobertura no necesariamente continua.
+2. **Formato agregado o mixto**: combina registros de detalle con totales regionales o nacionales dentro del mismo archivo.
+3. **Alcance restringido**: requiere contexto de negocio para evitar interpretaciones incorrectas.
+4. **Valor analítico condicionado**: puede aportar a análisis exploratorios o dimensiones auxiliares, pero no debe tratarse como tabla central sin restricciones.
 
-## Candidate Datasets
+Promover estos datasets a Silver permite contar con contratos estructurados, tipos consistentes y trazabilidad técnica. Sin embargo, su uso debe respetar las advertencias documentadas.
 
-The following two datasets are classified as candidates:
+## Datasets candidatos
+
+Los siguientes datasets quedan clasificados como candidatos:
+
 1. `pronabec_beca18_becarios_provincia_2016`
 2. `pronabec_convocatorias_carrera_sede`
 
@@ -21,64 +24,91 @@ The following two datasets are classified as candidates:
 
 ### 1. pronabec_beca18_becarios_provincia_2016
 
-* **Source Dataset**: `BECARIOS_PROVINCIA` (Bronze)
-* **Rationale for Name Change**: The original name (`becarios_provincia`) is too generic, suggesting it covers all years or programs. Analysis reveals it represents a specific historical snapshot of Beca 18 beneficiaries by province (circa 2016). The new name clearly documents its historical scope and program restriction.
+- **Dataset origen**: `BECARIOS_PROVINCIA` en Bronze.
+- **Motivo del cambio de nombre**: el nombre original `becarios_provincia` es demasiado genérico y podría sugerir que cubre todos los años, programas o convocatorias. El análisis funcional indica que representa una fotografía histórica de beneficiarios de Beca 18 por provincia, aproximadamente asociada al periodo disponible alrededor de 2016. El nuevo nombre explicita su alcance histórico y su restricción al programa Beca 18.
 
-#### Columns Kept
-* `source_row_id` (INT64 / INTEGER): Technical identifier for lineage.
-* `region` (STRING): Department name.
-* `provincia` (STRING): Province name.
-* `becarios_b18_count` (INT64 / INTEGER): Number of Beca 18 beneficiaries (renamed from `b18_n` / `b18n`).
-* `aggregation_scope` (STRING): Scope indicator (e.g., `PROVINCIA`, `REGION_TOTAL`, `NATIONAL_TOTAL`) to identify aggregated rows.
+#### Columnas conservadas
 
-#### Columns Discarded
-* `nro_fila`: Removed.
-* `b18_pct` / `b18pct`: Dropped because percentages are easily computed from totals in the reporting/BI layer.
-* Other program columns (e.g., `permanencia_n`, `ffaa_n`) that had sparse, incomplete, or corrupted records.
+- `source_row_id` (`INT64` / `INTEGER`): identificador técnico para trazabilidad hacia Bronze.
+- `region` (`STRING`): nombre del departamento o región.
+- `provincia` (`STRING`): nombre de la provincia.
+- `becarios_b18_count` (`INT64` / `INTEGER`): cantidad de beneficiarios de Beca 18. Campo renombrado desde `b18_n` / `b18n`.
+- `aggregation_scope` (`STRING`): indicador del nivel de agregación del registro. Valores esperados: `PROVINCIA`, `REGION_TOTAL`, `NATIONAL_TOTAL`.
 
-#### Risk of Interpretation & Allowed/Restricted Use
-* **Allowed Use**: Referencial distribution of Beca 18 scholarship holders by province for the historical snapshot.
-* **Restricted Use**: 
-  - Do NOT use this table as a complete or active series of all scholarship holders across years.
-  - Do NOT compare these totals directly with current year figures as a trend.
-  - Do NOT ignore the `aggregation_scope` field, as sum operations will double-count records if totals/subtotals are not filtered.
+#### Columnas descartadas
+
+- `nro_fila`: eliminado por redundancia con `source_row_id`.
+- `b18_pct` / `b18pct`: eliminado porque el porcentaje puede calcularse desde conteos y totales en Gold o Power BI.
+- Otras columnas de programas o métricas con registros dispersos, incompletos o poco confiables.
+
+#### Riesgos de interpretación y uso permitido
+
+**Uso permitido**:
+
+- Analizar de forma referencial la distribución territorial histórica de beneficiarios de Beca 18 por región y provincia.
+- Explorar concentración territorial en una fotografía histórica específica.
+
+**Uso restringido**:
+
+- No usar esta tabla como serie histórica completa.
+- No interpretarla como registro actualizado de beneficiarios.
+- No comparar directamente sus totales con años recientes como si fueran tendencia.
+- No sumar registros sin filtrar `aggregation_scope`, porque se pueden duplicar totales regionales o nacionales.
 
 ---
 
 ### 2. pronabec_convocatorias_carrera_sede
 
-* **Source Dataset**: `ConvocatoriaPorCarreraSede` (Bronze)
-* **Rationale for Promotion**: It lists the eligible offer of educational institutions, campuses, and academic programs by convocatoria. Highly valuable to analyze the educational supply, but must not be confused with actual student enrollment.
+- **Dataset origen**: `ConvocatoriaPorCarreraSede` en Bronze.
+- **Motivo de promoción**: contiene la oferta elegible de instituciones, sedes y carreras por convocatoria. Es útil para analizar disponibilidad educativa asociada a convocatorias, pero no debe confundirse con matrícula real ni con beneficiarios efectivos.
 
-#### Columns Kept
-* `source_row_id` (INT64 / INTEGER): Technical identifier for lineage.
-* `id_convocatoria` (INT64 / INTEGER): Business key to link with `pronabec_convocatorias`.
-* `pais_origen` (STRING): Country of the university/institute.
-* `nivel_educativo` (STRING): Target education level (e.g. Pregrado).
-* `tipo_institucion` (STRING): Institution type.
-* `sede` (STRING): Campus name.
-* `institucion` (STRING): Institution name.
-* `carrera` (STRING): Eligible program name.
-* `gestion_ies` (STRING): Management type (Pública/Privada) of the Higher Education Institution (IES) (renamed from `gestion`).
-* `ruc` (STRING): Standard business registry number of the IES. Kept as `STRING`.
+#### Columnas conservadas
 
-#### Columns Discarded
-* `nro_fila`: Removed.
-* `resolucion`, `abreviatura`, `region`, `web`, `representante`, `telefono`, `email`, `fecha_carga`: Removed to focus strictly on program-institution availability.
+- `source_row_id` (`INT64` / `INTEGER`): identificador técnico para trazabilidad hacia Bronze.
+- `id_convocatoria` (`INT64` / `INTEGER`): llave de negocio potencial para relacionarse con `pronabec_convocatorias`.
+- `pais_origen` (`STRING`): país de origen de la institución educativa.
+- `nivel_educativo` (`STRING`): nivel educativo asociado, por ejemplo pregrado.
+- `tipo_institucion` (`STRING`): tipo de institución.
+- `sede` (`STRING`): sede o campus.
+- `institucion` (`STRING`): nombre de la institución educativa superior.
+- `carrera` (`STRING`): carrera o programa elegible.
+- `gestion_ies` (`STRING`): tipo de gestión de la institución de educación superior, renombrado desde `gestion`.
+- `ruc` (`STRING`): número de RUC de la institución. Se conserva como `STRING` para evitar pérdida de formato.
 
-#### Risk of Interpretation & Allowed/Restricted Use
-* **Allowed Use**: Analyzing the eligible offer of programs, locations, and institutions by convocatoria.
-* **Restricted Use**: 
-  - Do NOT use this table to count active becarios or enrollments. It is a catalog of *eligible offers*, not *actual beneficiaries*.
-  - Do NOT assume the list of institutions is exhaustive for all national universities.
+#### Columnas descartadas
+
+- `nro_fila`: eliminado por redundancia con `source_row_id`.
+- `resolucion`: descartado por no aportar al análisis estructural de oferta.
+- `abreviatura`: descartado por redundancia o baja utilidad analítica.
+- `region`: descartado por alta nulidad o baja confiabilidad observada.
+- `web`, `representante`, `telefono`, `email`: descartados por no formar parte del modelo analítico.
+- `fecha_carga`: descartado como campo de negocio; la trazabilidad técnica se maneja con metadata estándar.
+
+#### Riesgos de interpretación y uso permitido
+
+**Uso permitido**:
+
+- Analizar oferta elegible por convocatoria, institución, sede, carrera, nivel educativo y tipo de gestión.
+- Explorar la relación entre convocatorias y oferta académica mediante `id_convocatoria`.
+- Construir dimensiones auxiliares de instituciones, sedes o carreras elegibles.
+
+**Uso restringido**:
+
+- No usar esta tabla para contar becarios activos.
+- No usarla como matrícula real.
+- No interpretarla como distribución de beneficiarios.
+- No asumir que la lista representa toda la oferta nacional de educación superior.
 
 ---
 
-## Technical Audit & Metadata Fields
+## Campos técnicos y metadata
 
-These tables contain the standard platform metadata columns:
-- `source_system` (STRING): "PRONABEC"
-- `source_dataset` (STRING): Origin dataset name.
-- `extraction_date` (DATE): Logical extraction date.
-- `ingestion_timestamp` (TIMESTAMP): Physical timestamp when written to Silver.
-- `pipeline_run_id` (STRING): Unique run ID of the pipeline execution.
+Estas tablas incluyen la metadata estándar de la plataforma:
+
+- `source_system` (`STRING`): sistema origen, por ejemplo `PRONABEC`.
+- `source_dataset` (`STRING`): nombre del dataset de origen.
+- `extraction_date` (`DATE`): fecha lógica de extracción.
+- `ingestion_timestamp` (`TIMESTAMP`): timestamp físico de escritura en Silver.
+- `pipeline_run_id` (`STRING`): identificador único de ejecución del pipeline.
+
+La metadata permite auditoría, trazabilidad y control operativo sin depender de campos visuales o numeraciones internas del portal.

@@ -1,60 +1,70 @@
-# PRONABEC Bronze-Only (Rejected) Datasets
+# Datasets PRONABEC Bronze-Only
 
-This document details the PRONABEC datasets that have been excluded from promotion to the Silver layer and are classified as `BRONZE_ONLY`. 
+Este documento detalla los datasets PRONABEC que fueron excluidos de la promoción a la capa Silver y quedan clasificados como `BRONZE_ONLY`.
 
-## Objective
+## Objetivo
 
-To maintain a clean and reliable analytical repository in Silver, datasets that contain low-value, sparse, or isolated information are rejected. This prevents confusion, prevents the ingestion of uninterpretable data, and ensures the platform is cost-efficient.
+Mantener una capa Silver limpia, confiable y útil para análisis. Los datasets con bajo valor analítico, información aislada, cobertura limitada o alto riesgo de interpretación se conservan únicamente en Bronze. Esta decisión evita confusión, reduce complejidad innecesaria en los pipelines y protege la calidad del modelo analítico.
 
-## Rejection Criteria
+## Criterios de exclusión
 
-A dataset is classified as `BRONZE_ONLY` and rejected for Silver if it meets any of the following conditions:
-1. **Lack of Relational Keys**: The dataset cannot be linked to other core entities (like convocatorias or becarios).
-2. **Poor Data Quality or Sparsity**: The dataset is incomplete, has low records count, or has limited temporal coverage.
-3. **No Direct Analytical Metric**: The dataset contains metadata or configuration data that does not drive analytical decisions or dashboards.
-4. **Interpretation Risk**: Using the dataset could lead to misleading conclusions because the underlying data collection is flawed or biased.
+Un dataset se clasifica como `BRONZE_ONLY` si cumple una o más de las siguientes condiciones:
 
-## Rejected Datasets
+1. **Falta de llaves relacionales**: no puede vincularse de forma confiable con entidades principales como convocatorias, becarios, instituciones o ubicaciones.
+2. **Baja calidad, escasez o cobertura limitada**: presenta pocos registros, información incompleta o cobertura temporal insuficiente.
+3. **Ausencia de métrica analítica directa**: contiene metadatos, catálogos aislados o información que no permite construir indicadores útiles.
+4. **Riesgo de interpretación**: su uso puede inducir conclusiones incorrectas por limitaciones de origen, falta de denominadores o ambigüedad semántica.
 
-The following five PRONABEC datasets have been rejected and remain strictly in the Bronze layer:
+## Datasets clasificados como Bronze-Only
+
+Los siguientes cinco datasets PRONABEC no pasan a Silver y permanecen estrictamente en la capa Bronze:
 
 ---
 
 ### 1. concepto_pago
 
-* **Decisión**: `BRONZE_ONLY`
-* **Technical Reason**: This dataset contains lists of payment concepts and subconcepts, but it does not map them to actual monetary values, student IDs, or convocatorias. It lacks business keys, making it impossible to integrate into any spend or cost dashboard.
+- **Decisión**: `BRONZE_ONLY`
+- **Motivo técnico y analítico**: este dataset contiene conceptos y subconceptos de pago, pero no los relaciona con montos reales, estudiantes, convocatorias ni periodos analíticos claros. Al no contar con llaves de negocio suficientes, no permite integrarse de forma confiable a un dashboard de gasto, subvenciones o costos.
 
 ---
 
 ### 2. notas_becarios
 
-* **Decisión**: `BRONZE_ONLY`
-* **Technical Reason**: Although academic performance is a high-value concept, the public data available in this dataset is highly sparse, historical, and lacks context (e.g. grading scales by university, career durations, etc.). Loading this data into Silver would create an illusion of a full performance tracker, which cannot be backed by the data itself.
+- **Decisión**: `BRONZE_ONLY`
+- **Motivo técnico y analítico**: aunque el rendimiento académico es un concepto de alto valor, la información pública disponible en este dataset es dispersa, histórica y carece de contexto suficiente, como escalas de calificación por institución, duración de carreras o continuidad completa por becario. Cargarlo a Silver podría crear la impresión equivocada de que existe un seguimiento académico completo y defendible.
 
 ---
 
 ### 3. periodos_academicos
 
-* **Decisión**: `BRONZE_ONLY`
-* **Technical Reason**: It functions as a lookup table of academic terms, years, and months. However, it does not add any relational value since convocatorias and other datasets already use standard date types.
+- **Decisión**: `BRONZE_ONLY`
+- **Motivo técnico y analítico**: funciona principalmente como un catálogo de periodos académicos, años y meses. Sin embargo, no aporta una relación analítica clara con las tablas principales, ya que las convocatorias y otros datasets pueden modelarse directamente con campos de fecha o periodo propios.
 
 ---
 
 ### 4. nota_promedio_postulante_region
 
-* **Decisión**: `BRONZE_ONLY`
-* **Technical Reason**: This dataset is extremely small, incomplete, and represents a static historical snapshot with low statistical significance. It cannot be used to analyze regional educational levels or student quality.
+- **Decisión**: `BRONZE_ONLY`
+- **Motivo técnico y analítico**: es un dataset pequeño, incompleto y con apariencia de fotografía histórica estática. Su baja cobertura limita la significancia estadística y no permite analizar de manera confiable el nivel académico regional ni la calidad de los postulantes.
 
 ---
 
 ### 5. perdida_becas
 
-* **Decisión**: `BRONZE_ONLY`
-* **Technical Reason**: The records representing scholarship losses or desertion are incomplete and lack proper denominators (e.g. total enrollment per year). Without a denominator, it is impossible to compute retention or desertion rates. Using this raw count in dashboards would create distorted views of scholarship performance.
+- **Decisión**: `BRONZE_ONLY`
+- **Motivo técnico y analítico**: aunque conceptualmente podría aportar al análisis de pérdida o deserción de becas, los registros disponibles no permiten interpretar con claridad la cobertura real del fenómeno. Además, no existen denominadores adecuados, como total de becarios por año o total de beneficiarios expuestos al riesgo, por lo que no se pueden calcular tasas de pérdida, retención o deserción de forma confiable. Usar conteos crudos en dashboards generaría una visión distorsionada del desempeño del programa.
 
 ---
 
-## Data Preservation in Bronze
+## Preservación en Bronze
 
-Excluding these datasets from Silver does **not** mean they are deleted from the platform. Their extractors remain fully functional, and raw files (`data_raw.json` and `data.jsonl`) will continue to be stored in the GCS Bronze layer under the `extraction_date=YYYY-MM-DD/` prefix for historical trace and audit purposes.
+Excluir estos datasets de Silver no significa eliminarlos de la plataforma. Sus datos crudos se conservan en la capa Bronze para trazabilidad, auditoría y revisión histórica.
+
+Los extractores pueden seguir preservando los archivos originales bajo la estructura:
+
+```text
+gs://<bucket>/bronze/pronabec/<dataset>/extraction_date=YYYY-MM-DD/data_raw.json
+gs://<bucket>/bronze/pronabec/<dataset>/extraction_date=YYYY-MM-DD/data.jsonl
+```
+
+La decisión `BRONZE_ONLY` indica únicamente que estos datasets no forman parte del contrato analítico Silver vigente.

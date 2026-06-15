@@ -1,21 +1,24 @@
-# PRONABEC Selected Silver Analytical Schemas
+# Schemas analíticos Silver seleccionados de PRONABEC
 
-This document details the selected PRONABEC datasets approved for promotion to the Silver layer, including the criteria for selection, the schema design, column selection rationale, and quality expectations.
+Este documento detalla los datasets PRONABEC aprobados para la capa Silver, incluyendo criterios de selección, diseño lógico, columnas conservadas, columnas descartadas y reglas mínimas de calidad.
 
-## Objective
+## Objetivo
 
-The objective of the Silver layer is to expose clean, structured, and relationally consistent datasets. This document records the architectural decisions for selecting high-value analytical datasets from the raw Bronze layer and designing their corresponding Silver schemas.
+La capa Silver expone datasets estructurados, tipados y consistentes para análisis, modelado y consumo posterior por Gold, Power BI o componentes analíticos. Este documento registra las decisiones de selección de columnas y datasets PRONABEC que sí aportan valor analítico claro.
 
-## Selection Criteria
+## Criterios de selección
 
-Datasets from the Bronze layer are selected for promotion to the Silver layer based on the following criteria:
-1. **Analytical Value**: The dataset contains key business variables (e.g. geographic distributions, scholarship details, institutional parameters) that directly support analytical models or business intelligence dashboards.
-2. **Relational Feasibility**: The dataset contains reliable business keys (e.g. `id_convocatoria`, `codigo_ubigeo`) that allow integration with other tables.
-3. **Data Completeness and Coverage**: The dataset contains sufficient historical and current records to provide meaningful insights.
+Los datasets de Bronze se promueven a Silver cuando cumplen criterios como:
 
-## Approved Datasets
+1. **Valor analítico**: contienen variables relevantes para análisis de convocatorias, cobertura territorial, becarios, instituciones o elegibilidad.
+2. **Viabilidad relacional**: incluyen llaves o atributos que permiten integrarse con otras entidades, como `id_convocatoria`, `codigo_ubigeo` o atributos institucionales.
+3. **Cobertura suficiente**: contienen volumen o vigencia suficiente para construir análisis defendibles.
+4. **Claridad semántica**: sus registros pueden interpretarse sin generar métricas engañosas.
 
-The following four PRONABEC datasets have been approved for the Silver layer:
+## Datasets aprobados
+
+Los siguientes datasets PRONABEC fueron aprobados para Silver:
+
 1. `pronabec_convocatorias`
 2. `pronabec_ubigeo_postulacion`
 3. `pronabec_becarios_pais_estudio`
@@ -25,24 +28,28 @@ The following four PRONABEC datasets have been approved for the Silver layer:
 
 ### 1. pronabec_convocatorias
 
-* **Source Dataset**: `CONVOCATORIA` (Bronze)
-* **Analytical Purpose**: Represents the catalog of scholarship convocatorias, including program type, modality, and the number of offered vacantes. It serves as a dimension to filter and slice other fact datasets.
+- **Dataset origen**: `CONVOCATORIA` en Bronze.
+- **Propósito analítico**: representa el catálogo de convocatorias de becas, incluyendo programa, modalidad y número de vacantes. Puede funcionar como dimensión de referencia para filtrar, agrupar o relacionar otros datasets.
 
-#### Columns Kept
-* `source_row_id` (INT64 / INTEGER): Technical identifier for lineage and audit trace back to Bronze.
-* `id_convocatoria` (INT64 / INTEGER): Unique business key for the convocatoria.
-* `codigo_anual` (STRING): Annual identifier representing the year and phase (e.g., `2021-02`). Kept as `STRING` to support mixed alphanumeric formats.
-* `descripcion_convocatoria` (STRING): Detailed description of the convocatoria (renamed from `description_conv`).
-* `modalidad` (STRING): Modality of the scholarship.
-* `programa` (STRING): Scholarship program name.
-* `vacantes` (INT64 / INTEGER): Number of vacancies offered.
+#### Columnas conservadas
 
-#### Columns Discarded
-* `nro_fila`: Removed in favor of `source_row_id` to eliminate technical redundancy.
-* Other non-essential fields (e.g. intermediate dates) to reduce column clutter.
+- `source_row_id` (`INT64` / `INTEGER`): identificador técnico para trazabilidad hacia Bronze.
+- `id_convocatoria` (`INT64` / `INTEGER`): llave de negocio de la convocatoria.
+- `codigo_anual` (`STRING`): identificador anual o de fase, por ejemplo `2021-02`. Se conserva como `STRING` por tener formatos mixtos.
+- `descripcion_convocatoria` (`STRING`): descripción de la convocatoria, renombrada desde `description_conv`.
+- `modalidad` (`STRING`): modalidad de la beca.
+- `programa` (`STRING`): nombre del programa de beca.
+- `vacantes` (`INT64` / `INTEGER`): número de vacantes ofrecidas.
 
-#### Quality Rules & Minimum Fields
-The following fields are strictly required for a row to be loaded:
+#### Columnas descartadas
+
+- `nro_fila`: eliminado por redundancia con `source_row_id`.
+- Fechas intermedias, límites de edad, resolución y otros campos no seleccionados para el contrato analítico actual.
+
+#### Reglas de calidad y campos mínimos
+
+Para cargar un registro en esta tabla Silver, se consideran campos mínimos:
+
 - `source_row_id`
 - `id_convocatoria`
 - `codigo_anual`
@@ -50,79 +57,94 @@ The following fields are strictly required for a row to be loaded:
 - `modalidad`
 - `programa`
 - `vacantes`
-Rows with null values in any of these columns will be filtered out in the transformation layer.
+
+Los registros con valores nulos en cualquiera de estos campos no deben cargarse a Silver durante la transformación.
 
 ---
 
 ### 2. pronabec_ubigeo_postulacion
 
-* **Source Dataset**: `UBIGEO_POSTULACION` (Bronze)
-* **Analytical Purpose**: Serves as a geographical district catalog associated with postulations, mapping regions, provinces, and districts to standard ubigeo codes. It does not measure applicant or scholarship counts directly.
+- **Dataset origen**: `UBIGEO_POSTULACION` en Bronze.
+- **Propósito analítico**: funciona como catálogo geográfico de distritos asociados a postulaciones. No mide cantidad de postulantes ni cantidad de becarios.
 
-#### Columns Kept
-* `source_row_id` (INT64 / INTEGER): Technical identifier for lineage.
-* `region` (STRING): Department or region name.
-* `provincia` (STRING): Province name.
-* `distrito` (STRING): District name.
-* `codigo_ubigeo` (STRING): Standard 6-digit territorial key (e.g., `150101` for Lima). Kept as `STRING` to preserve leading zeros.
+#### Columnas conservadas
 
-#### Columns Discarded
-* `nro_fila`: Removed.
+- `source_row_id` (`INT64` / `INTEGER`): identificador técnico para trazabilidad hacia Bronze.
+- `region` (`STRING`): nombre del departamento o región.
+- `provincia` (`STRING`): nombre de la provincia.
+- `distrito` (`STRING`): nombre del distrito.
+- `codigo_ubigeo` (`STRING`): código territorial estándar. Se conserva como `STRING` para preservar ceros a la izquierda.
+
+#### Columnas descartadas
+
+- `nro_fila`: eliminado por redundancia con `source_row_id`.
 
 ---
 
 ### 3. pronabec_becarios_pais_estudio
 
-* **Source Dataset**: `BECARIOS_PAIS_ESTUDIO` (Bronze)
-* **Analytical Purpose**: Tracks the volume of active scholarship holders by their country of study, modality, institution, and sex. Extremely valuable for international academic mobility analysis.
+- **Dataset origen**: `BECARIOS_PAIS_ESTUDIO` en Bronze.
+- **Propósito analítico**: permite analizar becarios por convocatoria, modalidad, país de estudio, institución y sexo. Es uno de los datasets más útiles para observar movilidad académica, distribución institucional y composición por sexo.
 
-#### Columns Kept
-* `source_row_id` (INT64 / INTEGER): Technical identifier for lineage.
-* `convocatoria` (STRING): Name of the convocatoria, which can contain compound text (e.g., `BECA PERMANENCIA - CONVOCATORIA 2023`). Kept as raw text.
-* `modalidad` (STRING): Modality name.
-* `pais_estudio` (STRING): Target country of studies (renamed from `pais de estudio` or other variants).
-* `institucion` (STRING): Name of the higher education institution.
-* `sexo` (STRING): Gender of the beneficiary.
+#### Columnas conservadas
 
-#### Columns Discarded
-* `nro_fila`: Removed.
+- `source_row_id` (`INT64` / `INTEGER`): identificador técnico para trazabilidad hacia Bronze.
+- `convocatoria` (`STRING`): nombre de la convocatoria. Puede contener texto compuesto, por ejemplo `BECA PERMANENCIA - CONVOCATORIA 2023`.
+- `modalidad` (`STRING`): modalidad asociada.
+- `pais_estudio` (`STRING`): país de estudio, renombrado desde variantes como `pais de estudio`.
+- `institucion` (`STRING`): institución de educación superior.
+- `sexo` (`STRING`): sexo reportado del beneficiario.
+
+#### Columnas descartadas
+
+- `nro_fila`: eliminado por redundancia con `source_row_id`.
+- Cualquier otro campo no seleccionado en el contrato Silver vigente.
 
 ---
 
 ### 4. pronabec_colegios_elegibles
 
-* **Source Dataset**: `COLEGIOS_ELEGIBLES` / `COLEGIOS_HABIBLES` (Bronze)
-* **Analytical Purpose**: Tracks educational institutions elegible for PRONABEC scholarship application, categorizing them by local UGEL, management type (public/private), and level/modality.
+- **Dataset origen**: `COLEGIOS_ELEGIBLES` / `colegios_habiles` en Bronze.
+- **Propósito analítico**: permite analizar instituciones educativas elegibles para postulación a becas, considerando UGEL, distrito, tipo de gestión y modalidad educativa.
 
-#### Columns Kept
-* `source_row_id` (INT64 / INTEGER): Technical identifier for lineage.
-* `ugel` (STRING): Local educational management unit.
-* `institucion_educativa` (STRING): Name of the school.
-* `tipo_gestion_colegio` (STRING): Management type (renamed from `tipo_gestion`), e.g., `Pública - Sector Educación`.
-* `nivel_modalidad` (STRING): Level and modality (renamed from `nivel_modalida` or variants).
-* `forma_atencion` (STRING): Attention format.
-* `distrito` (STRING): School's district.
+#### Columnas conservadas
 
-#### Columns Discarded
-* `nro_fila`: Removed.
-* `centro_poblado`, `direccion`, `telefono`, `fecha_carga`: Dropped because they lack direct analytical interest.
+- `source_row_id` (`INT64` / `INTEGER`): identificador técnico para trazabilidad hacia Bronze.
+- `ugel` (`STRING`): Unidad de Gestión Educativa Local.
+- `institucion_educativa` (`STRING`): nombre de la institución educativa.
+- `tipo_gestion_colegio` (`STRING`): tipo de gestión del colegio, renombrado desde `tipo_gestion`. Puede contener valores como `Pública - Sector Educación`.
+- `nivel_modalidad` (`STRING`): nivel o modalidad educativa, renombrado desde variantes como `nivel_modalida`.
+- `forma_atencion` (`STRING`): forma de atención educativa.
+- `distrito` (`STRING`): distrito donde se ubica la institución educativa.
+
+#### Columnas descartadas
+
+- `nro_fila`: eliminado por redundancia con `source_row_id`.
+- `centro_poblado`: descartado por granularidad excesiva para el modelo actual.
+- `direccion`: descartado por baja utilidad analítica y posible variabilidad textual.
+- `telefono`: descartado por no aportar a métricas analíticas.
+- `fecha_carga`: descartado como campo de negocio; la trazabilidad se maneja con metadata técnica estándar.
 
 ---
 
-## Technical Audit & Metadata Fields
+## Campos técnicos y metadata
 
-Each Silver table includes the standard technical metadata fields for consistency across the data platform:
-- `source_system` (STRING): "PRONABEC"
-- `source_dataset` (STRING): Origin dataset name.
-- `extraction_date` (DATE): Logical extraction date.
-- `ingestion_timestamp` (TIMESTAMP): Physical timestamp when written to Silver.
-- `pipeline_run_id` (STRING): Unique run ID of the pipeline execution.
+Cada tabla Silver incluye la metadata técnica estándar de la plataforma:
 
-## Decisions on Technical Columns
+- `source_system` (`STRING`): sistema origen, por ejemplo `PRONABEC`.
+- `source_dataset` (`STRING`): nombre del dataset de origen.
+- `extraction_date` (`DATE`): fecha lógica de extracción.
+- `ingestion_timestamp` (`TIMESTAMP`): timestamp físico de escritura en Silver.
+- `pipeline_run_id` (`STRING`): identificador único de ejecución del pipeline.
 
-A key architectural decision was made to drop `nro_fila` in favor of `source_row_id`. In Bronze, both fields exist, but in Silver, `source_row_id` acts as the single standard lineage reference. 
+## Decisión sobre columnas técnicas
 
-## Known Limitations
+Se conserva `source_row_id` como identificador técnico único de trazabilidad hacia Bronze.
 
-- **Text Cleanliness**: Fields such as `tipo_gestion_colegio` and `convocatoria` contain raw, mixed-case text with trailing spaces or codes. This will be normalized in future pipeline steps, but the schema keeps them as raw strings in Silver.
-- **Geographical Keys**: There are no coordinates or spatial data in these schemas; regional groupings rely strictly on the `codigo_ubigeo` and textual names.
+Se elimina `nro_fila` de Silver porque cumple una función similar y no aporta valor adicional para análisis. Esta decisión reduce redundancia y estandariza la trazabilidad de los datasets PRONABEC.
+
+## Limitaciones conocidas
+
+- Los campos textuales como `tipo_gestion_colegio`, `convocatoria`, `modalidad`, `institucion` o `carrera` pueden contener diferencias de escritura, espacios, mayúsculas, acentos o variaciones semánticas. En este contrato se conservan como texto seleccionado, sin canonización avanzada.
+- La normalización textual profunda, corrección de encoding, homologación de nombres y fuzzy matching no forman parte de esta definición de schema.
+- Las claves geográficas dependen de `codigo_ubigeo` y nombres territoriales. No se incorporan coordenadas ni geometrías espaciales.
