@@ -158,6 +158,32 @@ def test_bigquery_ddl_generator_writes_bronze_and_silver_sql(tmp_path: Path) -> 
     assert "test-project-id.silver.pronabec_convocatorias" in silver_sql
     assert "vacantes INTEGER" in silver_sql
 
+    # Validate approved MEF Silver tables are generated
+    approved_silver_tables = [
+        "presupuesto_mef",
+        "presupuesto_mef_temporal",
+        "presupuesto_mef_producto",
+        "presupuesto_mef_producto_temporal",
+        "presupuesto_mef_actividad",
+        "presupuesto_mef_actividad_temporal",
+        "presupuesto_mef_generica",
+        "presupuesto_mef_generica_temporal",
+        "presupuesto_mef_hierarchy"
+    ]
+    for table in approved_silver_tables:
+        assert f"test-project-id.silver.{table}" in silver_sql
+
+    # Validate rejected MEF Silver tables are NOT generated
+    rejected_silver_tables = [
+        "presupuesto_mef_fuente",
+        "presupuesto_mef_rubro",
+        "presupuesto_mef_departamento",
+        "presupuesto_mef_categoria",
+        "presupuesto_mef_subgenerica"
+    ]
+    for table in rejected_silver_tables:
+        assert f"silver.{table}" not in silver_sql
+
 def test_bigquery_ddl_generator_uses_environment_config(tmp_path: Path) -> None:
     output_dir = tmp_path / "generated" / "sql"
     env = {
@@ -307,3 +333,129 @@ def test_mef_expanded_budget_schemas_integrity() -> None:
     gen_temp_fields = field_names(gen_temp)
     assert {"codigo_generica", "generica"}.issubset(gen_temp_fields)
     assert temporal_fields.issubset(gen_temp_fields)
+
+
+def test_mef_silver_schemas_integrity() -> None:
+    # 1. Verify approved files exist
+    approved_datasets = [
+        "presupuesto_mef",
+        "presupuesto_mef_temporal",
+        "presupuesto_mef_producto",
+        "presupuesto_mef_producto_temporal",
+        "presupuesto_mef_actividad",
+        "presupuesto_mef_actividad_temporal",
+        "presupuesto_mef_generica",
+        "presupuesto_mef_generica_temporal",
+        "presupuesto_mef_hierarchy"
+    ]
+    for dataset in approved_datasets:
+        schema_path = SILVER_SCHEMAS_DIR / f"{dataset}_schema.json"
+        assert schema_path.exists(), f"Schema file {schema_path.name} does not exist"
+
+    # 2. Verify rejected files do NOT exist
+    rejected_datasets = [
+        "presupuesto_mef_fuente",
+        "presupuesto_mef_rubro",
+        "presupuesto_mef_departamento",
+        "presupuesto_mef_categoria",
+        "presupuesto_mef_subgenerica"
+    ]
+    for dataset in rejected_datasets:
+        schema_path = SILVER_SCHEMAS_DIR / f"{dataset}_schema.json"
+        assert not schema_path.exists(), f"Rejected schema file {schema_path.name} should not exist"
+
+    # 3. Check types and modes in approved Silver schemas
+    mef_silver_schemas = {d: load_schema(SILVER_SCHEMAS_DIR / f"{d}_schema.json") for d in approved_datasets}
+
+    # Helper function to get field structure
+    def get_field(schema: list[dict[str, str]], name: str) -> dict[str, str] | None:
+        for f in schema:
+            if f["name"] == name:
+                return f
+        return None
+
+    # ano is INT64 and REQUIRED in all approved schemas
+    for dataset, schema in mef_silver_schemas.items():
+        field = get_field(schema, "ano")
+        assert field is not None, f"Field 'ano' not found in {dataset}"
+        assert field["type"] in ("INT64", "INTEGER"), f"Field 'ano' in {dataset} has type {field['type']}, expected INT64/INTEGER"
+        assert field["mode"] == "REQUIRED", f"Field 'ano' in {dataset} has mode {field['mode']}, expected REQUIRED"
+
+    # period_valor is STRING and REQUIRED in temporal schemas
+    temporal_datasets = [d for d in approved_datasets if d.endswith("temporal")]
+    for dataset in temporal_datasets:
+        schema = mef_silver_schemas[dataset]
+        # check periodo_valor
+        field = get_field(schema, "periodo_valor")
+        assert field is not None, f"Field 'periodo_valor' not found in temporal schema {dataset}"
+        assert field["type"] == "STRING"
+        assert field["mode"] == "REQUIRED"
+
+        # check trimestre
+        field = get_field(schema, "trimestre")
+        assert field is not None, f"Field 'trimestre' not found in temporal schema {dataset}"
+        assert field["type"] in ("INT64", "INTEGER")
+        assert field["mode"] == "NULLABLE"
+
+        # check mes_numero
+        field = get_field(schema, "mes_numero")
+        assert field is not None, f"Field 'mes_numero' not found in temporal schema {dataset}"
+        assert field["type"] in ("INT64", "INTEGER")
+        assert field["mode"] == "NULLABLE"
+
+        # check mes_nombre
+        field = get_field(schema, "mes_nombre")
+        assert field is not None, f"Field 'mes_nombre' not found in temporal schema {dataset}"
+        assert field["type"] == "STRING"
+        assert field["mode"] == "NULLABLE"
+
+    # Code fields must be STRING (when they exist)
+    code_fields = ["codigo_entidad", "codigo_producto", "codigo_actividad", "codigo_generica"]
+    for dataset, schema in mef_silver_schemas.items():
+        for code_field in code_fields:
+            field = get_field(schema, code_field)
+            if field is not None:
+                assert field["type"] == "STRING", f"Field '{code_field}' in {dataset} must be STRING"
+
+    # Budget fields must be NUMERIC (when they exist)
+    budget_fields = ["pia", "pim", "devengado", "avance_porcentaje"]
+    for dataset, schema in mef_silver_schemas.items():
+        for budget_field in budget_fields:
+            field = get_field(schema, budget_field)
+            if field is not None:
+                assert field["type"] == "NUMERIC", f"Field '{budget_field}' in {dataset} must be NUMERIC"
+
+    # 4. Check exclusions
+    excluded_fields = ["certificacion", "compromiso_anual", "compromiso_mensual", "girado"]
+    for dataset, schema in mef_silver_schemas.items():
+        fields = field_names(schema)
+        for f in excluded_fields:
+            assert f not in fields, f"Field '{f}' should be excluded in {dataset} Silver schema"
+
+    # Temporal schemas must not contain pia, pim, avance_porcentaje
+    temporal_exclusions = ["pia", "pim", "avance_porcentaje"]
+    for dataset in temporal_datasets:
+        schema = mef_silver_schemas[dataset]
+        fields = field_names(schema)
+        for f in temporal_exclusions:
+            assert f not in fields, f"Field '{f}' should be excluded in temporal schema {dataset}"
+
+    # Hierarchy schema must not contain periodo_tipo or periodo_valor
+    hierarchy_fields = field_names(mef_silver_schemas["presupuesto_mef_hierarchy"])
+    assert "periodo_tipo" not in hierarchy_fields
+    assert "periodo_valor" not in hierarchy_fields
+
+    # 5. Technical metadata check
+    metadata_fields = {
+        "source_system": ("STRING", "REQUIRED"),
+        "source_dataset": ("STRING", "REQUIRED"),
+        "extraction_date": ("DATE", "REQUIRED"),
+        "ingestion_timestamp": ("TIMESTAMP", "REQUIRED"),
+        "pipeline_run_id": ("STRING", "REQUIRED")
+    }
+    for dataset, schema in mef_silver_schemas.items():
+        for meta_field, (expected_type, expected_mode) in metadata_fields.items():
+            field = get_field(schema, meta_field)
+            assert field is not None, f"Technical metadata field '{meta_field}' not found in {dataset}"
+            assert field["type"] == expected_type, f"Field '{meta_field}' in {dataset} has type {field['type']}, expected {expected_type}"
+            assert field["mode"] == expected_mode, f"Field '{meta_field}' in {dataset} has mode {field['mode']}, expected {expected_mode}"
