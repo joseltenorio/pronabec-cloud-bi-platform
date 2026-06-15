@@ -1667,6 +1667,15 @@ class FakeNestedSession:
                     </table>
                     """
                 )
+        elif "BtnGenerica" in button:
+            html = base_form(
+                f"""
+                <table>
+                  {radio_row("G1", "5-23: BIENES Y SERVICIOS")}
+                  {radio_row("G2", "5-24: DONACIONES Y TRANSFERENCIAS")}
+                </table>
+                """
+            )
         elif any(b in button for b in ("BtnMes", "BtnTrimestre", "BtnPeriodo")):
             if grp1 == "P1":
                 html = breakdown_table("ENERO")
@@ -1676,6 +1685,10 @@ class FakeNestedSession:
                 html = breakdown_table("MARZO")
             elif grp1 == "A2":
                 html = breakdown_table("ABRIL")
+            elif grp1 == "G1":
+                html = breakdown_table("MAYO")
+            elif grp1 == "G2":
+                html = breakdown_table("JUNIO")
             else:
                 html = breakdown_table("TOTAL ANUAL")
         else:
@@ -1691,7 +1704,7 @@ def test_scrape_consulta_amigable_breakdown_snapshot_nested_slices() -> None:
         "html.parser",
     )
     
-    slices = ["producto_temporal", "actividad", "actividad_temporal"]
+    slices = ["producto_temporal", "actividad", "actividad_temporal", "generica_temporal"]
     res = scrape_mef_budget.scrape_consulta_amigable_breakdown_snapshot(
         session=session,
         base_soup=base_soup,
@@ -1740,5 +1753,17 @@ def test_scrape_consulta_amigable_breakdown_snapshot_nested_slices() -> None:
     assert act_temp[1]["producto"] == "ACCIONES COMUNES"
     assert act_temp[1]["codigo_actividad"] == "5006318"
     assert act_temp[1]["actividad"] == "SEGUIMIENTO"
+
+    # 4. Verify generica_temporal
+    gen_temp = res["generica_temporal"]
+    assert len(gen_temp) == 2
+    assert gen_temp[0]["periodo_tipo"] == "MENSUAL"
+    assert gen_temp[0]["periodo_valor"] == "2026-05"
+    assert gen_temp[0]["codigo_generica"] == "5-23"
+    assert gen_temp[0]["generica"] == "BIENES Y SERVICIOS"
+    assert gen_temp[1]["periodo_tipo"] == "MENSUAL"
+    assert gen_temp[1]["periodo_valor"] == "2026-06"
+    assert gen_temp[1]["codigo_generica"] == "5-24"
+    assert gen_temp[1]["generica"] == "DONACIONES Y TRANSFERENCIAS"
 
 

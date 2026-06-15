@@ -427,5 +427,45 @@ def test_mef_new_slices_outputs_validation(tmp_path: Path) -> None:
     assert csv3.exists()
     assert meta3.exists()
 
+    # 4. Generica temporal records
+    gen_temp_records = [
+        {
+            "ano": "2026",
+            "periodo_tipo": "MENSUAL",
+            "periodo_valor": "2026-05",
+            "trimestre": "2",
+            "mes_numero": "05",
+            "mes_nombre": "MAYO",
+            "codigo_generica": "5-23",
+            "generica": "BIENES Y SERVICIOS",
+            "pia": "1000",
+            "pim": "2000",
+            "certificacion": "1900",
+            "compromiso_anual": "1500",
+            "compromiso_mensual": "1100",
+            "devengado": "1000",
+            "girado": "900",
+            "avance_porcentaje": "50.0",
+        }
+    ]
+
+    # Write generica_temporal
+    res4 = write_mef_breakdown_to_local(
+        records=gen_temp_records,
+        extraction_date="2026-06-10",
+        output_dir=tmp_path,
+        run_id="test_run_123",
+        records_read=len(gen_temp_records),
+        source_url="http://test/url",
+        slice_name="generica_temporal",
+        logger=logger_mock,
+        fiscal_year="2026",
+    )
+    csv4 = Path(res4["output_uri"])
+    meta4 = Path(res4["metadata_path"])
+    assert str(csv4.parent).replace("\\", "/").endswith("bronze/mef/presupuesto_generica_temporal/extraction_date=2026-06-10/year=2026")
+    assert csv4.exists()
+    assert meta4.exists()
+
 
 
