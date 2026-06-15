@@ -1,0 +1,117 @@
+[
+  {
+    "name": "universidad",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "anio_2012",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "anio_2013",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "anio_2014",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "anio_2015",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "anio_2016",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "anio_2017",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "anio_2018",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "anio_2019",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "anio_2020",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "anio_2021",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "anio_2022",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "anio_2023",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "anio_2024",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "anio_2025",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "anio_2026_preliminar",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "total",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "source_document_file",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "source_document_title",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "source_publication_url",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "source_page",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "source_table",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "extraction_method",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  }
+]
