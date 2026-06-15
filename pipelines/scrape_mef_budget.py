@@ -830,8 +830,17 @@ def parse_mef_temporal_period(label: str, ano: int | str) -> dict[str, str]:
             normalized,
         )
 
-    if quarter_match:
-        quarter = quarter_match.group(1)
+    roman_quarter = None
+    if not quarter_match:
+        roman_match = re.search(r"\b(IV|III|II|I)\s*(?:TRIMESTRE|TRIM)\b", normalized)
+        if not roman_match:
+            roman_match = re.search(r"\b(?:TRIMESTRE|TRIM)\s*(IV|III|II|I)\b", normalized)
+        if roman_match:
+            roman_map = {"I": "1", "II": "2", "III": "3", "IV": "4"}
+            roman_quarter = roman_map[roman_match.group(1)]
+
+    if quarter_match or roman_quarter:
+        quarter = quarter_match.group(1) if quarter_match else roman_quarter
         return {
             "periodo_tipo": "TRIMESTRAL",
             "periodo_valor": f"{year}-T{quarter}",
@@ -1131,7 +1140,7 @@ def extract_mef_budget_record_from_soup(
     if not code:
         code = executora_code
     if not description:
-        description = ejecutora_name
+        description = executora_name
 
     return {
         "ano": year,
