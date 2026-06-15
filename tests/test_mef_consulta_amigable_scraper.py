@@ -508,6 +508,61 @@ def test_extract_mef_temporal_quarterly_rows_from_fake_html() -> None:
     assert records[1]["trimestre"] == "4"
 
 
+def test_extract_mef_temporal_roman_quarters_and_anual() -> None:
+    records = extract_mef_breakdown_rows(
+        soup=soup_from_html(breakdown_table("I TRIMESTRE", "TRIMESTRE II", "TOTAL ANUAL")),
+        ano=2026,
+        slice_name="temporal",
+    )
+
+    assert len(records) == 3
+    assert records[0]["periodo_tipo"] == "TRIMESTRAL"
+    assert records[0]["periodo_valor"] == "2026-T1"
+    assert records[0]["trimestre"] == "1"
+    assert records[0]["mes_numero"] == ""
+    assert records[0]["mes_nombre"] == ""
+
+    assert records[1]["periodo_tipo"] == "TRIMESTRAL"
+    assert records[1]["periodo_valor"] == "2026-T2"
+    assert records[1]["trimestre"] == "2"
+
+    assert records[2]["periodo_tipo"] == "ANUAL"
+    assert records[2]["periodo_valor"] == "2026"
+    assert records[2]["trimestre"] == ""
+    assert records[2]["mes_numero"] == ""
+    assert records[2]["mes_nombre"] == ""
+
+
+def test_extract_mef_temporal_negative_and_empty_values() -> None:
+    html = """
+    <table>
+      <tr class="Data">
+        <td>ENERO</td>
+        <td></td>
+        <td></td>
+        <td>-1,900</td>
+        <td>-1,500</td>
+        <td>1,100</td>
+        <td>1,000</td>
+        <td>900</td>
+        <td></td>
+      </tr>
+    </table>
+    """
+    records = extract_mef_breakdown_rows(
+        soup=soup_from_html(html),
+        ano=2026,
+        slice_name="temporal",
+    )
+
+    assert len(records) == 1
+    assert records[0]["pia"] == ""
+    assert records[0]["pim"] == ""
+    assert records[0]["certificacion"] == "-1,900"
+    assert records[0]["compromiso_anual"] == "-1,500"
+    assert records[0]["avance_porcentaje"] == ""
+
+
 def test_parse_breakdown_slices_defaults_cli_and_env_values() -> None:
     assert parse_breakdown_slices(None) == ["producto", "generica"]
     assert parse_breakdown_slices("") == ["producto", "generica"]

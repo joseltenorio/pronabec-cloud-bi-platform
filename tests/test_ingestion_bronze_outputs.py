@@ -17,6 +17,7 @@ from pipelines.extract_pronabec import (
 from pipelines.scrape_mef_budget import (
     normalize_mef_records,
     write_mef_to_local,
+    write_mef_breakdown_to_local,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -242,3 +243,65 @@ def test_gcs_paths_consistency_with_ddl(tmp_path: Path) -> None:
             assert relative_path == expected, f"DDL path '{relative_path}' mismatch with expected '{expected}'"
         else:
             pytest.fail(f"Unknown bronze folder in external table DDL: {relative_path}")
+
+
+def test_mef_temporal_slice_outputs_validation(tmp_path: Path) -> None:
+    # 1. Simulate temporal records with mixed granularities
+    records = [
+        {
+            "ano": "2026",
+            "periodo_tipo": "MENSUAL",
+            "periodo_valor": "2026-01",
+            "trimestre": "1",
+            "mes_numero": "01",
+            "mes_nombre": "ENERO",
+            "pia": "1000",
+            "pim": "2000",
+            "certificacion": "1900",
+            "compromiso_anual": "1500",
+            "compromiso_mensual": "1100",
+            "devengado": "1000",
+            "girado": "900",
+            "avance_porcentaje": "50.0",
+        },
+        {
+            "ano": "2026",
+            "periodo_tipo": "TRIMESTRAL",
+            "periodo_valor": "2026-T1",
+            "trimestre": "1",
+            "mes_numero": "",
+            "mes_nombre": "",
+            "pia": "3000",
+            "pim": "4000",
+            "certificacion": "3900",
+            "compromiso_anual": "3500",
+            "compromiso_mensual": "3100",
+            "devengado": "3000",
+            "girado": "2900",
+            "avance_porcentaje": "75.0",
+        }
+    ]
+
+    logger_mock = type("MockLogger", (), {"log": lambda *a, **k: None})()
+
+    # 2. Test writing temporal slice
+    res = write_mef_breakdown_to_local(
+        records=records,
+        extraction_date="2026-06-10",
+        output_dir=tmp_path,
+        run_id="test_mef_run_123",
+        records_read=len(records),
+        source_url="http://test-url/mef.html",
+        slice_name="temporal",
+        logger=logger_mock,
+        fiscal_year="2026",
+    )
+
+    csv_file = Path(res["output_uri"])
+    meta_file = Path(res["metadata_path"])
+
+    assert str(csv_file.parent).replace("\\", "/").endswith("bronze/mef/presupuesto_temporal/extraction_date=2026-06-10/year=2026")
+    assert csv_file.exists()
+    assert meta_file.exists()
+
+
