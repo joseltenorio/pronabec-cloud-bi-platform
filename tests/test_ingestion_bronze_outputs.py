@@ -125,6 +125,7 @@ def test_mef_bronze_outputs_validation(tmp_path: Path) -> None:
     raw_records = [
         {
             "ano": "2026",
+            "ejecutora_codigo": "117-1438",
             "ejecutora_nombre": "PRONABEC",
             "pia": "1200000.00",
             "pim": "1250000.00",
@@ -175,7 +176,8 @@ def test_mef_bronze_outputs_validation(tmp_path: Path) -> None:
 
     assert header == expected_columns
     assert row[0] == "2026"
-    assert row[1] == "PRONABEC"
+    assert row[1] == "117-1438"
+    assert row[2] == "PRONABEC"
 
 
 def test_gcs_paths_consistency_with_ddl(tmp_path: Path) -> None:

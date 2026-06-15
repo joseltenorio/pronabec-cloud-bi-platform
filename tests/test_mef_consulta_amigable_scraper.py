@@ -600,7 +600,8 @@ def test_scrape_consulta_amigable_year_uses_mocked_session(
 
     assert record == {
         "ano": 2026,
-        "ejecutora_nombre": PRONABEC_EXECUTORA,
+        "ejecutora_codigo": "117-1438",
+        "ejecutora_nombre": "PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO",
         "pia": 1429676488.0,
         "pim": 1607711495.0,
         "certificacion": 1590100549.0,
@@ -625,7 +626,8 @@ def test_write_mef_to_local_includes_consulta_amigable_metadata(
     records = [
         {
             "ano": "2026",
-            "ejecutora_nombre": PRONABEC_EXECUTORA,
+            "ejecutora_codigo": "117-1438",
+            "ejecutora_nombre": "PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO",
             "pia": "1429676488.0",
             "pim": "1607711495.0",
             "certificacion": "1590100549.0",
@@ -797,7 +799,7 @@ def test_mef_scraper_parametrization_cli_vs_env(monkeypatch) -> None:
     })
 
     monkeypatch.setattr(scrape_mef_budget, "load_yaml_config", lambda config: {
-        "mef": {"expected_columns": ["ano", "ejecutora_nombre", "pia", "pim", "certificacion", "compromiso_anual", "compromiso_mensual", "devengado", "girado", "avance_porcentaje"]}
+        "mef": {"expected_columns": ["ano", "ejecutora_codigo", "ejecutora_nombre", "pia", "pim", "certificacion", "compromiso_anual", "compromiso_mensual", "devengado", "girado", "avance_porcentaje"]}
     })
 
     args = scrape_mef_budget.parse_args([
@@ -885,6 +887,7 @@ def test_run_extraction_without_include_hierarchy_skips_hierarchy_output(
             "mef": {
                 "expected_columns": [
                     "ano",
+                    "ejecutora_codigo",
                     "ejecutora_nombre",
                     "pia",
                     "pim",
@@ -977,6 +980,7 @@ def test_run_extraction_with_include_hierarchy_writes_hierarchy_output(
             "mef": {
                 "expected_columns": [
                     "ano",
+                    "ejecutora_codigo",
                     "ejecutora_nombre",
                     "pia",
                     "pim",
@@ -1077,6 +1081,7 @@ def test_run_extraction_without_spending_breakdowns_skips_slice_outputs(
             "mef": {
                 "expected_columns": [
                     "ano",
+                    "ejecutora_codigo",
                     "ejecutora_nombre",
                     "pia",
                     "pim",
@@ -1169,6 +1174,7 @@ def test_run_extraction_with_spending_breakdowns_writes_selected_slices(
             "mef": {
                 "expected_columns": [
                     "ano",
+                    "ejecutora_codigo",
                     "ejecutora_nombre",
                     "pia",
                     "pim",
@@ -1302,6 +1308,7 @@ def test_run_extraction_with_funding_and_geography_breakdowns_writes_slices(
             "mef": {
                 "expected_columns": [
                     "ano",
+                    "ejecutora_codigo",
                     "ejecutora_nombre",
                     "pia",
                     "pim",
@@ -1434,6 +1441,7 @@ def test_run_extraction_with_temporal_breakdown_writes_slice(
             "mef": {
                 "expected_columns": [
                     "ano",
+                    "ejecutora_codigo",
                     "ejecutora_nombre",
                     "pia",
                     "pim",
