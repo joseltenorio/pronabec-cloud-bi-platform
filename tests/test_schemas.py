@@ -164,6 +164,8 @@ def test_bigquery_ddl_generator_writes_bronze_and_silver_sql(tmp_path: Path) -> 
     assert "CREATE OR REPLACE TABLE" in silver_sql
     assert "test-project-id.silver.pronabec_convocatorias" in silver_sql
     assert "vacantes INTEGER" in silver_sql
+    assert "test-project-id.silver.pronabec_report_beca18_universitarios_universidad_anual" in silver_sql
+    assert "test-project-id.silver.pronabec_report_beca18_universitarios_carrera_anual" in silver_sql
 
     # Validate approved MEF Silver tables are generated
     approved_silver_tables = [
