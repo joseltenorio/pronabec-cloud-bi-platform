@@ -27,6 +27,11 @@ logger = setup_structured_logger("dataflow_bronze_to_silver", level="INFO")
 class ReadCsvDoFn(beam.DoFn):
     """DoFn para leer un archivo CSV desde almacenamiento local o GCS."""
 
+    def __init__(self) -> None:
+        super().__init__()
+        # Inicializar métrica para contar filas leídas en el CSV
+        self.read_counter = beam.metrics.Metrics.counter("dataflow_metrics", "records_read")
+
     def process(self, path: str) -> Any:
         from apache_beam.io.filesystems import FileSystems
 
@@ -35,6 +40,7 @@ class ReadCsvDoFn(beam.DoFn):
                 text_file = io.TextIOWrapper(f, encoding="utf-8-sig")
                 reader = csv.DictReader(text_file)
                 for row in reader:
+                    self.read_counter.inc()
                     yield dict(row)
         except Exception as e:
             logger.error(f"Error leyendo archivo CSV {path}: {str(e)}")
@@ -43,6 +49,12 @@ class ReadCsvDoFn(beam.DoFn):
 
 class ReadJsonlDoFn(beam.DoFn):
     """DoFn para leer un archivo JSONL desde almacenamiento local o GCS."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        # Inicializar métricas para contar líneas leídas y rechazos en parseo
+        self.read_counter = beam.metrics.Metrics.counter("dataflow_metrics", "records_read")
+        self.rejected_counter = beam.metrics.Metrics.counter("dataflow_metrics", "records_rejected")
 
     def process(
         self,
@@ -62,9 +74,11 @@ class ReadJsonlDoFn(beam.DoFn):
                 for line in text_file:
                     line = line.strip()
                     if line:
+                        self.read_counter.inc()
                         try:
                             yield json.loads(line)
                         except Exception as e:
+                            self.rejected_counter.inc()
                             if source_system is None:
                                 raise e
                             rejected = build_rejected_record(
@@ -92,6 +106,12 @@ class TransformBronzeRecordsDoFn(beam.DoFn):
     Los registros exitosos se emiten por la salida principal.
     Las fallas se emiten por TaggedOutput("rejected") hacia el DLQ.
     """
+
+    def __init__(self) -> None:
+        super().__init__()
+        # Inicializar métricas para registros válidos y rechazados
+        self.valid_counter = beam.metrics.Metrics.counter("dataflow_metrics", "records_valid")
+        self.rejected_counter = beam.metrics.Metrics.counter("dataflow_metrics", "records_rejected")
 
     def process(
         self,
@@ -138,6 +158,7 @@ class TransformBronzeRecordsDoFn(beam.DoFn):
 
             for res in transformed_list:
                 if not isinstance(res, dict) or not res:
+                    self.rejected_counter.inc()
                     rejected = build_rejected_record(
                         raw_record=record,
                         source_system=source_system,
@@ -155,6 +176,7 @@ class TransformBronzeRecordsDoFn(beam.DoFn):
                 if schema_keys:
                     res_keys = set(res.keys())
                     if not res_keys.issubset(schema_keys):
+                        self.rejected_counter.inc()
                         extra_keys = sorted(res_keys - schema_keys)
                         rejected = build_rejected_record(
                             raw_record=record,
@@ -173,10 +195,12 @@ class TransformBronzeRecordsDoFn(beam.DoFn):
                         yield beam.pvalue.TaggedOutput("rejected", rejected)
                         continue
 
+                self.valid_counter.inc()
                 yield res
 
         except Exception as e:
             logger.warning(f"Fallo al transformar registro en {source_dataset}: {str(e)}")
+            self.rejected_counter.inc()
             rejected = build_rejected_record(
                 raw_record=record,
                 source_system=source_system,
@@ -298,6 +322,12 @@ def parse_arguments(argv: list[str] | None = None) -> tuple[argparse.Namespace, 
         "--disable-dlq",
         action="store_true",
         help="Desactiva la escritura de registros rechazados en el DLQ.",
+    )
+    parser.add_argument(
+        "--summary-output-path",
+        required=False,
+        default=None,
+        help="Ruta local o GCS para escribir el resumen de procesamiento en formato JSON.",
     )
 
     args, pipeline_args = parser.parse_known_args(argv)
@@ -460,24 +490,77 @@ def run(argv: list[str] | None = None) -> None:
     """
     Función principal de ejecución del pipeline.
     """
-    args, pipeline_args = parse_arguments(argv)
-    validate_arguments(args)
+    # Registrar marca de tiempo de inicio
+    started_at = datetime.now(timezone.utc)
 
-    pipeline_options = build_pipeline_options(args, pipeline_args)
-    pipeline_run_id = args.pipeline_run_id or f"run_{int(datetime.now(timezone.utc).timestamp())}"
-    ingestion_timestamp = datetime.now(timezone.utc).isoformat()
+    # Intentar parsear argumentos de entrada de forma segura
+    try:
+        args, pipeline_args = parse_arguments(argv)
+    except Exception as e:
+        # En caso de fallo grave de parseo, registrar estado FAILED
+        summary = {
+            "source_system": None,
+            "source_dataset": None,
+            "extraction_date": None,
+            "pipeline_run_id": f"run_{int(started_at.timestamp())}",
+            "input_format": None,
+            "dry_run": True,
+            "dlq_enabled": False,
+            "records_read": 0,
+            "records_valid": 0,
+            "records_rejected": 0,
+            "rejection_rate": 0.0,
+            "started_at": started_at.isoformat(),
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+            "duration_seconds": 0.0,
+            "status": "FAILED",
+            "error_message": f"Error parseando argumentos: {str(e)}",
+        }
+        logger.error(f"Fallo al parsear argumentos: {str(e)}")
+        logger.info(f"Resumen de procesamiento:\n{json.dumps(summary, indent=4, ensure_ascii=False)}")
+        raise e
 
-    log_event(
-        logger,
-        "INFO",
-        "Iniciando pipeline Bronze a Silver",
-        source_system=args.source_system,
-        source_dataset=args.source_dataset,
-        runner=args.runner,
-        dry_run=args.dry_run,
-    )
+    pipeline_run_id = args.pipeline_run_id or f"run_{int(started_at.timestamp())}"
+    ingestion_timestamp = started_at.isoformat()
 
-    with beam.Pipeline(options=pipeline_options) as p:
+    # Construir ruta dlq de forma determinista para el resumen
+    dlq_path = None
+    if args.source_system and args.source_dataset and args.extraction_date:
+        from pipelines.common.dlq import build_dlq_path
+        try:
+            dlq_path = build_dlq_path(
+                output_root=args.dlq_output_root or "tmp/dlq",
+                source_system=args.source_system,
+                source_dataset=args.source_dataset,
+                extraction_date=args.extraction_date,
+            )
+        except Exception:
+            pass
+
+    status = "COMPLETED"
+    error_message = None
+    read_count = 0
+    valid_count = 0
+    rejected_count = 0
+
+    try:
+        # Validar argumentos de entrada
+        validate_arguments(args)
+
+        pipeline_options = build_pipeline_options(args, pipeline_args)
+
+        log_event(
+            logger,
+            "INFO",
+            "Iniciando pipeline Bronze a Silver",
+            source_system=args.source_system,
+            source_dataset=args.source_dataset,
+            runner=args.runner,
+            dry_run=args.dry_run,
+        )
+
+        p = beam.Pipeline(options=pipeline_options)
+
         # 1. Lectura de datos según formato
         if args.input_format == "csv":
             parsed_records = (
@@ -552,17 +635,11 @@ def run(argv: list[str] | None = None) -> None:
                 )
             )
 
-        # 4. Escritura al DLQ
+        # 4. Escritura al DLQ si no está deshabilitado
         if not args.disable_dlq:
-            from pipelines.common.dlq import build_dlq_path, serialize_rejected_record
-            dlq_path = build_dlq_path(
-                output_root=args.dlq_output_root,
-                source_system=args.source_system,
-                source_dataset=args.source_dataset,
-                extraction_date=args.extraction_date,
-            )
+            from pipelines.common.dlq import serialize_rejected_record
             
-            # Serialize y escribir
+            # Serializar y escribir
             serialized_rejected = (
                 rejected_records
                 | "Serialize Rejected" >> beam.Map(serialize_rejected_record)
@@ -577,6 +654,95 @@ def run(argv: list[str] | None = None) -> None:
                     shard_name_template="",
                 )
             )
+
+        # Ejecutar el pipeline de forma síncrona
+        result = p.run()
+        result.wait_until_finish()
+
+        # Consultar las métricas de Beam
+        try:
+            metrics = result.metrics().query(beam.metrics.MetricsFilter().with_namespace("dataflow_metrics"))
+            
+            def get_counter_value(counter) -> int:
+                committed = counter.committed
+                attempted = counter.attempted
+                vals = [v for v in (committed, attempted) if v is not None]
+                return max(vals) if vals else 0
+
+            for counter in metrics["counters"]:
+                name = counter.key.metric.name
+                val = get_counter_value(counter)
+                if name == "records_read":
+                    read_count = val
+                elif name == "records_valid":
+                    valid_count = val
+                elif name == "records_rejected":
+                    rejected_count = val
+        except Exception as me:
+            logger.warning(f"No se pudieron extraer las métricas de Beam: {str(me)}")
+
+        # Determinar el estado final según los registros rechazados
+        if rejected_count > 0:
+            status = "COMPLETED_WITH_REJECTIONS"
+
+    except Exception as e:
+        status = "FAILED"
+        error_message = str(e)
+        logger.error(f"El pipeline falló de forma fatal: {error_message}")
+        raise e
+    finally:
+        # Registrar fin y calcular duración
+        finished_at = datetime.now(timezone.utc)
+        duration_seconds = (finished_at - started_at).total_seconds()
+
+        rejection_rate = 0.0
+        if read_count > 0:
+            rejection_rate = float(rejected_count) / read_count
+
+        # Construir estructura del resumen de procesamiento
+        summary = {
+            "source_system": getattr(args, "source_system", None),
+            "source_dataset": getattr(args, "source_dataset", None),
+            "extraction_date": getattr(args, "extraction_date", None),
+            "pipeline_run_id": pipeline_run_id,
+            "input_format": getattr(args, "input_format", None),
+            "input_path": getattr(args, "input_path", None),
+            "output_table": getattr(args, "output_table", None),
+            "dry_run": getattr(args, "dry_run", True),
+            "dlq_enabled": not getattr(args, "disable_dlq", False),
+            "dlq_output_path": dlq_path if not getattr(args, "disable_dlq", False) else None,
+            "records_read": read_count,
+            "records_valid": valid_count,
+            "records_rejected": rejected_count,
+            "rejection_rate": round(rejection_rate, 6),
+            "started_at": started_at.isoformat(),
+            "finished_at": finished_at.isoformat(),
+            "duration_seconds": round(duration_seconds, 2),
+            "status": status,
+        }
+
+        if error_message:
+            summary["error_message"] = error_message
+
+        # Persistir o registrar el resumen
+        summary_path = getattr(args, "summary_output_path", None)
+        if summary_path:
+            if not summary_path.startswith("gs://"):
+                from pathlib import Path
+                try:
+                    Path(summary_path).parent.mkdir(parents=True, exist_ok=True)
+                except Exception as pe:
+                    logger.warning(f"No se pudo crear el directorio para el resumen: {str(pe)}")
+            
+            try:
+                from apache_beam.io.filesystems import FileSystems
+                with FileSystems.create(summary_path) as f:
+                    f.write(json.dumps(summary, indent=4, ensure_ascii=False).encode("utf-8"))
+                logger.info(f"Resumen de procesamiento escrito en {summary_path}")
+            except Exception as se:
+                logger.error(f"No se pudo escribir el resumen de procesamiento en {summary_path}: {str(se)}")
+        else:
+            logger.info(f"Resumen de procesamiento:\n{json.dumps(summary, indent=4, ensure_ascii=False)}")
 
 
 if __name__ == "__main__":
