@@ -6,6 +6,24 @@
     "description": "Nombre de la carrera de estudio universitaria."
   },
   {
+    "name": "carrera_estudio_canonical",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Nombre de la carrera de estudio canonizado para reportería."
+  },
+  {
+    "name": "carrera_estudio_canonical_match_method",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Método de matching utilizado para la carrera."
+  },
+  {
+    "name": "carrera_estudio_canonical_review_required",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE",
+    "description": "Flag de si la carrera canónica requiere revisión."
+  },
+  {
     "name": "ano_convocatoria",
     "type": "INT64",
     "mode": "REQUIRED",

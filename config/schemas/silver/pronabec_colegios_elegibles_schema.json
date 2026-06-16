@@ -12,6 +12,24 @@
     "description": "Unidad de Gestión Educativa Local asociada al colegio."
   },
   {
+    "name": "ugel_canonical",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Unidad de Gestión Educativa Local canonizada para reportería."
+  },
+  {
+    "name": "ugel_canonical_match_method",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Método de matching utilizado para la UGEL."
+  },
+  {
+    "name": "ugel_canonical_review_required",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE",
+    "description": "Flag de si la UGEL canónica requiere revisión."
+  },
+  {
     "name": "institucion_educativa",
     "type": "STRING",
     "mode": "NULLABLE",
@@ -24,16 +42,70 @@
     "description": "Tipo de gestión del colegio (Pública o Privada)."
   },
   {
+    "name": "tipo_gestion_colegio_canonical",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Tipo de gestión del colegio canonizado para reportería."
+  },
+  {
+    "name": "tipo_gestion_colegio_canonical_match_method",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Método de matching utilizado para el tipo de gestión."
+  },
+  {
+    "name": "tipo_gestion_colegio_canonical_review_required",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE",
+    "description": "Flag de si el tipo de gestión canónico requiere revisión."
+  },
+  {
     "name": "nivel_modalidad",
     "type": "STRING",
     "mode": "NULLABLE",
     "description": "Nivel y modalidad educativa del colegio."
   },
   {
+    "name": "nivel_modalidad_canonical",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Nivel y modalidad educativa canonizados para reportería."
+  },
+  {
+    "name": "nivel_modalidad_canonical_match_method",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Método de matching utilizado para el nivel y modalidad."
+  },
+  {
+    "name": "nivel_modalidad_canonical_review_required",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE",
+    "description": "Flag de si el nivel y modalidad canónicos requieren revisión."
+  },
+  {
     "name": "forma_atencion",
     "type": "STRING",
     "mode": "NULLABLE",
     "description": "Forma de atención que brinda el colegio."
+  },
+  {
+    "name": "forma_atencion_canonical",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Forma de atención canonizada para reportería."
+  },
+  {
+    "name": "forma_atencion_canonical_match_method",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Método de matching utilizado para la forma de atención."
+  },
+  {
+    "name": "forma_atencion_canonical_review_required",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE",
+    "description": "Flag de si la forma de atención canónica requiere revisión."
   },
   {
     "name": "distrito",

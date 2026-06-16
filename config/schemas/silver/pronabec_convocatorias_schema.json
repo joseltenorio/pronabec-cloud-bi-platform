@@ -30,10 +30,46 @@
     "description": "Modalidad de postulación asociada."
   },
   {
+    "name": "modalidad_canonical",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Modalidad de postulación canonizada para reportería."
+  },
+  {
+    "name": "modalidad_canonical_match_method",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Método de matching utilizado para la modalidad."
+  },
+  {
+    "name": "modalidad_canonical_review_required",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE",
+    "description": "Flag de si la modalidad canónica requiere revisión."
+  },
+  {
     "name": "programa",
     "type": "STRING",
     "mode": "NULLABLE",
     "description": "Programa de beca correspondiente."
+  },
+  {
+    "name": "programa_canonical",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Programa de beca canonizado para reportería."
+  },
+  {
+    "name": "programa_canonical_match_method",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Método de matching utilizado para el programa."
+  },
+  {
+    "name": "programa_canonical_review_required",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE",
+    "description": "Flag de si el programa canónico requiere revisión."
   },
   {
     "name": "vacantes",

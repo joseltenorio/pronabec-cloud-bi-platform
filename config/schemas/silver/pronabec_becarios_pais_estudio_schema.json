@@ -18,10 +18,46 @@
     "description": "Modalidad de postulación del becario."
   },
   {
+    "name": "modalidad_canonical",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Modalidad de postulación canonizada para reportería."
+  },
+  {
+    "name": "modalidad_canonical_match_method",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Método de matching utilizado para la modalidad."
+  },
+  {
+    "name": "modalidad_canonical_review_required",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE",
+    "description": "Flag de si la modalidad canónica requiere revisión."
+  },
+  {
     "name": "pais_estudio",
     "type": "STRING",
     "mode": "NULLABLE",
     "description": "País donde se realizan los estudios."
+  },
+  {
+    "name": "pais_estudio_canonical",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "País canonizado para reportería."
+  },
+  {
+    "name": "pais_estudio_canonical_match_method",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Método de matching utilizado para el país."
+  },
+  {
+    "name": "pais_estudio_canonical_review_required",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE",
+    "description": "Flag de si el país canónico requiere revisión."
   },
   {
     "name": "institucion",
@@ -34,6 +70,24 @@
     "type": "STRING",
     "mode": "NULLABLE",
     "description": "Género o sexo registrado del becario."
+  },
+  {
+    "name": "sexo_canonical",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Género/sexo canonizado para reportería."
+  },
+  {
+    "name": "sexo_canonical_match_method",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Método de matching utilizado para el género/sexo."
+  },
+  {
+    "name": "sexo_canonical_review_required",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE",
+    "description": "Flag de si el género/sexo canónico requiere revisión."
   },
   {
     "name": "source_system",

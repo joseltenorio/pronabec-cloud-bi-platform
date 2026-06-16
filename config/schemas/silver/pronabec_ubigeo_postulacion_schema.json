@@ -12,6 +12,24 @@
     "description": "Región o Departamento asociado al ubigeo."
   },
   {
+    "name": "region_canonical",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Región/Departamento canonizado para reportería."
+  },
+  {
+    "name": "region_canonical_match_method",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "Método de matching utilizado para la región."
+  },
+  {
+    "name": "region_canonical_review_required",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE",
+    "description": "Flag de si la región canónica requiere revisión."
+  },
+  {
     "name": "provincia",
     "type": "STRING",
     "mode": "NULLABLE",
