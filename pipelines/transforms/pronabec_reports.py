@@ -183,6 +183,51 @@ def clean_report_text(value: Any) -> str | None:
     return normalize_whitespace(without_controls)
 
 
+_CANONICAL_CATALOG = None
+
+
+def get_canonical_catalog() -> dict[str, Any]:
+    global _CANONICAL_CATALOG
+    if _CANONICAL_CATALOG is None:
+        from pathlib import Path
+        from pipelines.common.canonical_mapping import load_canonical_mappings
+        repo_root = Path(__file__).resolve().parents[2]
+        catalog_path = repo_root / "config" / "reference" / "pronabec_canonical_mappings.yaml"
+        _CANONICAL_CATALOG = load_canonical_mappings(catalog_path)
+    return _CANONICAL_CATALOG
+
+
+def _apply_report_canonical(
+    record: dict[str, Any],
+    output_fields: tuple[str, ...],
+) -> None:
+    from pipelines.common.canonical_mapping import lookup_canonical_value
+    catalog = get_canonical_catalog()
+
+    # Map carrera_estudio -> carrera
+    if "carrera_estudio" in record and "carrera_estudio_canonical" in output_fields:
+        domain = "carrera"
+        val = record["carrera_estudio"]
+        match_res = lookup_canonical_value(catalog, domain, val)
+        record["carrera_estudio_canonical"] = match_res.canonical_value
+        record["carrera_estudio_canonical_match_method"] = match_res.match_method
+        record["carrera_estudio_canonical_review_required"] = match_res.review_required if match_res.matched else None
+
+    # Map universidad -> institucion
+    if "universidad" in record and "universidad_canonical" in output_fields:
+        domain = "institucion"
+        val = record["universidad"]
+        if domain not in catalog.get("domains", {}):
+            record["universidad_canonical"] = None
+            record["universidad_canonical_match_method"] = None
+            record["universidad_canonical_review_required"] = None
+        else:
+            match_res = lookup_canonical_value(catalog, domain, val)
+            record["universidad_canonical"] = match_res.canonical_value
+            record["universidad_canonical_match_method"] = match_res.match_method
+            record["universidad_canonical_review_required"] = match_res.review_required if match_res.matched else None
+
+
 def _clean_number_text(value: Any) -> str | None:
     text = clean_report_text(value)
     if text is None:
@@ -342,6 +387,7 @@ def unpivot_annual_report(
             spec.preliminary_field: is_preliminary,
             **metadata,
         }
+        _apply_report_canonical(transformed, spec.output_fields)
         rows.append(_project_output(transformed, spec))
     return rows
 
@@ -370,6 +416,7 @@ def transform_snapshot_report(
             metadata_fields=spec.metadata_fields,
         )
     )
+    _apply_report_canonical(transformed, spec.output_fields)
     return [_project_output(transformed, spec)]
 
 

@@ -62,6 +62,12 @@ def test_transform_pronabec_convocatorias() -> None:
         "modalidad": "ACADÉMICA",
         "programa": "BECA CENTENARIO",
         "vacantes": 100,
+        "modalidad_canonical": None,
+        "modalidad_canonical_match_method": None,
+        "modalidad_canonical_review_required": None,
+        "programa_canonical": None,
+        "programa_canonical_match_method": None,
+        "programa_canonical_review_required": None,
         "source_system": "pronabec",
         "source_dataset": "convocatorias",
         "extraction_date": "2026-06-15",
@@ -72,7 +78,7 @@ def test_transform_pronabec_convocatorias() -> None:
     assert "etapas" not in transformed
     assert "resolucion" not in transformed
     assert "fecha_carga" not in transformed
-    assert "programa_canonical" not in transformed
+    assert "programa_canonical" in transformed
 
 
 def test_transform_pronabec_ubigeo_postulacion() -> None:
