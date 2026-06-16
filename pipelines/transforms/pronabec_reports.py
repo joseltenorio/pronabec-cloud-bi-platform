@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+import json
+from pathlib import Path
 from typing import Any, Literal
 
 from pipelines.common.text_normalization import (
@@ -55,6 +57,98 @@ class ReportTransformSpec:
     year_field: str = "ano_convocatoria"
     preliminary_field: str = "es_anio_preliminar"
     output_fields: tuple[str, ...] = field(default_factory=tuple)
+
+
+def _schema_to_field_types(schema_fields: list[dict[str, Any]]) -> dict[str, FieldType]:
+    field_types: dict[str, FieldType] = {}
+    excluded = set(DOCUMENT_METADATA_FIELDS) | set(TECHNICAL_METADATA_FIELDS)
+    for field_def in schema_fields:
+        name = field_def["name"]
+        if name in excluded or name == "es_anio_preliminar":
+            continue
+        field_type = str(field_def["type"]).upper()
+        if field_type in {"INT64", "INTEGER"}:
+            field_types[name] = "int"
+        elif name.startswith("porcentaje_"):
+            field_types[name] = "percent"
+        elif field_type in {"NUMERIC", "FLOAT", "FLOAT64"}:
+            field_types[name] = "numeric"
+        else:
+            field_types[name] = "string"
+    return field_types
+
+
+def _load_json_schema(path: Path) -> list[dict[str, Any]]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _build_spec_from_schema(
+    source_dataset: str,
+    bronze_schema: list[dict[str, Any]],
+    silver_schema: list[dict[str, Any]],
+) -> ReportTransformSpec:
+    silver_fields = tuple(field_def["name"] for field_def in silver_schema)
+    metadata_fields = tuple(
+        field for field in DOCUMENT_METADATA_FIELDS if field in silver_fields
+    )
+    target_table = f"pronabec_{source_dataset}"
+    bronze_field_names = {field_def["name"] for field_def in bronze_schema}
+    is_wide = any(parse_year_column(field_name) for field_name in bronze_field_names)
+
+    if is_wide:
+        dimension_columns = tuple(
+            field
+            for field in bronze_field_names
+            if field not in set(DOCUMENT_METADATA_FIELDS)
+            and not is_total_column(field)
+            and parse_year_column(field) is None
+        )
+        return ReportTransformSpec(
+            source_dataset=source_dataset,
+            target_table=target_table,
+            report_type="annual_wide",
+            dimension_columns=dimension_columns,
+            field_types={"cantidad_becarios": "int"},
+            metadata_fields=metadata_fields,
+            zero_dash_fields=frozenset({"cantidad_becarios"}),
+            value_field="cantidad_becarios",
+            output_fields=silver_fields,
+        )
+
+    field_types = _schema_to_field_types(silver_schema)
+    dimension_columns = tuple(
+        field_name
+        for field_name, field_type in field_types.items()
+        if field_type == "string"
+    )
+    return ReportTransformSpec(
+        source_dataset=source_dataset,
+        target_table=target_table,
+        report_type="snapshot",
+        dimension_columns=dimension_columns,
+        field_types=field_types,
+        metadata_fields=metadata_fields,
+        output_fields=silver_fields,
+    )
+
+
+def _load_report_specs() -> dict[str, ReportTransformSpec]:
+    repo_root = Path(__file__).resolve().parents[2]
+    bronze_dir = repo_root / "config" / "schemas" / "bronze"
+    silver_dir = repo_root / "config" / "schemas" / "silver"
+    specs: dict[str, ReportTransformSpec] = {}
+
+    for bronze_path in sorted(bronze_dir.glob("report_*_schema.json")):
+        source_dataset = bronze_path.name.removesuffix("_schema.json")
+        silver_path = silver_dir / f"pronabec_{source_dataset}_schema.json"
+        if not silver_path.exists():
+            continue
+        specs[source_dataset] = _build_spec_from_schema(
+            source_dataset=source_dataset,
+            bronze_schema=_load_json_schema(bronze_path),
+            silver_schema=_load_json_schema(silver_path),
+        )
+    return specs
 
 
 REPORT_SPECS: dict[str, ReportTransformSpec] = {}
@@ -269,3 +363,6 @@ def transform_pronabec_report_record(
     if spec.report_type == "annual_wide":
         return unpivot_annual_report(record, spec, context)
     return transform_snapshot_report(record, spec, context)
+
+
+REPORT_SPECS.update(_load_report_specs())
