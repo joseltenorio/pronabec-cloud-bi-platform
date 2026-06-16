@@ -1,0 +1,289 @@
+"""
+Pruebas unitarias para la herramienta local de staging de reportes manuales PRONABEC.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from tools.stage_pronabec_manual_reports import stage_reports
+
+
+@pytest.fixture
+def mock_input_dir(tmp_path: Path) -> Path:
+    """Fixture que crea un directorio temporal de entrada."""
+    input_dir = tmp_path / "input_manual"
+    input_dir.mkdir()
+    return input_dir
+
+
+@pytest.fixture
+def mock_output_dir(tmp_path: Path) -> Path:
+    """Fixture que crea un directorio temporal de salida."""
+    output_dir = tmp_path / "output_bronze"
+    output_dir.mkdir()
+    return output_dir
+
+
+def test_stage_university_report_success(mock_input_dir: Path, mock_output_dir: Path) -> None:
+    """
+    Valida el staging exitoso de report_beca18_universitarios_universidad_anual.
+    """
+    # Crear archivo CSV manual de prueba
+    csv_content = (
+        "Universidad,2012,2013,2026 (*),Total\n"
+        "UNIVERSIDAD NACIONAL,1,2,3,6\n"
+        "Total general,1,2,3,6\n"
+    )
+    source_file = mock_input_dir / "beca18_becarios_universidad_2012_2026.csv"
+    source_file.write_text(csv_content, encoding="utf-8")
+
+    staged, skipped, missing = stage_reports(
+        input_dir=str(mock_input_dir),
+        output_dir=str(mock_output_dir),
+        extraction_date="2026-06-15",
+        report_name="report_beca18_universitarios_universidad_anual",
+    )
+
+    assert staged == 1
+    assert skipped == 0
+    assert missing == 0
+
+    # Validar que los archivos de salida existan
+    target_dir = (
+        mock_output_dir
+        / "report_beca18_universitarios_universidad_anual"
+        / "extraction_date=2026-06-15"
+    )
+    target_csv = target_dir / "data.csv"
+    target_meta = target_dir / "extraction_metadata.json"
+
+    assert target_csv.exists()
+    assert target_meta.exists()
+
+    # Validar contenido idéntico
+    assert target_csv.read_text(encoding="utf-8") == csv_content
+
+    # Validar metadatos
+    with open(target_meta, "r", encoding="utf-8") as f:
+        metadata = json.load(f)
+
+    assert metadata["source_system"] == "pronabec_reports"
+    assert metadata["source_dataset"] == "report_beca18_universitarios_universidad_anual"
+    assert metadata["source_file_name"] == "beca18_becarios_universidad_2012_2026.csv"
+    assert metadata["bronze_file_name"] == "data.csv"
+    assert metadata["extraction_date"] == "2026-06-15"
+    assert metadata["extraction_method"] == "manual_csv"
+    assert metadata["row_count"] == 2
+    assert metadata["column_count"] == 5
+    assert metadata["columns"] == ["Universidad", "2012", "2013", "2026 (*)", "Total"]
+    assert "content_sha256" in metadata
+    assert "staging_timestamp" in metadata
+
+
+def test_stage_career_report_success_recursive(mock_input_dir: Path, mock_output_dir: Path) -> None:
+    """
+    Valida el staging exitoso de report_beca18_universitarios_carrera_anual
+    ubicado en una subcarpeta recursiva.
+    """
+    # Crear estructura de subcarpeta y archivo
+    sub_dir = mock_input_dir / "subfolder" / "beca18"
+    sub_dir.mkdir(parents=True)
+    
+    csv_content = (
+        "Carrera de Estudio,2012,2026 (*),Total\n"
+        "INGENIERÍA DE SISTEMAS,-,5,5\n"
+        "Total general,0,5,5\n"
+    )
+    source_file = sub_dir / "beca18_becarios_universidades_carrera_2012_2026.csv"
+    source_file.write_text(csv_content, encoding="utf-8")
+
+    staged, skipped, missing = stage_reports(
+        input_dir=str(mock_input_dir),
+        output_dir=str(mock_output_dir),
+        extraction_date="2026-06-15",
+        report_name="report_beca18_universitarios_carrera_anual",
+    )
+
+    assert staged == 1
+    assert skipped == 0
+    assert missing == 0
+
+    target_dir = (
+        mock_output_dir
+        / "report_beca18_universitarios_carrera_anual"
+        / "extraction_date=2026-06-15"
+    )
+    target_csv = target_dir / "data.csv"
+    assert target_csv.exists()
+    assert target_csv.read_text(encoding="utf-8") == csv_content
+
+
+def test_stage_all_reports_some_missing(mock_input_dir: Path, mock_output_dir: Path) -> None:
+    """
+    Valida que al ejecutar sin report_name no falle todo si falta un archivo manual,
+    sino que stagee los que sí existan y marque los faltantes como missing.
+    """
+    # Solo creamos el de universidad
+    csv_content = "Col1,Col2\nVal1,Val2"
+    source_file = mock_input_dir / "beca18_becarios_universidad_2012_2026.csv"
+    source_file.write_text(csv_content, encoding="utf-8")
+
+    staged, skipped, missing = stage_reports(
+        input_dir=str(mock_input_dir),
+        output_dir=str(mock_output_dir),
+        extraction_date="2026-06-15",
+    )
+
+    assert staged == 1
+    assert skipped == 0
+    assert missing == 1
+
+
+def test_report_name_filter(mock_input_dir: Path, mock_output_dir: Path) -> None:
+    """
+    Valida que al especificar --report-name solo se stagee ese reporte específico,
+    incluso si el otro archivo fuente también existe en el input_dir.
+    """
+    # Crear ambos archivos manuales
+    csv_content = "Col1,Col2\nVal1,Val2"
+    (mock_input_dir / "beca18_becarios_universidad_2012_2026.csv").write_text(csv_content)
+    (mock_input_dir / "beca18_becarios_universidades_carrera_2012_2026.csv").write_text(csv_content)
+
+    staged, skipped, missing = stage_reports(
+        input_dir=str(mock_input_dir),
+        output_dir=str(mock_output_dir),
+        extraction_date="2026-06-15",
+        report_name="report_beca18_universitarios_universidad_anual",
+    )
+
+    assert staged == 1
+    # Solo el de universidad debe haberse creado físicamente
+    assert (
+        mock_output_dir
+        / "report_beca18_universitarios_universidad_anual"
+        / "extraction_date=2026-06-15"
+        / "data.csv"
+    ).exists()
+    assert not (
+        mock_output_dir
+        / "report_beca18_universitarios_carrera_anual"
+    ).exists()
+
+
+def test_explicit_report_missing_file_raises_error(mock_input_dir: Path, mock_output_dir: Path) -> None:
+    """
+    Valida que se lance FileNotFoundError si se solicita un reporte explícito
+    pero su archivo manual no existe en input_dir.
+    """
+    with pytest.raises(FileNotFoundError) as excinfo:
+        stage_reports(
+            input_dir=str(mock_input_dir),
+            output_dir=str(mock_output_dir),
+            extraction_date="2026-06-15",
+            report_name="report_beca18_universitarios_universidad_anual",
+        )
+    assert "No se encontró el archivo fuente para el reporte" in str(excinfo.value)
+
+
+def test_overwrite_modes(mock_input_dir: Path, mock_output_dir: Path) -> None:
+    """
+    Valida que falle si ya existe el archivo destino y no se habilita overwrite,
+    y que reemplace correctamente si se habilita.
+    """
+    csv_content = "Col1,Col2\nVal1,Val2"
+    source_file = mock_input_dir / "beca18_becarios_universidad_2012_2026.csv"
+    source_file.write_text(csv_content)
+
+    # 1. Primera ejecución exitosa
+    staged, skipped, missing = stage_reports(
+        input_dir=str(mock_input_dir),
+        output_dir=str(mock_output_dir),
+        extraction_date="2026-06-15",
+        report_name="report_beca18_universitarios_universidad_anual",
+    )
+    assert staged == 1
+
+    # 2. Segunda ejecución sin overwrite debe saltarlo (o fallar si es explícito con report_name)
+    with pytest.raises(FileExistsError) as excinfo:
+        stage_reports(
+            input_dir=str(mock_input_dir),
+            output_dir=str(mock_output_dir),
+            extraction_date="2026-06-15",
+            report_name="report_beca18_universitarios_universidad_anual",
+            overwrite=False,
+        )
+    assert "ya existe y no se especificó --overwrite" in str(excinfo.value)
+
+    # Si es ejecución general, incrementa skipped
+    staged_gen, skipped_gen, missing_gen = stage_reports(
+        input_dir=str(mock_input_dir),
+        output_dir=str(mock_output_dir),
+        extraction_date="2026-06-15",
+        overwrite=False,
+    )
+    assert staged_gen == 0
+    assert skipped_gen == 1
+
+    # 3. Segunda ejecución con overwrite=True debe sobreescribir con éxito
+    staged_ov, skipped_ov, missing_ov = stage_reports(
+        input_dir=str(mock_input_dir),
+        output_dir=str(mock_output_dir),
+        extraction_date="2026-06-15",
+        report_name="report_beca18_universitarios_universidad_anual",
+        overwrite=True,
+    )
+    assert staged_ov == 1
+    assert skipped_ov == 0
+
+
+def test_invalid_extraction_date_format(mock_input_dir: Path, mock_output_dir: Path) -> None:
+    """Valida error si el formato de la fecha es inválido."""
+    with pytest.raises(ValueError) as excinfo:
+        stage_reports(
+            input_dir=str(mock_input_dir),
+            output_dir=str(mock_output_dir),
+            extraction_date="2026/06/15",
+        )
+    assert "Formato de fecha inválido" in str(excinfo.value)
+
+
+def test_non_existent_input_dir(mock_output_dir: Path) -> None:
+    """Valida error si el directorio de entrada no existe."""
+    with pytest.raises(FileNotFoundError) as excinfo:
+        stage_reports(
+            input_dir="non_existent_path_dir_12345",
+            output_dir=str(mock_output_dir),
+            extraction_date="2026-06-15",
+        )
+    assert "El directorio de entrada no existe" in str(excinfo.value)
+
+
+def test_unknown_report_name(mock_input_dir: Path, mock_output_dir: Path) -> None:
+    """Valida error si se pasa un report_name desconocido."""
+    with pytest.raises(ValueError) as excinfo:
+        stage_reports(
+            input_dir=str(mock_input_dir),
+            output_dir=str(mock_output_dir),
+            extraction_date="2026-06-15",
+            report_name="unknown_report_dataset_name",
+        )
+    assert "Reporte desconocido o no soportado" in str(excinfo.value)
+
+
+def test_empty_csv_raises_error(mock_input_dir: Path, mock_output_dir: Path) -> None:
+    """Valida error si el archivo CSV de origen está completamente vacío."""
+    source_file = mock_input_dir / "beca18_becarios_universidad_2012_2026.csv"
+    source_file.write_text("")  # Archivo vacío
+
+    with pytest.raises(ValueError) as excinfo:
+        stage_reports(
+            input_dir=str(mock_input_dir),
+            output_dir=str(mock_output_dir),
+            extraction_date="2026-06-15",
+            report_name="report_beca18_universitarios_universidad_anual",
+        )
+    assert "El archivo CSV está vacío" in str(excinfo.value)
