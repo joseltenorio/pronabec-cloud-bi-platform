@@ -119,7 +119,7 @@ def _build_spec_from_schema(
     dimension_columns = tuple(
         field_name
         for field_name, field_type in field_types.items()
-        if field_type == "string"
+        if field_type == "string" or field_name.startswith("ano_") or field_name == "periodo"
     )
     return ReportTransformSpec(
         source_dataset=source_dataset,
