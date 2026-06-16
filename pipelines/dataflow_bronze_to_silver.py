@@ -5,9 +5,9 @@ Pipeline principal de Apache Beam / Dataflow para procesar datos de Bronze a Sil
 from __future__ import annotations
 
 import argparse
+import csv
 import io
 import json
-import csv
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,6 +16,7 @@ from apache_beam.options.pipeline_options import PipelineOptions
 
 from pipelines.common.logging import setup_structured_logger, log_event
 from pipelines.transforms.base import add_technical_metadata
+from pipelines.transforms.pronabec import transform_pronabec_record
 
 logger = setup_structured_logger("dataflow_bronze_to_silver", level="INFO")
 
@@ -215,6 +216,35 @@ def build_pipeline_options(
     return PipelineOptions(pipeline_args, **options_dict)
 
 
+def transform_bronze_record(
+    record: dict[str, Any],
+    source_system: str,
+    source_dataset: str,
+    extraction_date: str,
+    pipeline_run_id: str,
+    ingestion_timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Apply a supported Bronze to Silver transform, or metadata-only fallback."""
+    if source_system == "pronabec":
+        return transform_pronabec_record(
+            source_dataset,
+            record,
+            {
+                "extraction_date": extraction_date,
+                "ingestion_timestamp": ingestion_timestamp,
+                "pipeline_run_id": pipeline_run_id,
+            },
+        )
+
+    return add_technical_metadata(
+        record,
+        source_system=source_system,
+        source_dataset=source_dataset,
+        extraction_date=extraction_date,
+        pipeline_run_id=pipeline_run_id,
+    )
+
+
 def run(argv: list[str] | None = None) -> None:
     """
     Función principal de ejecución del pipeline.
@@ -224,6 +254,7 @@ def run(argv: list[str] | None = None) -> None:
 
     pipeline_options = build_pipeline_options(args, pipeline_args)
     pipeline_run_id = args.pipeline_run_id or f"run_{int(datetime.now(timezone.utc).timestamp())}"
+    ingestion_timestamp = datetime.now(timezone.utc).isoformat()
 
     log_event(
         logger,
@@ -253,12 +284,13 @@ def run(argv: list[str] | None = None) -> None:
         # 2. Transformación placeholder (Identidad + Metadata técnica)
         transformed = (
             records
-            | "Apply Technical Metadata" >> beam.Map(
-                add_technical_metadata,
+            | "Apply Bronze to Silver Transform" >> beam.Map(
+                transform_bronze_record,
                 source_system=args.source_system,
                 source_dataset=args.source_dataset,
                 extraction_date=args.extraction_date,
                 pipeline_run_id=pipeline_run_id,
+                ingestion_timestamp=ingestion_timestamp,
             )
         )
 
