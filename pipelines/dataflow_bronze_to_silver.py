@@ -14,7 +14,7 @@ from typing import Any
 import apache_beam as beam
 from apache_beam.options.pipeline_options import PipelineOptions
 
-from pipelines.common.logging import setup_structured_logger
+from pipelines.common.logging import setup_structured_logger, log_event
 from pipelines.transforms.base import add_technical_metadata
 
 logger = setup_structured_logger("dataflow_bronze_to_silver", level="INFO")
@@ -225,14 +225,14 @@ def run(argv: list[str] | None = None) -> None:
     pipeline_options = build_pipeline_options(args, pipeline_args)
     pipeline_run_id = args.pipeline_run_id or f"run_{int(datetime.now(timezone.utc).timestamp())}"
 
-    logger.info(
+    log_event(
+        logger,
+        "INFO",
         "Iniciando pipeline Bronze a Silver",
-        extra_fields={
-            "source_system": args.source_system,
-            "source_dataset": args.source_dataset,
-            "runner": args.runner,
-            "dry_run": args.dry_run,
-        },
+        source_system=args.source_system,
+        source_dataset=args.source_dataset,
+        runner=args.runner,
+        dry_run=args.dry_run,
     )
 
     with beam.Pipeline(options=pipeline_options) as p:
