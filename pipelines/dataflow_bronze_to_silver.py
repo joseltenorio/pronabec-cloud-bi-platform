@@ -14,6 +14,7 @@ from typing import Any
 import apache_beam as beam
 from apache_beam.options.pipeline_options import PipelineOptions
 
+from pipelines.common.bigquery import build_bigquery_write_config, build_bigquery_write_transform
 from pipelines.common.logging import setup_structured_logger, log_event
 from pipelines.transforms.pronabec_reports import REPORT_SPECS, transform_pronabec_report_record
 from pipelines.transforms.base import add_technical_metadata
@@ -102,6 +103,18 @@ def parse_arguments(argv: list[str] | None = None) -> tuple[argparse.Namespace, 
         help="Nombre completo de la tabla BigQuery de salida (project:dataset.table).",
     )
     parser.add_argument(
+        "--write-disposition",
+        required=False,
+        default="WRITE_APPEND",
+        help="Disposicion de escritura para BigQuery.",
+    )
+    parser.add_argument(
+        "--create-disposition",
+        required=False,
+        default="CREATE_NEVER",
+        help="Disposicion de creacion para BigQuery.",
+    )
+    parser.add_argument(
         "--runner",
         required=False,
         default="DirectRunner",
@@ -158,7 +171,6 @@ def validate_arguments(args: argparse.Namespace) -> None:
         ("extraction_date", "--extraction-date"),
         ("input_path", "--input-path"),
         ("input_format", "--input-format"),
-        ("output_table", "--output-table"),
         ("runner", "--runner"),
     ]
     for field, arg_name in critical_fields:
@@ -170,6 +182,18 @@ def validate_arguments(args: argparse.Namespace) -> None:
     if args.input_format not in ("csv", "jsonl"):
         raise ValueError(
             f"Formato de entrada inválido: {args.input_format}. Debe ser 'csv' o 'jsonl'."
+        )
+
+    if not args.dry_run and not args.output_table:
+        raise ValueError(
+            "El argumento --output-table es requerido cuando --dry-run no esta activo."
+        )
+
+    if args.output_table:
+        build_bigquery_write_config(
+            args.output_table,
+            write_disposition=args.write_disposition,
+            create_disposition=args.create_disposition,
         )
 
     # 3. Validar runner
@@ -347,11 +371,23 @@ def run(argv: list[str] | None = None) -> None:
                 )
             )
         else:
-            # Comportamiento temporal sin BigQuery real
+            bq_config = build_bigquery_write_config(
+                args.output_table,
+                write_disposition=args.write_disposition,
+                create_disposition=args.create_disposition,
+            )
+            log_event(
+                logger,
+                "INFO",
+                "Escribiendo registros Silver en BigQuery",
+                output_table=bq_config.output_table,
+                write_disposition=bq_config.write_disposition,
+                create_disposition=bq_config.create_disposition,
+            )
             (
                 transformed
-                | "Log Records (Standard)" >> beam.Map(
-                    lambda x: logger.info(f"Registro procesado (Standard): {x}")
+                | "Write Silver Records to BigQuery" >> build_bigquery_write_transform(
+                    bq_config
                 )
             )
 
