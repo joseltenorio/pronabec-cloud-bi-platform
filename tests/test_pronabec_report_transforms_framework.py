@@ -8,6 +8,7 @@ from pipelines.dataflow_bronze_to_silver import transform_bronze_records
 from pipelines.transforms.pronabec_reports import (
     ReportTransformSpec,
     clean_report_text,
+    get_record_value_flexible,
     is_total_column,
     is_total_row,
     parse_report_int,
@@ -210,3 +211,15 @@ def test_dataflow_hook_falls_back_for_unmapped_report_dataset() -> None:
     assert transformed[0]["extraction_date"] == "2026-06-15"
     assert transformed[0]["pipeline_run_id"] == "test-run"
     assert transformed[0]["ingestion_timestamp"]
+
+
+def test_get_record_value_flexible() -> None:
+    record = {
+        "\ufeffUniversidad": "UPC",
+        "Carrera de Estudio": "Civil",
+        "source_page": "12",
+    }
+    assert get_record_value_flexible(record, "universidad") == "UPC"
+    assert get_record_value_flexible(record, "carrera_estudio") == "Civil"
+    assert get_record_value_flexible(record, "source_page") == "12"
+    assert get_record_value_flexible(record, "non_existent") is None

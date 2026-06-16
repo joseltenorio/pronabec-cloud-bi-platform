@@ -30,7 +30,7 @@ class ReadCsvDoFn(beam.DoFn):
 
         try:
             with FileSystems.open(path) as f:
-                text_file = io.TextIOWrapper(f, encoding="utf-8")
+                text_file = io.TextIOWrapper(f, encoding="utf-8-sig")
                 reader = csv.DictReader(text_file)
                 for row in reader:
                     yield dict(row)

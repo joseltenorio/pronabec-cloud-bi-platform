@@ -154,6 +154,28 @@ def _load_report_specs() -> dict[str, ReportTransformSpec]:
 REPORT_SPECS: dict[str, ReportTransformSpec] = {}
 
 
+def _normalize_key_for_matching(k: str) -> str:
+    # remove BOM
+    k = k.replace("\ufeff", "")
+    # lowercase
+    k = k.lower()
+    # treat underscores as spaces for word boundary splitting
+    k = k.replace("_", " ")
+    words = k.split()
+    stop_words = {"de", "del", "la", "los", "las", "el", "y", "en", "para", "con", "segun", "a", "o", "u"}
+    filtered_words = [w for w in words if w not in stop_words]
+    return "".join(filtered_words)
+
+
+def get_record_value_flexible(record: dict[str, Any], target_key: str) -> Any:
+    """Retrieve value from record using flexible key matching (BOM, case, space/underscore insensitive)."""
+    normalized_target = _normalize_key_for_matching(target_key)
+    for k, v in record.items():
+        if _normalize_key_for_matching(k) == normalized_target:
+            return v
+    return None
+
+
 def clean_report_text(value: Any) -> str | None:
     """Clean report text technically while preserving readable accents/case."""
     fixed = fix_mojibake(value)
@@ -247,9 +269,9 @@ def build_report_metadata(
 
     for field_name in metadata_fields:
         if field_name == "source_page":
-            metadata[field_name] = parse_report_int(source.get(field_name))
+            metadata[field_name] = parse_report_int(get_record_value_flexible(source, field_name))
         else:
-            metadata[field_name] = clean_report_text(source.get(field_name))
+            metadata[field_name] = clean_report_text(get_record_value_flexible(source, field_name))
 
     metadata.update(
         {
@@ -291,7 +313,7 @@ def unpivot_annual_report(
         raise ValueError(f"Annual report spec '{spec.source_dataset}' requires value_field.")
 
     dimensions = {
-        column: clean_report_text(record.get(column))
+        column: clean_report_text(get_record_value_flexible(record, column))
         for column in spec.dimension_columns
     }
     metadata = build_report_metadata(
@@ -336,7 +358,7 @@ def transform_snapshot_report(
     transformed: dict[str, Any] = {}
     for field_name, field_type in spec.field_types.items():
         transformed[field_name] = _convert_field(
-            record.get(field_name),
+            get_record_value_flexible(record, field_name),
             field_type,
             zero_dash=field_name in spec.zero_dash_fields,
         )
