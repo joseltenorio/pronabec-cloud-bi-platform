@@ -15,6 +15,7 @@ import apache_beam as beam
 from apache_beam.options.pipeline_options import PipelineOptions
 
 from pipelines.common.logging import setup_structured_logger, log_event
+from pipelines.transforms.pronabec_reports import REPORT_SPECS, transform_pronabec_report_record
 from pipelines.transforms.base import add_technical_metadata
 from pipelines.transforms.pronabec import transform_pronabec_record
 
@@ -245,6 +246,37 @@ def transform_bronze_record(
     )
 
 
+def transform_bronze_records(
+    record: dict[str, Any],
+    source_system: str,
+    source_dataset: str,
+    extraction_date: str,
+    pipeline_run_id: str,
+    ingestion_timestamp: str | None = None,
+) -> list[dict[str, Any]]:
+    """Apply transforms that may emit one or more Silver records."""
+    if source_system == "pronabec_reports" and source_dataset in REPORT_SPECS:
+        return transform_pronabec_report_record(
+            source_dataset,
+            record,
+            {
+                "extraction_date": extraction_date,
+                "ingestion_timestamp": ingestion_timestamp,
+                "pipeline_run_id": pipeline_run_id,
+            },
+        )
+    return [
+        transform_bronze_record(
+            record,
+            source_system=source_system,
+            source_dataset=source_dataset,
+            extraction_date=extraction_date,
+            pipeline_run_id=pipeline_run_id,
+            ingestion_timestamp=ingestion_timestamp,
+        )
+    ]
+
+
 def run(argv: list[str] | None = None) -> None:
     """
     Función principal de ejecución del pipeline.
@@ -284,8 +316,8 @@ def run(argv: list[str] | None = None) -> None:
         # 2. Transformación placeholder (Identidad + Metadata técnica)
         transformed = (
             records
-            | "Apply Bronze to Silver Transform" >> beam.Map(
-                transform_bronze_record,
+            | "Apply Bronze to Silver Transform" >> beam.FlatMap(
+                transform_bronze_records,
                 source_system=args.source_system,
                 source_dataset=args.source_dataset,
                 extraction_date=args.extraction_date,
