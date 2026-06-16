@@ -17,6 +17,7 @@ from apache_beam.options.pipeline_options import PipelineOptions
 from pipelines.common.logging import setup_structured_logger, log_event
 from pipelines.transforms.pronabec_reports import REPORT_SPECS, transform_pronabec_report_record
 from pipelines.transforms.base import add_technical_metadata
+from pipelines.transforms.mef import transform_mef_record
 from pipelines.transforms.pronabec import transform_pronabec_record
 
 logger = setup_structured_logger("dataflow_bronze_to_silver", level="INFO")
@@ -228,6 +229,16 @@ def transform_bronze_record(
     """Apply a supported Bronze to Silver transform, or metadata-only fallback."""
     if source_system == "pronabec":
         return transform_pronabec_record(
+            source_dataset,
+            record,
+            {
+                "extraction_date": extraction_date,
+                "ingestion_timestamp": ingestion_timestamp,
+                "pipeline_run_id": pipeline_run_id,
+            },
+        )
+    if source_system == "mef":
+        return transform_mef_record(
             source_dataset,
             record,
             {
