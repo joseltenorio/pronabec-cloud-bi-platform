@@ -127,6 +127,7 @@ def _transform_with_spec(
     record: dict[str, Any],
     context: dict[str, Any],
     spec: MefTransformSpec,
+    source_dataset_override: str | None = None,
 ) -> dict[str, Any]:
     transformed: dict[str, Any] = {}
     for field_name in spec.output_fields:
@@ -135,7 +136,7 @@ def _transform_with_spec(
         value = _first_present(record, spec.source_aliases.get(field_name, ()), field_name)
         transformed[field_name] = _convert(value, spec.field_kinds[field_name])
 
-    transformed.update(build_mef_metadata(spec.source_dataset, context))
+    transformed.update(build_mef_metadata(source_dataset_override or spec.source_dataset, context))
     return {field_name: transformed.get(field_name) for field_name in spec.output_fields}
 
 
@@ -416,4 +417,4 @@ def transform_mef_record(
         raise ValueError(
             f"Unsupported MEF dataset '{source_dataset}'. Supported datasets: {supported}."
         )
-    return _transform_with_spec(record, context, spec)
+    return _transform_with_spec(record, context, spec, source_dataset_override=source_dataset)
