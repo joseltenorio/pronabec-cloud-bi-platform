@@ -1,0 +1,99 @@
+version: 1
+source_system: pronabec
+description: "Candidate canonical mappings for PRONABEC textual values."
+default_policy:
+  preserve_original: true
+  apply_automatically: false
+  require_explicit_alias: true
+  fuzzy_matching_enabled: false
+
+domains:
+  carrera:
+    - canonical_value: "ARTE & DISEÑO GRÁFICO EMPRESARIAL"
+      aliases:
+        - "ARTE & DISEO GRAFICO EMPRESARIAL"
+        - "ARTE & DISEÑO GRAFICO EMPRESARIAL"
+        - "ARTE Y DISEÑO GRAFICO EMPRESARIAL"
+      normalized_key: "ARTE DISENO GRAFICO EMPRESARIAL"
+      match_method: "manual_alias"
+      confidence: "high"
+      review_required: true
+      notes: "Detected in PRONABEC Beca 18 career report dry-run."
+
+  pais:
+    - canonical_value: "PERÚ"
+      aliases:
+        - "PERU"
+        - "PERÚ"
+      normalized_key: "PERU"
+      match_method: "manual_alias"
+      confidence: "high"
+      review_required: false
+      notes: "Country display value for dashboards."
+
+  programa:
+    - canonical_value: "BECA 18"
+      aliases:
+        - "BECA 18"
+        - "BECA18"
+        - "BECA  18"
+      normalized_key: "BECA 18"
+      match_method: "manual_alias"
+      confidence: "high"
+      review_required: false
+      notes: "Common spacing variant."
+
+  sexo:
+    - canonical_value: "Femenino"
+      aliases:
+        - "F"
+        - "FEMENINO"
+        - "MUJER"
+      normalized_key: "FEMENINO"
+      match_method: "manual_alias"
+      confidence: "medium"
+      review_required: true
+      notes: "Candidate; confirm source semantics before applying automatically."
+
+    - canonical_value: "Masculino"
+      aliases:
+        - "M"
+        - "MASCULINO"
+        - "HOMBRE"
+      normalized_key: "MASCULINO"
+      match_method: "manual_alias"
+      confidence: "medium"
+      review_required: true
+      notes: "Candidate; confirm source semantics before applying automatically."
+
+  modalidad:
+    - canonical_value: "Ordinaria"
+      aliases:
+        - "ORDINARIA"
+        - "MODALIDAD ORDINARIA"
+      normalized_key: "ORDINARIA"
+      match_method: "manual_alias"
+      confidence: "high"
+      review_required: false
+      notes: "Common scholarship modality."
+
+  tipo_gestion_colegio:
+    - canonical_value: "Pública"
+      aliases:
+        - "PUBLICA"
+        - "PÚBLICA"
+        - "ESTATAL"
+      normalized_key: "PUBLICA"
+      match_method: "manual_alias"
+      confidence: "high"
+      review_required: false
+      notes: "School management type."
+    - canonical_value: "Privada"
+      aliases:
+        - "PRIVADA"
+        - "PARTICULAR"
+      normalized_key: "PRIVADA"
+      match_method: "manual_alias"
+      confidence: "high"
+      review_required: false
+      notes: "School management type."
