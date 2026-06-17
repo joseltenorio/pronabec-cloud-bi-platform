@@ -92,6 +92,15 @@ def resolve_required_config(
     return value
 
 
+def resolve_optional_config(
+    *,
+    cli_value: str | None,
+    env_var_name: str,
+) -> str | None:
+    return clean_config_value(cli_value) or clean_config_value(os.getenv(env_var_name))
+
+
+
 def dataset_name_from_schema_path(schema_path: Path) -> str:
     suffix = "_schema"
     stem = schema_path.stem
@@ -136,6 +145,7 @@ def render_bronze_table(
     schema: list[dict[str, str]],
     project_id: str,
     bucket: str,
+    bronze_extraction_date: str | None = None,
 ) -> str:
     columns = render_columns(schema)
 
@@ -145,8 +155,13 @@ def render_bronze_table(
         else:
             slice_name = dataset.replace("presupuesto_mef_", "presupuesto_")
 
+        if not bronze_extraction_date:
+            raise ValueError(
+                f"MEF external table DDL for '{dataset}' requires --bronze-extraction-date to be BigQuery-compatible."
+            )
+
         table_name = f"{project_id}.bronze.mef_{slice_name}_raw"
-        source_uri = f"gs://{bucket}/bronze/mef/{slice_name}/extraction_date=*/year=*/data.csv"
+        source_uri = f"gs://{bucket}/bronze/mef/{slice_name}/extraction_date={bronze_extraction_date}/year=*/data.csv"
         options = f"""OPTIONS (
   format = 'CSV',
   uris = ['{source_uri}'],
@@ -202,6 +217,7 @@ def generate_ddl(
     output_dir: Path,
     bronze_schemas_dir: Path,
     silver_schemas_dir: Path,
+    bronze_extraction_date: str | None = None,
 ) -> tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -214,6 +230,7 @@ def generate_ddl(
                 schema=load_schema(schema_path),
                 project_id=project_id,
                 bucket=bucket,
+                bronze_extraction_date=bronze_extraction_date,
             )
         )
 
@@ -259,6 +276,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=f"Bucket de Cloud Storage. También puede definirse con {BUCKET_ENV_VAR}.",
     )
+    parser.add_argument(
+        "--bronze-extraction-date",
+        default=None,
+        help="Fecha de extracción Bronze para URIs MEF (formato YYYY-MM-DD). También se puede definir con BRONZE_EXTRACTION_DATE.",
+    )
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--bronze-schemas-dir", default=DEFAULT_BRONZE_SCHEMAS_DIR)
     parser.add_argument("--silver-schemas-dir", default=DEFAULT_SILVER_SCHEMAS_DIR)
@@ -277,6 +299,10 @@ def parse_args() -> argparse.Namespace:
         option_name="--bucket",
         parser=parser,
     )
+    args.bronze_extraction_date = resolve_optional_config(
+        cli_value=args.bronze_extraction_date,
+        env_var_name="BRONZE_EXTRACTION_DATE",
+    )
 
     return args
 
@@ -290,6 +316,7 @@ def main() -> None:
         output_dir=Path(args.output_dir),
         bronze_schemas_dir=Path(args.bronze_schemas_dir),
         silver_schemas_dir=Path(args.silver_schemas_dir),
+        bronze_extraction_date=args.bronze_extraction_date,
     )
 
     print(f"Generated {bronze_output}")
