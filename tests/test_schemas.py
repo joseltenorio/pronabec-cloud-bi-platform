@@ -116,6 +116,8 @@ def test_bigquery_ddl_generator_writes_bronze_and_silver_sql(tmp_path: Path) -> 
             "test-project-id",
             "--bucket",
             "test-bucket-name",
+            "--bronze-extraction-date",
+            "2026-06-17",
             "--output-dir",
             str(output_dir),
         ],
@@ -149,10 +151,10 @@ def test_bigquery_ddl_generator_writes_bronze_and_silver_sql(tmp_path: Path) -> 
     assert "test-project-id.bronze.mef_presupuesto_actividad_raw" in bronze_sql
     assert "test-project-id.bronze.mef_presupuesto_actividad_temporal_raw" in bronze_sql
     assert "test-project-id.bronze.mef_presupuesto_generica_temporal_raw" in bronze_sql
-    assert "gs://test-bucket-name/bronze/mef/presupuesto_producto_temporal/extraction_date=*/year=*/data.csv" in bronze_sql
-    assert "gs://test-bucket-name/bronze/mef/presupuesto_actividad/extraction_date=*/year=*/data.csv" in bronze_sql
-    assert "gs://test-bucket-name/bronze/mef/presupuesto_actividad_temporal/extraction_date=*/year=*/data.csv" in bronze_sql
-    assert "gs://test-bucket-name/bronze/mef/presupuesto_generica_temporal/extraction_date=*/year=*/data.csv" in bronze_sql
+    assert "gs://test-bucket-name/bronze/mef/presupuesto_producto_temporal/extraction_date=2026-06-17/year=*/data.csv" in bronze_sql
+    assert "gs://test-bucket-name/bronze/mef/presupuesto_actividad/extraction_date=2026-06-17/year=*/data.csv" in bronze_sql
+    assert "gs://test-bucket-name/bronze/mef/presupuesto_actividad_temporal/extraction_date=2026-06-17/year=*/data.csv" in bronze_sql
+    assert "gs://test-bucket-name/bronze/mef/presupuesto_generica_temporal/extraction_date=2026-06-17/year=*/data.csv" in bronze_sql
     
     # Validate pronabec_report family generates as CSV external tables
     assert "test-project-id.bronze.pronabec_report_beca18_sexo_anual_raw" in bronze_sql
@@ -197,6 +199,7 @@ def test_bigquery_ddl_generator_uses_environment_config(tmp_path: Path) -> None:
         **env_without_ddl_config(),
         "GCP_PROJECT_ID": "env-project-id",
         "GCS_BUCKET_NAME": "env-bucket-name",
+        "BRONZE_EXTRACTION_DATE": "2026-06-17",
     }
 
     subprocess.run(
@@ -239,6 +242,8 @@ def test_bigquery_ddl_generator_cli_overrides_environment(tmp_path: Path) -> Non
             "cli-project-id",
             "--bucket",
             "cli-bucket-name",
+            "--bronze-extraction-date",
+            "2026-06-17",
             "--output-dir",
             str(output_dir),
         ],
@@ -464,3 +469,74 @@ def test_mef_silver_schemas_integrity() -> None:
             assert field is not None, f"Technical metadata field '{meta_field}' not found in {dataset}"
             assert field["type"] == expected_type, f"Field '{meta_field}' in {dataset} has type {field['type']}, expected {expected_type}"
             assert field["mode"] == expected_mode, f"Field '{meta_field}' in {dataset} has mode {field['mode']}, expected {expected_mode}"
+
+
+def test_mef_external_table_wildcard_generation(tmp_path: Path) -> None:
+    output_dir = tmp_path / "generated" / "sql"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "tools/generate_bigquery_ddl.py",
+            "--project-id",
+            "test-project-id",
+            "--bucket",
+            "test-bucket-name",
+            "--bronze-extraction-date",
+            "2026-06-17",
+            "--output-dir",
+            str(output_dir),
+        ],
+        cwd=PROJECT_ROOT,
+        env=env_without_ddl_config(),
+        check=True,
+    )
+
+    bronze_sql = (output_dir / "create_bronze_external_tables.sql").read_text(
+        encoding="utf-8"
+    )
+
+    # 1. Validar que ninguna URI externa generada contiene más de un wildcard '*'
+    import re
+    uri_lines = re.findall(r"uris\s*=\s*\[([^\]]+)\]", bronze_sql)
+    for line in uri_lines:
+        uris = [u.strip(" '\"") for u in line.split(",")]
+        for uri in uris:
+            assert uri.count("*") <= 1, f"La URI '{uri}' contiene más de un wildcard '*'"
+
+    # 2. Validar que no exista la URI con doble wildcard para MEF
+    assert "extraction_date=*/year=*/data.csv" not in bronze_sql
+
+    # 3. Validar rutas específicas de MEF
+    assert "gs://test-bucket-name/bronze/mef/presupuesto/extraction_date=2026-06-17/year=*/data.csv" in bronze_sql
+
+    # 4. Validar que PRONABEC API mantiene extraction_date=*/data.jsonl
+    assert "gs://test-bucket-name/bronze/pronabec/notas_becarios/extraction_date=*/data.jsonl" in bronze_sql
+
+    # 5. Validar que pronabec_reports mantiene extraction_date=*/data.csv
+    assert "gs://test-bucket-name/bronze/pronabec_reports/report_beca18_sexo_anual/extraction_date=*/data.csv" in bronze_sql
+
+
+def test_mef_external_table_generation_fails_without_date(tmp_path: Path) -> None:
+    output_dir = tmp_path / "generated" / "sql"
+
+    # Debe fallar de forma controlada cuando no se pasa fecha para MEF
+    result = subprocess.run(
+        [
+            sys.executable,
+            "tools/generate_bigquery_ddl.py",
+            "--project-id",
+            "test-project-id",
+            "--bucket",
+            "test-bucket-name",
+            "--output-dir",
+            str(output_dir),
+        ],
+        cwd=PROJECT_ROOT,
+        env=env_without_ddl_config(),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "requires --bronze-extraction-date to be BigQuery-compatible" in result.stderr

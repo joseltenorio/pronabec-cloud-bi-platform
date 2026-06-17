@@ -200,6 +200,8 @@ def test_gcs_paths_consistency_with_ddl(tmp_path: Path) -> None:
             "test-project-id",
             "--bucket",
             "test-bucket-name",
+            "--bronze-extraction-date",
+            "2026-06-17",
             "--output-dir",
             str(output_dir),
         ],
@@ -234,12 +236,13 @@ def test_gcs_paths_consistency_with_ddl(tmp_path: Path) -> None:
             expected = pronabec_norm_tmpl.format(dataset=dataset_name, extraction_date="*")
             assert relative_path == expected, f"DDL path '{relative_path}' mismatch with pipeline.yaml expected '{expected}'"
         elif "bronze/mef/" in relative_path:
-            # Format is bronze/mef/<slice>/extraction_date=*/year=*/data.csv
-            match = re.match(r"bronze/mef/([^/]+)/extraction_date=\*/year=\*/data\.csv", relative_path)
+            # Format is bronze/mef/<slice>/extraction_date=YYYY-MM-DD/year=*/data.csv
+            match = re.match(r"bronze/mef/([^/]+)/extraction_date=(\d{4}-\d{2}-\d{2})/year=\*/data\.csv", relative_path)
             assert match, f"DDL MEF path structure is invalid: {relative_path}"
             slice_name = match.group(1)
+            ext_date = match.group(2)
 
-            expected = f"bronze/mef/{slice_name}/extraction_date=*/year=*/data.csv"
+            expected = f"bronze/mef/{slice_name}/extraction_date={ext_date}/year=*/data.csv"
             assert relative_path == expected, f"DDL path '{relative_path}' mismatch with expected '{expected}'"
         elif "bronze/pronabec_reports/" in relative_path:
             # Format is bronze/pronabec_reports/{dataset}/extraction_date=*/data.csv
