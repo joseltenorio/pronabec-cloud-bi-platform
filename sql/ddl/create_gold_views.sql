@@ -1,252 +1,434 @@
--- ============================================================================
+-- =============================================================================
 -- Project Cloud BI Platform
 -- BigQuery Gold analytics views
--- ============================================================================
+-- =============================================================================
 --
--- Este script define las primeras vistas Gold del proyecto.
+-- Este script define las vistas Gold del proyecto.
 --
--- Decisión de diseño:
--- - Las vistas Gold consumen tablas Silver, no archivos Bronze.
+-- Decisiones de diseño:
+-- - Las vistas Gold consumen únicamente tablas Silver, no archivos Bronze.
 -- - Gold expone KPIs, agregaciones y estructuras listas para Power BI.
--- - La limpieza fuerte, casteos y normalización pertenecen a Silver.
--- - Estas vistas pueden evolucionar luego hacia marts físicos si el volumen
---   o el rendimiento lo requieren.
+-- - La limpieza de datos, casteos y canonizaciones pertenecen a Silver.
+-- - No se incluyen tablas "candidates/review" ni referencias obsoletas.
+-- - Todos los esquemas y nombres de columnas están validados contra Silver.
 --
--- Reemplazar antes de ejecutar:
--- - your-gcp-project-id
--- ============================================================================
+-- Placeholders utilizados:
+-- - {project_id}
+-- - {silver_dataset}
+-- - {gold_dataset}
+-- =============================================================================
 
--- ============================================================================
--- Vista: gold.vw_resumen_ejecutivo
--- Propósito:
--- Vista de KPIs generales para una página ejecutiva en Power BI.
--- ============================================================================
+-- =============================================================================
+-- Gold - Resumen ejecutivo
+-- =============================================================================
 
-CREATE OR REPLACE VIEW `your-gcp-project-id.gold.vw_resumen_ejecutivo` AS
-WITH presupuesto AS (
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_pronabec_resumen_ejecutivo` AS
+WITH mef_stats AS (
   SELECT
     SUM(pia) AS pia_total,
     SUM(pim) AS pim_total,
     SUM(devengado) AS devengado_total,
-    SUM(girado) AS girado_total,
-    SUM(saldo_no_ejecutado) AS saldo_no_ejecutado_total,
     SAFE_MULTIPLY(SAFE_DIVIDE(SUM(devengado), NULLIF(SUM(pim), 0)), 100) AS avance_presupuestal_pct
-  FROM `your-gcp-project-id.silver.presupuesto_mef`
+  FROM `{project_id}.{silver_dataset}.presupuesto_mef`
 ),
-becarios AS (
+becas_stats AS (
   SELECT
-    SUM(
-      COALESCE(b18_n, 0)
-      + COALESCE(permanencia_n, 0)
-      + COALESCE(bicentenario_n, 0)
-      + COALESCE(especial_n, 0)
-      + COALESCE(ffaa_n, 0)
-      + COALESCE(vraem_n, 0)
-      + COALESCE(repec_n, 0)
-      + COALESCE(internacional_n, 0)
-      + COALESCE(otros_n, 0)
-    ) AS becarios_reportados
-  FROM `your-gcp-project-id.silver.becarios_provincia`
-  WHERE UPPER(TRIM(COALESCE(provincia, ''))) <> 'TOTAL'
+    SUM(becas_otorgadas) AS total_becas_otorgadas,
+    COUNT(DISTINCT modalidad) AS modalidades_atendidas
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_becas_otorgadas_modalidad_anual`
 ),
-notas AS (
-  SELECT
-    AVG(nota_promedio) AS nota_promedio_general,
-    COUNT(*) AS registros_notas
-  FROM `your-gcp-project-id.silver.notas_becarios`
-),
-perdidas AS (
-  SELECT
-    COUNT(*) AS registros_perdida_beca
-  FROM `your-gcp-project-id.silver.perdida_becas`
-),
-convocatorias AS (
+convocatorias_stats AS (
   SELECT
     COUNT(DISTINCT id_convocatoria) AS convocatorias_registradas,
     SUM(vacantes) AS vacantes_registradas
-  FROM `your-gcp-project-id.silver.convocatorias`
+  FROM `{project_id}.{silver_dataset}.pronabec_convocatorias`
 )
 SELECT
   CURRENT_DATE() AS fecha_consulta,
-  presupuesto.pia_total,
-  presupuesto.pim_total,
-  presupuesto.devengado_total,
-  presupuesto.girado_total,
-  presupuesto.saldo_no_ejecutado_total,
-  presupuesto.avance_presupuestal_pct,
-  becarios.becarios_reportados,
-  notas.nota_promedio_general,
-  notas.registros_notas,
-  perdidas.registros_perdida_beca,
-  convocatorias.convocatorias_registradas,
-  convocatorias.vacantes_registradas
-FROM presupuesto
-CROSS JOIN becarios
-CROSS JOIN notas
-CROSS JOIN perdidas
-CROSS JOIN convocatorias;
+  mef_stats.pia_total,
+  mef_stats.pim_total,
+  mef_stats.devengado_total,
+  mef_stats.avance_presupuestal_pct,
+  becas_stats.total_becas_otorgadas,
+  becas_stats.modalidades_atendidas,
+  convocatorias_stats.convocatorias_registradas,
+  convocatorias_stats.vacantes_registradas
+FROM mef_stats
+CROSS JOIN becas_stats
+CROSS JOIN convocatorias_stats;
 
--- ============================================================================
--- Vista: gold.vw_presupuesto_mef_anual
--- Propósito:
--- Evolución anual del presupuesto y ejecución financiera.
--- ============================================================================
+-- =============================================================================
+-- Gold - Beca 18 evolución y cobertura
+-- =============================================================================
 
-CREATE OR REPLACE VIEW `your-gcp-project-id.gold.vw_presupuesto_mef_anual` AS
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_beca18_becas_otorgadas_anual` AS
+SELECT
+  modalidad,
+  ano_convocatoria,
+  becas_otorgadas,
+  source_document_file,
+  source_page,
+  source_table
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_becas_otorgadas_modalidad_anual`;
+
+-- =============================================================================
+-- Gold - Beca 18 universitarios
+-- =============================================================================
+
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_beca18_universitarios_carrera_anual` AS
+SELECT
+  carrera_estudio,
+  carrera_estudio_canonical,
+  COALESCE(carrera_estudio_canonical, carrera_estudio) AS carrera_estudio_final,
+  carrera_estudio_canonical_match_method,
+  carrera_estudio_canonical_review_required,
+  ano_convocatoria,
+  cantidad_becarios,
+  es_anio_preliminar,
+  source_publication_url,
+  source_table
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_universitarios_carrera_anual`;
+
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_beca18_universitarios_universidad_anual` AS
+SELECT
+  universidad,
+  universidad_canonical,
+  COALESCE(universidad_canonical, universidad) AS universidad_final,
+  universidad_canonical_match_method,
+  universidad_canonical_review_required,
+  ano_convocatoria,
+  cantidad_becarios,
+  es_anio_preliminar,
+  source_publication_url,
+  source_table
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_universitarios_universidad_anual`;
+
+-- =============================================================================
+-- Gold - Perfil social PES 2025
+-- =============================================================================
+
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_beca18_perfil_social_indicadores` AS
+SELECT
+  'Perfil Étnico' AS indicator_group,
+  'Autoidentificación Étnica' AS indicator_name,
+  modalidad AS category,
+  autoidentificacion_etnica AS subcategory,
+  CAST(ano_encuesta AS STRING) AS period,
+  CAST(NULL AS INT64) AS value_count,
+  porcentaje_becarios AS value_percentage,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_autoidentificacion_etnica_modalidad_2025`
+UNION ALL
+SELECT
+  'Perfil Lingüístico' AS indicator_group,
+  'Lengua Materna' AS indicator_name,
+  modalidad AS category,
+  lengua_materna AS subcategory,
+  CAST(ano_encuesta AS STRING) AS period,
+  CAST(NULL AS INT64) AS value_count,
+  porcentaje_becarios AS value_percentage,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_lengua_materna_modalidad_2025`
+UNION ALL
+SELECT
+  'Demografía' AS indicator_group,
+  'Composición por Sexo' AS indicator_name,
+  'Sexo' AS category,
+  sexo AS subcategory,
+  CAST(ano_convocatoria AS STRING) AS period,
+  CAST(NULL AS INT64) AS value_count,
+  porcentaje_becarios AS value_percentage,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_sexo_anual`
+UNION ALL
+SELECT
+  'Entorno Educativo' AS indicator_group,
+  'Colegio de Procedencia' AS indicator_name,
+  'Tipo de Gestión' AS category,
+  tipo_gestion_colegio AS subcategory,
+  CAST(ano_encuesta AS STRING) AS period,
+  CAST(NULL AS INT64) AS value_count,
+  porcentaje_becarios AS value_percentage,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_colegio_gestion_2025`
+UNION ALL
+SELECT
+  'Entorno Familiar' AS indicator_group,
+  'Nivel Educativo de los Padres' AS indicator_name,
+  'Nivel Educativo' AS category,
+  nivel_educativo_padres AS subcategory,
+  CAST(ano_encuesta AS STRING) AS period,
+  CAST(NULL AS INT64) AS value_count,
+  porcentaje_becarios AS value_percentage,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_padres_nivel_educativo_2025`
+UNION ALL
+SELECT
+  'Movilidad Social' AS indicator_group,
+  'Primera Generación Universitaria' AS indicator_name,
+  region AS category,
+  'Primera Generación' AS subcategory,
+  periodo AS period,
+  total_becarios_primera_generacion AS value_count,
+  ratio_primera_generacion AS value_percentage,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_primera_generacion_region`
+UNION ALL
+SELECT
+  'Impacto Social' AS indicator_group,
+  'No Continuaría Sin Beca' AS indicator_name,
+  grupo_caracteristica AS category,
+  caracteristica AS subcategory,
+  CAST(ano_encuesta AS STRING) AS period,
+  CAST(NULL AS INT64) AS value_count,
+  porcentaje_becarios AS value_percentage,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_no_continuaria_sin_beca_caracteristica_2025`
+UNION ALL
+SELECT
+  'Entorno Educativo' AS indicator_group,
+  'Tipo de Preparación IES' AS indicator_name,
+  'Tipo de Preparación' AS category,
+  tipo_preparacion AS subcategory,
+  CAST(ano_encuesta AS STRING) AS period,
+  CAST(NULL AS INT64) AS value_count,
+  porcentaje_becarios AS value_percentage,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_preparacion_ies_tipo_2025`
+UNION ALL
+SELECT
+  'Entorno Educativo' AS indicator_group,
+  'Promedio de Meses de Preparación' AS indicator_name,
+  grupo_caracteristica AS category,
+  caracteristica AS subcategory,
+  CAST(ano_encuesta AS STRING) AS period,
+  CAST(NULL AS INT64) AS value_count,
+  promedio_meses_preparacion AS value_percentage,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_preparacion_ies_meses_caracteristica_2025`
+UNION ALL
+SELECT
+  'Rendimiento ENP' AS indicator_group,
+  'Puntaje Promedio ENP por Característica' AS indicator_name,
+  grupo_caracteristica AS category,
+  caracteristica AS subcategory,
+  CAST(ano_encuesta AS STRING) AS period,
+  CAST(NULL AS INT64) AS value_count,
+  puntaje_promedio_enp AS value_percentage,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_enp_promedio_caracteristica_2025`
+UNION ALL
+SELECT
+  'Rendimiento ENP' AS indicator_group,
+  'Puntaje Promedio ENP por Región' AS indicator_name,
+  region AS category,
+  'Promedio ENP' AS subcategory,
+  CAST(ano_encuesta AS STRING) AS period,
+  CAST(NULL AS INT64) AS value_count,
+  puntaje_promedio_enp AS value_percentage,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_enp_promedio_region_2025`
+UNION ALL
+SELECT
+  'Trayectoria' AS indicator_group,
+  'Periodo de Ingreso a la IES' AS indicator_name,
+  periodo_ingreso_ies AS category,
+  sexo AS subcategory,
+  CAST(ano_encuesta AS STRING) AS period,
+  CAST(NULL AS INT64) AS value_count,
+  porcentaje_becarios AS value_percentage,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_periodo_ingreso_ies_genero_2025`;
+
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_beca18_region_postulacion` AS
+SELECT
+  'anual' AS tipo_registro,
+  grupo_region AS region,
+  CAST(ano_convocatoria AS STRING) AS periodo,
+  porcentaje_becarios,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_region_postulacion_anual`
+UNION ALL
+SELECT
+  'acumulado' AS tipo_registro,
+  region,
+  periodo,
+  porcentaje_acumulado AS porcentaje_becarios,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_region_postulacion_acumulada`
+UNION ALL
+SELECT
+  'encuesta_2025' AS tipo_registro,
+  region,
+  CAST(ano_encuesta AS STRING) AS periodo,
+  porcentaje_becarios,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_region_postulacion_2025`;
+
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_beca18_migracion_region` AS
+SELECT
+  'anual' AS tipo_registro,
+  'Nacional' AS region,
+  CAST(ano_convocatoria AS STRING) AS periodo,
+  porcentaje_migracion_region AS tasa_migracion,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_migracion_region_anual`
+UNION ALL
+SELECT
+  'acumulado' AS tipo_registro,
+  region,
+  periodo,
+  tasa_migracion_acumulada AS tasa_migracion,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_migracion_region_acumulada`;
+
+-- =============================================================================
+-- Gold - Trayectoria y elección
+-- =============================================================================
+
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_beca18_trayectoria_eleccion` AS
+SELECT
+  'Elección de Carrera por Gestión IES' AS dimension_analisis,
+  razon_eleccion_carrera AS motivo,
+  gestion_ies AS segmento,
+  porcentaje_becarios,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_razones_eleccion_carrera_gestion_ies_2025`
+UNION ALL
+SELECT
+  'Elección de Carrera por Sexo' AS dimension_analisis,
+  razon_eleccion_carrera AS motivo,
+  sexo AS segmento,
+  porcentaje_becarios,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_razones_eleccion_carrera_sexo_2025`
+UNION ALL
+SELECT
+  'Elección de IES por Gestión Escolar' AS dimension_analisis,
+  razon_eleccion_ies AS motivo,
+  gestion_ies AS segmento,
+  porcentaje_becarios,
+  source_dataset,
+  source_document_file
+FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_razones_eleccion_ies_gestion_2025`;
+
+-- =============================================================================
+-- Gold - Presupuesto MEF
+-- =============================================================================
+
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_mef_presupuesto_ejecucion_anual` AS
 SELECT
   ano,
-  ejecutora_nombre,
-  SUM(pia) AS pia_total,
-  SUM(pim) AS pim_total,
-  SUM(certificacion) AS certificacion_total,
-  SUM(compromiso_anual) AS compromiso_anual_total,
-  SUM(compromiso_mensual) AS compromiso_mensual_total,
-  SUM(devengado) AS devengado_total,
-  SUM(girado) AS girado_total,
-  SUM(saldo_no_ejecutado) AS saldo_no_ejecutado_total,
-  SAFE_MULTIPLY(SAFE_DIVIDE(SUM(devengado), NULLIF(SUM(pim), 0)), 100) AS tasa_ejecucion_pct,
-  MAX(extraction_date) AS ultima_fecha_extraccion,
-  MAX(ingestion_timestamp) AS ultima_ingesta
-FROM `your-gcp-project-id.silver.presupuesto_mef`
-GROUP BY
+  codigo_entidad,
+  nombre_entidad,
+  pia,
+  pim,
+  devengado,
+  avance_porcentaje,
+  SAFE_MULTIPLY(SAFE_DIVIDE(devengado, NULLIF(pim, 0)), 100) AS avance_calculado_pct,
+  extraction_date,
+  ingestion_timestamp
+FROM `{project_id}.{silver_dataset}.presupuesto_mef`;
+
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_mef_presupuesto_ejecucion_temporal` AS
+SELECT
   ano,
-  ejecutora_nombre;
+  periodo_tipo,
+  periodo_valor,
+  trimestre,
+  mes_numero,
+  mes_nombre,
+  devengado,
+  extraction_date,
+  ingestion_timestamp
+FROM `{project_id}.{silver_dataset}.presupuesto_mef_temporal`;
 
--- ============================================================================
--- Vista: gold.vw_becarios_por_departamento
--- Propósito:
--- Cobertura territorial agregada por departamento.
--- ============================================================================
-
-CREATE OR REPLACE VIEW `your-gcp-project-id.gold.vw_becarios_por_departamento` AS
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_mef_presupuesto_producto` AS
 SELECT
-  departamento,
-  SUM(COALESCE(b18_n, 0)) AS beca18_total,
-  SUM(COALESCE(permanencia_n, 0)) AS permanencia_total,
-  SUM(COALESCE(bicentenario_n, 0)) AS bicentenario_total,
-  SUM(COALESCE(especial_n, 0)) AS especial_total,
-  SUM(COALESCE(ffaa_n, 0)) AS ffaa_total,
-  SUM(COALESCE(vraem_n, 0)) AS vraem_total,
-  SUM(COALESCE(repec_n, 0)) AS repec_total,
-  SUM(COALESCE(internacional_n, 0)) AS internacional_total,
-  SUM(COALESCE(otros_n, 0)) AS otros_total,
-  SUM(
-    COALESCE(b18_n, 0)
-    + COALESCE(permanencia_n, 0)
-    + COALESCE(bicentenario_n, 0)
-    + COALESCE(especial_n, 0)
-    + COALESCE(ffaa_n, 0)
-    + COALESCE(vraem_n, 0)
-    + COALESCE(repec_n, 0)
-    + COALESCE(internacional_n, 0)
-    + COALESCE(otros_n, 0)
-  ) AS becarios_total,
-  COUNT(DISTINCT provincia) AS provincias_reportadas,
-  MAX(extraction_date) AS ultima_fecha_extraccion,
-  MAX(ingestion_timestamp) AS ultima_ingesta
-FROM `your-gcp-project-id.silver.becarios_provincia`
-WHERE UPPER(TRIM(COALESCE(provincia, ''))) <> 'TOTAL'
-GROUP BY
-  departamento;
+  ano,
+  codigo_producto,
+  producto,
+  pia,
+  pim,
+  devengado,
+  avance_porcentaje,
+  SAFE_MULTIPLY(SAFE_DIVIDE(devengado, NULLIF(pim, 0)), 100) AS avance_calculado_pct
+FROM `{project_id}.{silver_dataset}.presupuesto_mef_producto`;
 
--- ============================================================================
--- Vista: gold.vw_notas_por_semestre
--- Propósito:
--- Rendimiento académico agregado por semestre y ciclo.
--- ============================================================================
-
-CREATE OR REPLACE VIEW `your-gcp-project-id.gold.vw_notas_por_semestre` AS
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_mef_presupuesto_actividad` AS
 SELECT
-  semestre,
-  ciclo,
-  COUNT(DISTINCT codigo_becario) AS becarios_con_nota,
-  COUNT(*) AS registros_notas,
-  AVG(nota_promedio) AS nota_promedio,
-  MIN(nota_promedio) AS nota_minima,
-  MAX(nota_promedio) AS nota_maxima,
-  COUNTIF(nota_promedio < 11) AS registros_en_riesgo_academico,
-  SAFE_MULTIPLY(SAFE_DIVIDE(COUNTIF(nota_promedio < 11), COUNT(*)), 100) AS tasa_riesgo_academico_pct,
-  MAX(extraction_date) AS ultima_fecha_extraccion,
-  MAX(ingestion_timestamp) AS ultima_ingesta
-FROM `your-gcp-project-id.silver.notas_becarios`
-GROUP BY
-  semestre,
-  ciclo;
+  ano,
+  codigo_producto,
+  producto,
+  codigo_actividad,
+  actividad,
+  pia,
+  pim,
+  devengado,
+  avance_porcentaje,
+  SAFE_MULTIPLY(SAFE_DIVIDE(devengado, NULLIF(pim, 0)), 100) AS avance_calculado_pct
+FROM `{project_id}.{silver_dataset}.presupuesto_mef_actividad`;
 
--- ============================================================================
--- Vista: gold.vw_desercion_por_convocatoria
--- Propósito:
--- Análisis de pérdida de beca por convocatoria, motivo y territorio.
--- ============================================================================
-
-CREATE OR REPLACE VIEW `your-gcp-project-id.gold.vw_desercion_por_convocatoria` AS
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_mef_presupuesto_generica` AS
 SELECT
-  convocatoria,
-  departamento,
-  motivo_perdida,
-  tipo_ies,
-  sexo,
-  COUNT(*) AS total_perdidas,
-  COUNT(DISTINCT institucion) AS instituciones_reportadas,
-  COUNT(DISTINCT carrera) AS carreras_reportadas,
-  MAX(fecha_resolucion) AS ultima_fecha_resolucion,
-  MAX(extraction_date) AS ultima_fecha_extraccion,
-  MAX(ingestion_timestamp) AS ultima_ingesta
-FROM `your-gcp-project-id.silver.perdida_becas`
-GROUP BY
-  convocatoria,
-  departamento,
-  motivo_perdida,
-  tipo_ies,
-  sexo;
+  ano,
+  codigo_generica,
+  generica,
+  pia,
+  pim,
+  devengado,
+  avance_porcentaje,
+  SAFE_MULTIPLY(SAFE_DIVIDE(devengado, NULLIF(pim, 0)), 100) AS avance_calculado_pct
+FROM `{project_id}.{silver_dataset}.presupuesto_mef_generica`;
 
--- ============================================================================
--- Vista: gold.vw_presupuesto_vs_becas
--- Propósito:
--- Relacionar presupuesto anual con cobertura territorial reportada.
---
--- Nota:
--- Esta vista ofrece una aproximación ejecutiva. La relación exacta entre
--- presupuesto y beneficiarios dependerá de reglas de negocio adicionales,
--- granularidad temporal compatible y definición final de cobertura.
--- ============================================================================
+-- =============================================================================
+-- Gold - Becas vs presupuesto
+-- =============================================================================
 
-CREATE OR REPLACE VIEW `your-gcp-project-id.gold.vw_presupuesto_vs_becas` AS
-WITH presupuesto_anual AS (
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_pronabec_becas_vs_presupuesto_anual` AS
+WITH becas_anuales AS (
+  SELECT
+    ano_convocatoria AS ano,
+    SUM(becas_otorgadas) AS becas_otorgadas_total
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_becas_otorgadas_modalidad_anual`
+  GROUP BY ano_convocatoria
+),
+mef_anual AS (
   SELECT
     ano,
+    SUM(pia) AS pia_total,
     SUM(pim) AS pim_total,
-    SUM(devengado) AS devengado_total,
-    SUM(saldo_no_ejecutado) AS saldo_no_ejecutado_total,
-    SAFE_MULTIPLY(SAFE_DIVIDE(SUM(devengado), NULLIF(SUM(pim), 0)), 100) AS tasa_ejecucion_pct
-  FROM `your-gcp-project-id.silver.presupuesto_mef`
-  GROUP BY
-    ano
-),
-cobertura AS (
-  SELECT
-    SUM(
-      COALESCE(b18_n, 0)
-      + COALESCE(permanencia_n, 0)
-      + COALESCE(bicentenario_n, 0)
-      + COALESCE(especial_n, 0)
-      + COALESCE(ffaa_n, 0)
-      + COALESCE(vraem_n, 0)
-      + COALESCE(repec_n, 0)
-      + COALESCE(internacional_n, 0)
-      + COALESCE(otros_n, 0)
-    ) AS becarios_reportados
-  FROM `your-gcp-project-id.silver.becarios_provincia`
-  WHERE UPPER(TRIM(COALESCE(provincia, ''))) <> 'TOTAL'
+    SUM(devengado) AS devengado_total
+  FROM `{project_id}.{silver_dataset}.presupuesto_mef`
+  GROUP BY ano
 )
 SELECT
-  presupuesto_anual.ano,
-  presupuesto_anual.pim_total,
-  presupuesto_anual.devengado_total,
-  presupuesto_anual.saldo_no_ejecutado_total,
-  presupuesto_anual.tasa_ejecucion_pct,
-  cobertura.becarios_reportados,
-  SAFE_DIVIDE(presupuesto_anual.devengado_total, NULLIF(cobertura.becarios_reportados, 0)) AS devengado_por_becario_referencial,
-  SAFE_DIVIDE(presupuesto_anual.pim_total, NULLIF(cobertura.becarios_reportados, 0)) AS pim_por_becario_referencial
-FROM presupuesto_anual
-CROSS JOIN cobertura;
+  COALESCE(becas_anuales.ano, mef_anual.ano) AS ano,
+  becas_anuales.becas_otorgadas_total,
+  mef_anual.pia_total,
+  mef_anual.pim_total,
+  mef_anual.devengado_total,
+  SAFE_MULTIPLY(SAFE_DIVIDE(mef_anual.devengado_total, NULLIF(mef_anual.pim_total, 0)), 100) AS avance_presupuestal_pct,
+  SAFE_DIVIDE(mef_anual.devengado_total, NULLIF(becas_anuales.becas_otorgadas_total, 0)) AS devengado_por_beca,
+  SAFE_DIVIDE(mef_anual.pim_total, NULLIF(becas_anuales.becas_otorgadas_total, 0)) AS pim_por_beca
+FROM becas_anuales
+FULL OUTER JOIN mef_anual ON becas_anuales.ano = mef_anual.ano;
