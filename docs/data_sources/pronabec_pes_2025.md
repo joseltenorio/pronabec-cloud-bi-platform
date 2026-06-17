@@ -68,3 +68,6 @@ Esta familia de datos agrupa 21 datasets tabulados correspondientes a gráficos,
 * **Datos consolidados:** Al tratarse de porcentajes o agregaciones precalculadas por PRONABEC en el informe original, los valores numéricos de porcentajes pueden venir redondeados.
 * **Tolerancia y Consistencia:** Se debe tener especial cuidado de no sumar directamente los porcentajes a través de diferentes regiones sin sopesar las bases poblacionales si no están disponibles.
 * **Extracción:** La fidelidad de los datos depende directamente del proceso manual de tabulación. En el futuro, este proceso puede automatizarse con un parser de PDF sin alterar la estructura Bronze/Silver aquí definida.
+
+## 7. Evidencia de Validación
+El proceso completo de staging y la ejecución en DirectRunner para la validación estructural se detalla en [pronabec_pes_2025_validation.md](file:///c:/Users/Windows%2011/Desktop/Proyectos/pronabec-cloud-bi-platform/docs/dataflow/pronabec_pes_2025_validation.md).

@@ -12,8 +12,6 @@ import pytest
 from pipelines.dataflow_bronze_to_silver import run
 from pipelines.transforms.pronabec_reports import (
     REPORT_SPECS,
-    DOCUMENT_METADATA_FIELDS,
-    TECHNICAL_METADATA_FIELDS,
     ReportTransformSpec,
     transform_pronabec_report_record,
 )
