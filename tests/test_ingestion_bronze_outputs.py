@@ -228,12 +228,13 @@ def test_gcs_paths_consistency_with_ddl(tmp_path: Path) -> None:
         if "bronze/pronabec/" in relative_path:
             # Format is bronze/pronabec/{dataset}/extraction_date={extraction_date}/data.jsonl
             # Extract dataset name
-            match = re.match(r"bronze/pronabec/([^/]+)/extraction_date=\*/data\.jsonl", relative_path)
+            match = re.match(r"bronze/pronabec/([^/]+)/extraction_date=(\d{4}-\d{2}-\d{2}|\*)/data\.jsonl", relative_path)
             assert match, f"DDL PRONABEC path structure is invalid: {relative_path}"
             dataset_name = match.group(1)
+            ext_date = match.group(2)
 
             # Format the template with wildcards and check match
-            expected = pronabec_norm_tmpl.format(dataset=dataset_name, extraction_date="*")
+            expected = pronabec_norm_tmpl.format(dataset=dataset_name, extraction_date=ext_date)
             assert relative_path == expected, f"DDL path '{relative_path}' mismatch with pipeline.yaml expected '{expected}'"
         elif "bronze/mef/" in relative_path:
             # Format is bronze/mef/<slice>/extraction_date=YYYY-MM-DD/year=*/data.csv
@@ -246,11 +247,12 @@ def test_gcs_paths_consistency_with_ddl(tmp_path: Path) -> None:
             assert relative_path == expected, f"DDL path '{relative_path}' mismatch with expected '{expected}'"
         elif "bronze/pronabec_reports/" in relative_path:
             # Format is bronze/pronabec_reports/{dataset}/extraction_date=*/data.csv
-            match = re.match(r"bronze/pronabec_reports/([^/]+)/extraction_date=\*/data\.csv", relative_path)
+            match = re.match(r"bronze/pronabec_reports/([^/]+)/extraction_date=(\d{4}-\d{2}-\d{2}|\*)/data\.csv", relative_path)
             assert match, f"DDL PRONABEC Reports path structure is invalid: {relative_path}"
             dataset_name = match.group(1)
+            ext_date = match.group(2)
 
-            expected = pipeline_settings["gcs_paths"]["pronabec_reports_bronze_csv"].format(dataset=dataset_name, extraction_date="*")
+            expected = pipeline_settings["gcs_paths"]["pronabec_reports_bronze_csv"].format(dataset=dataset_name, extraction_date=ext_date)
             assert relative_path == expected, f"DDL path '{relative_path}' mismatch with pipeline.yaml expected '{expected}'"
         else:
             pytest.fail(f"Unknown bronze folder in external table DDL: {relative_path}")

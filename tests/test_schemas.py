@@ -158,11 +158,11 @@ def test_bigquery_ddl_generator_writes_bronze_and_silver_sql(tmp_path: Path) -> 
     
     # Validate pronabec_report family generates as CSV external tables
     assert "test-project-id.bronze.pronabec_report_beca18_sexo_anual_raw" in bronze_sql
-    assert "gs://test-bucket-name/bronze/pronabec_reports/report_beca18_sexo_anual/extraction_date=*/data.csv" in bronze_sql
+    assert "gs://test-bucket-name/bronze/pronabec_reports/report_beca18_sexo_anual/extraction_date=2026-06-17/data.csv" in bronze_sql
     assert "test-project-id.bronze.pronabec_report_beca18_universitarios_universidad_anual_raw" in bronze_sql
-    assert "gs://test-bucket-name/bronze/pronabec_reports/report_beca18_universitarios_universidad_anual/extraction_date=*/data.csv" in bronze_sql
+    assert "gs://test-bucket-name/bronze/pronabec_reports/report_beca18_universitarios_universidad_anual/extraction_date=2026-06-17/data.csv" in bronze_sql
     assert "test-project-id.bronze.pronabec_report_beca18_universitarios_carrera_anual_raw" in bronze_sql
-    assert "gs://test-bucket-name/bronze/pronabec_reports/report_beca18_universitarios_carrera_anual/extraction_date=*/data.csv" in bronze_sql
+    assert "gs://test-bucket-name/bronze/pronabec_reports/report_beca18_universitarios_carrera_anual/extraction_date=2026-06-17/data.csv" in bronze_sql
     assert "CREATE OR REPLACE TABLE" in silver_sql
     assert "test-project-id.silver.pronabec_convocatorias" in silver_sql
     assert "vacantes INTEGER" in silver_sql
@@ -471,7 +471,7 @@ def test_mef_silver_schemas_integrity() -> None:
             assert field["mode"] == expected_mode, f"Field '{meta_field}' in {dataset} has mode {field['mode']}, expected {expected_mode}"
 
 
-def test_mef_external_table_wildcard_generation(tmp_path: Path) -> None:
+def test_bronze_external_table_wildcard_generation(tmp_path: Path) -> None:
     output_dir = tmp_path / "generated" / "sql"
 
     subprocess.run(
@@ -507,14 +507,62 @@ def test_mef_external_table_wildcard_generation(tmp_path: Path) -> None:
     # 2. Validar que no exista la URI con doble wildcard para MEF
     assert "extraction_date=*/year=*/data.csv" not in bronze_sql
 
-    # 3. Validar rutas específicas de MEF
+    # 3. Validar que no quede ninguna URI con wildcard de fecha cuando se provee la fecha
+    assert "extraction_date=*" not in bronze_sql
+
+    # 4. Validar rutas específicas de MEF
     assert "gs://test-bucket-name/bronze/mef/presupuesto/extraction_date=2026-06-17/year=*/data.csv" in bronze_sql
+    assert "gs://test-bucket-name/bronze/mef/presupuesto_temporal/extraction_date=2026-06-17/year=*/data.csv" in bronze_sql
 
-    # 4. Validar que PRONABEC API mantiene extraction_date=*/data.jsonl
-    assert "gs://test-bucket-name/bronze/pronabec/notas_becarios/extraction_date=*/data.jsonl" in bronze_sql
+    # 5. Validar rutas específicas de PRONABEC API
+    assert "gs://test-bucket-name/bronze/pronabec/convocatorias/extraction_date=2026-06-17/data.jsonl" in bronze_sql
+    assert "gs://test-bucket-name/bronze/pronabec/ubigeo_postulacion/extraction_date=2026-06-17/data.jsonl" in bronze_sql
 
-    # 5. Validar que pronabec_reports mantiene extraction_date=*/data.csv
-    assert "gs://test-bucket-name/bronze/pronabec_reports/report_beca18_sexo_anual/extraction_date=*/data.csv" in bronze_sql
+    # 6. Validar rutas específicas de PRONABEC reports
+    assert "gs://test-bucket-name/bronze/pronabec_reports/report_beca18_universitarios_carrera_anual/extraction_date=2026-06-17/data.csv" in bronze_sql
+    assert "gs://test-bucket-name/bronze/pronabec_reports/report_beca18_universitarios_universidad_anual/extraction_date=2026-06-17/data.csv" in bronze_sql
+
+
+def test_render_bronze_table_fallback_behavior() -> None:
+    """
+    Valida que al renderizar individualmente sin fecha de extracción:
+    - Las tablas PRONABEC API y PRONABEC reports usen por defecto 'extraction_date=*'.
+    - Las tablas MEF lancen un ValueError por requerir fecha explícita.
+    """
+    from tools.generate_bigquery_ddl import render_bronze_table
+
+    # 1. PRONABEC API
+    api_ddl = render_bronze_table(
+        dataset="notas_becarios",
+        schema=[{"name": "col1", "type": "STRING", "mode": "NULLABLE"}],
+        project_id="test-project",
+        bucket="test-bucket",
+        bronze_extraction_date=None,
+    )
+    assert "gs://test-bucket/bronze/pronabec/notas_becarios/extraction_date=*/data.jsonl" in api_ddl
+
+    # 2. PRONABEC Reports
+    report_ddl = render_bronze_table(
+        dataset="report_beca18_sexo_anual",
+        schema=[{"name": "col1", "type": "STRING", "mode": "NULLABLE"}],
+        project_id="test-project",
+        bucket="test-bucket",
+        bronze_extraction_date=None,
+    )
+    assert "gs://test-bucket/bronze/pronabec_reports/report_beca18_sexo_anual/extraction_date=*/data.csv" in report_ddl
+
+    # 3. MEF
+    import pytest
+    with pytest.raises(ValueError) as excinfo:
+        render_bronze_table(
+            dataset="presupuesto_mef",
+            schema=[{"name": "col1", "type": "STRING", "mode": "NULLABLE"}],
+            project_id="test-project",
+            bucket="test-bucket",
+            bronze_extraction_date=None,
+        )
+    assert "requires --bronze-extraction-date to be BigQuery-compatible" in str(excinfo.value)
+
 
 
 def test_mef_external_table_generation_fails_without_date(tmp_path: Path) -> None:
