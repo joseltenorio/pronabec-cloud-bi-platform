@@ -12,6 +12,7 @@ import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 # Lista de los 21 reportes del Panorama de Estudios Sociales (PES 2025)
 PES_2025_REPORTS = [
@@ -48,6 +49,9 @@ MANUAL_REPORT_SOURCES = {
         "source_document_title": "Beca 18 - cantidad de becarios según universidad de estudio 2012-2026",
         "source_publication_url": "https://www.gob.pe/institucion/pronabec/informes-publicaciones/8170922-beca-18-cantidad-de-becarios-universitarios",
         "extraction_method": "manual_csv",
+        "source_document_file": "8170922-beca-18-cantidad-de-becarios-segun-universidad-de-estudio-2012-2026.pdf",
+        "source_page": "1",
+        "source_table": "1",
     },
     "report_beca18_universitarios_carrera_anual": {
         "filename": "beca18_becarios_universidades_carrera_2012_2026.csv",
@@ -57,6 +61,9 @@ MANUAL_REPORT_SOURCES = {
         "source_document_title": "Beca 18 - cantidad de becarios en universidades según carrera de estudio 2012-2026",
         "source_publication_url": "https://www.gob.pe/institucion/pronabec/informes-publicaciones/8170922-beca-18-cantidad-de-becarios-universitarios",
         "extraction_method": "manual_csv",
+        "source_document_file": "8170922-beca-18-cantidad-de-becarios-en-universidades-segun-carrera-de-estudio-2012-2026.pdf",
+        "source_page": "1",
+        "source_table": "1",
     },
 }
 
@@ -146,6 +153,87 @@ def analyze_csv(file_path: Path) -> tuple[int, int, list[str]]:
     )
 
 
+def stage_csv_with_metadata(
+    source_file: Path,
+    target_csv_path: Path,
+    schema_columns: list[str],
+    config: dict[str, Any],
+) -> tuple[int, int, list[str]]:
+    """
+    Lee el archivo CSV de origen, mapea sus cabeceras a los nombres del esquema Bronze,
+    agrega las columnas de metadatos documentales requeridas por fila y guarda el resultado.
+    """
+    encodings = ["utf-8", "utf-8-sig", "latin-1"]
+    source_rows = []
+    source_headers = []
+
+    # Intentar leer con codificaciones defensivas
+    for encoding in encodings:
+        try:
+            with open(source_file, mode="r", encoding=encoding) as f:
+                # Comprobar si el archivo está vacío
+                first_char = f.read(1)
+                if not first_char:
+                    raise ValueError("El archivo CSV está vacío.")
+                f.seek(0)
+                reader = csv.reader(f)
+                source_headers = [h.strip() for h in next(reader)]
+                source_rows = list(reader)
+                break
+        except UnicodeDecodeError:
+            continue
+    else:
+        raise UnicodeDecodeError(
+            "utf-8", b"", 0, 0, f"No se pudo decodificar el archivo CSV {source_file}."
+        )
+
+    # Mapeo de cabeceras
+    header_mapping = {}
+    for h in source_headers:
+        h_clean = h.strip().lower()
+        if h_clean in ("universidad", "carrera de estudio", "carrera_estudio"):
+            header_mapping[h] = "universidad" if "universidad" in schema_columns else "carrera_estudio"
+        elif h_clean.isdigit():
+            header_mapping[h] = f"anio_{h_clean}"
+        elif h_clean == "2026 (*)":
+            header_mapping[h] = "anio_2026_preliminar"
+        elif h_clean in ("total", "total general"):
+            header_mapping[h] = "total"
+        else:
+            header_mapping[h] = h_clean
+
+    # Escribir el nuevo CSV con las columnas en el orden exacto del esquema
+    with open(target_csv_path, mode="w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(schema_columns)
+
+        for row in source_rows:
+            row_dict = {}
+            for idx, h in enumerate(source_headers):
+                if idx < len(row):
+                    target_col = header_mapping.get(h, h)
+                    row_dict[target_col] = row[idx]
+
+            # Rellenar metadatos documentales
+            for col in schema_columns:
+                if col not in row_dict:
+                    if col in config:
+                        row_dict[col] = config[col]
+                    elif col == "source_page":
+                        row_dict[col] = config.get("source_page", "1")
+                    elif col == "source_table":
+                        row_dict[col] = config.get("source_table", "1")
+                    else:
+                        row_dict[col] = ""
+
+            # Escribir fila mapeada en el orden del esquema
+            new_row = [row_dict.get(col, "") for col in schema_columns]
+            writer.writerow(new_row)
+
+    return len(source_rows), len(schema_columns), schema_columns
+
+
+
 def stage_reports(
     input_dir: str,
     output_dir: str,
@@ -220,17 +308,50 @@ def stage_reports(
         # Crear directorios
         target_dataset_dir.mkdir(parents=True, exist_ok=True)
 
-        # Copia conservadora binaria
-        shutil.copyfile(source_file, target_csv_path)
+        # Verificar si existe esquema Bronze para validar si faltan columnas de metadatos documentales
+        project_root = Path(__file__).resolve().parent.parent
+        schema_path = project_root / "config" / "schemas" / "bronze" / f"{target_key}_schema.json"
 
-        # Analizar el archivo final copiado para los metadatos
-        try:
-            row_count, col_count, columns = analyze_csv(target_csv_path)
-        except Exception as e:
-            # Si falla la lectura, removemos el archivo copiado para no dejar Bronze inconsistente
-            if target_csv_path.exists():
-                target_csv_path.unlink()
-            raise ValueError(f"Error analizando el archivo CSV {source_file}: {str(e)}") from e
+        should_rewrite = False
+        schema_columns = []
+
+        if target_key in ("report_beca18_universitarios_universidad_anual", "report_beca18_universitarios_carrera_anual") and schema_path.exists():
+            try:
+                with open(schema_path, "r", encoding="utf-8") as f:
+                    schema_data = json.load(f)
+                schema_columns = [field["name"] for field in schema_data]
+
+                # Leer cabeceras del CSV de origen para ver si ya contiene "source_document_file"
+                _, _, source_cols = analyze_csv(source_file)
+                if "source_document_file" in schema_columns and "source_document_file" not in source_cols:
+                    should_rewrite = True
+            except Exception as e:
+                print(f"Warning leyendo esquema o CSV para {target_key}: {e}")
+
+        if should_rewrite:
+            try:
+                row_count, col_count, columns = stage_csv_with_metadata(
+                    source_file=source_file,
+                    target_csv_path=target_csv_path,
+                    schema_columns=schema_columns,
+                    config=config,
+                )
+            except Exception as e:
+                if target_csv_path.exists():
+                    target_csv_path.unlink()
+                raise ValueError(f"Error procesando CSV con metadatos {source_file}: {str(e)}") from e
+        else:
+            # Copia conservadora binaria
+            shutil.copyfile(source_file, target_csv_path)
+
+            # Analizar el archivo final copiado para los metadatos
+            try:
+                row_count, col_count, columns = analyze_csv(target_csv_path)
+            except Exception as e:
+                # Si falla la lectura, removemos el archivo copiado para no dejar Bronze inconsistente
+                if target_csv_path.exists():
+                    target_csv_path.unlink()
+                raise ValueError(f"Error analizando el archivo CSV {source_file}: {str(e)}") from e
 
         # Hash SHA-256 reproducible
         sha256 = calculate_sha256(target_csv_path)
