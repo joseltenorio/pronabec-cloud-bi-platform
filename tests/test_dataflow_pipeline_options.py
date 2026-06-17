@@ -43,6 +43,7 @@ def test_dataflow_runner_requires_cloud_config() -> None:
         "--input-format", "csv",
         "--output-table", "test-project:silver.some_table",
         "--runner", "DataflowRunner",
+        "--dry-run",
     ]
     
     # Falta project, region, temp_location, staging_location
@@ -92,6 +93,7 @@ def test_invalid_input_format_raises_error() -> None:
         "--input-format", "parquet",
         "--output-table", "test-project:silver.some_table",
         "--runner", "DirectRunner",
+        "--temp-location", "gs://bucket/temp",
     ]
     args, _ = parse_arguments(argv)
     with pytest.raises(ValueError) as excinfo:
@@ -112,9 +114,35 @@ def test_missing_critical_argument_raises_error() -> None:
         "--input-format", "csv",
         "--output-table", "test-project:silver.some_table",
         "--runner", "DirectRunner",
+        "--temp-location", "gs://bucket/temp",
     ]
     args, _ = parse_arguments(argv)
     with pytest.raises(ValueError) as excinfo:
         validate_arguments(args)
         
     assert "El argumento crítico --source-system es requerido." in str(excinfo.value)
+
+
+def test_build_pipeline_options_propagates_temp_location() -> None:
+    """
+    Valida que build_pipeline_options propague temp_location en DirectRunner.
+    """
+    from pipelines.dataflow_bronze_to_silver import build_pipeline_options
+    
+    argv = [
+        "--source-system", "pronabec_reports",
+        "--source-dataset", "report_beca18_universitarios_universidad_anual",
+        "--extraction-date", "2026-06-15",
+        "--input-path", "tmp/data.csv",
+        "--input-format", "csv",
+        "--output-table", "test-project:silver.some_table",
+        "--runner", "DirectRunner",
+        "--temp-location", "gs://test-bucket/temp",
+    ]
+    args, pipeline_args = parse_arguments(argv)
+    options = build_pipeline_options(args, pipeline_args)
+    
+    # Extraer diccionario de opciones
+    opt_dict = options.get_all_options()
+    assert opt_dict.get("temp_location") == "gs://test-bucket/temp"
+

@@ -249,6 +249,7 @@ def test_summary_no_dry_run_calls_mocked_bigquery(
         "--input-format", "jsonl",
         "--runner", "DirectRunner",
         "--output-table", "project-123:silver.pronabec_convocatorias",
+        "--temp-location", "gs://test-bucket/temp",
         "--summary-output-path", str(summary_file),
     ])
 

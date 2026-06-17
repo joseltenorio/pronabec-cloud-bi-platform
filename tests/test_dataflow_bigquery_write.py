@@ -91,6 +91,7 @@ def test_build_bigquery_write_transform_uses_validated_config(monkeypatch: pytes
         output_table="test-project:silver.table",
         write_disposition="WRITE_TRUNCATE",
         create_disposition="CREATE_IF_NEEDED",
+        custom_gcs_temp_location="gs://test-bucket/temp",
     )
     sink = build_bigquery_write_transform(config)
 
@@ -99,7 +100,24 @@ def test_build_bigquery_write_transform_uses_validated_config(monkeypatch: pytes
         "table": "test-project:silver.table",
         "write_disposition": "WRITE_TRUNCATE",
         "create_disposition": "CREATE_IF_NEEDED",
+        "custom_gcs_temp_location": "gs://test-bucket/temp",
     }
+
+
+def test_bigquery_write_config_preserves_temp_location() -> None:
+    config = build_bigquery_write_config(
+        "test-project:silver.table",
+        write_disposition="WRITE_TRUNCATE",
+        create_disposition="CREATE_IF_NEEDED",
+        custom_gcs_temp_location="gs://my-bucket/tmp",
+    )
+    assert config.custom_gcs_temp_location == "gs://my-bucket/tmp"
+
+    with pytest.raises(ValueError, match="Formato invalido de ubicacion temporal GCS"):
+        build_bigquery_write_config(
+            "test-project:silver.table",
+            custom_gcs_temp_location="invalid-non-gcs-path",
+        )
 
 
 def test_validate_arguments_allows_dry_run_without_output_table() -> None:
@@ -146,6 +164,39 @@ def test_validate_arguments_requires_output_table_when_not_dry_run() -> None:
 
     with pytest.raises(ValueError, match="output-table"):
         validate_arguments(args)
+
+
+def test_validate_arguments_requires_temp_location_when_not_dry_run() -> None:
+    # Caso 1: dry_run=False, output_table presente, pero temp_location ausente -> debe fallar
+    args, _ = parse_arguments(
+        [
+            "--source-system", "pronabec",
+            "--source-dataset", "convocatorias",
+            "--extraction-date", "2026-06-15",
+            "--input-path", "tmp/data.csv",
+            "--input-format", "csv",
+            "--output-table", "test-project:silver.pronabec_convocatorias",
+            "--runner", "DirectRunner",
+        ]
+    )
+    with pytest.raises(ValueError, match="temp-location es requerido"):
+        validate_arguments(args)
+
+    # Caso 2: dry_run=False, output_table presente y temp_location presente -> debe pasar
+    args_ok, _ = parse_arguments(
+        [
+            "--source-system", "pronabec",
+            "--source-dataset", "convocatorias",
+            "--extraction-date", "2026-06-15",
+            "--input-path", "tmp/data.csv",
+            "--input-format", "csv",
+            "--output-table", "test-project:silver.pronabec_convocatorias",
+            "--temp-location", "gs://test-bucket/temp",
+            "--runner", "DirectRunner",
+        ]
+    )
+    validate_arguments(args_ok)
+    assert args_ok.temp_location == "gs://test-bucket/temp"
 
 
 def test_dry_run_skips_bigquery_sink(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -219,6 +270,8 @@ def test_no_dry_run_configures_bigquery_sink(
             "csv",
             "--output-table",
             "test-project:silver.pronabec_convocatorias",
+            "--temp-location",
+            "gs://test-bucket/temp",
             "--write-disposition",
             "WRITE_TRUNCATE",
             "--create-disposition",
@@ -234,6 +287,7 @@ def test_no_dry_run_configures_bigquery_sink(
     assert config.output_table == "test-project:silver.pronabec_convocatorias"
     assert config.write_disposition == "WRITE_TRUNCATE"
     assert config.create_disposition == "CREATE_IF_NEEDED"
+    assert config.custom_gcs_temp_location == "gs://test-bucket/temp"
 
 
 @pytest.mark.parametrize(
