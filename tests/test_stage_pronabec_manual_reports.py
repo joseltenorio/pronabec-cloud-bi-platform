@@ -180,6 +180,8 @@ def test_stage_all_reports_some_missing(mock_input_dir: Path, mock_output_dir: P
     source_file = mock_input_dir / "beca18_becarios_universidad_2012_2026.csv"
     source_file.write_text(csv_content, encoding="utf-8")
 
+    from tools.stage_pronabec_manual_reports import MANUAL_REPORT_SOURCES
+
     staged, skipped, missing = stage_reports(
         input_dir=str(mock_input_dir),
         output_dir=str(mock_output_dir),
@@ -188,7 +190,7 @@ def test_stage_all_reports_some_missing(mock_input_dir: Path, mock_output_dir: P
 
     assert staged == 1
     assert skipped == 0
-    assert missing == 1
+    assert missing == len(MANUAL_REPORT_SOURCES) - 1
 
 
 def test_report_name_filter(mock_input_dir: Path, mock_output_dir: Path) -> None:
@@ -427,4 +429,104 @@ def test_stage_pes_2025_non_strict_tolerates_missing(mock_input_dir: Path, mock_
 
     assert staged == 1
     assert missing == 20  # Los otros 20 faltan y se omiten sin fallar
+
+
+def test_stage_all_reports_success_joint(mock_input_dir: Path, mock_output_dir: Path) -> None:
+    """
+    Valida que al ejecutar sin filtros (sin report_name ni source_subset),
+    cuando todos los archivos fuente de ambas subfamilias (PES 2025 y universitarios)
+    están presentes, se procesan los 23 reportes completos con éxito.
+    """
+    from tools.stage_pronabec_manual_reports import MANUAL_REPORT_SOURCES
+
+    # Crear mock files para cada uno de los reportes en el registry
+    for report_id, config in MANUAL_REPORT_SOURCES.items():
+        if "source_subset" in config and config["source_subset"] == "pes_2025":
+            # Los PES 2025 ya contienen metadatos en su CSV de origen
+            csv_content = (
+                "modalidad,ano_convocatoria,becas_otorgadas,source_document_file,"
+                "source_document_title,source_page,source_figure,extraction_method\n"
+                "ORDINARIA,2012,3973,doc.pdf,title,7,1,manual_csv\n"
+            )
+        else:
+            # Los universitarios se reescriben a Bronze con metadatos
+            csv_content = (
+                "Universidad,2012,Total\n"
+                "UNIVERSIDAD NACIONAL,1,1\n"
+            )
+
+        file_path = mock_input_dir / config["filename"]
+        file_path.write_text(csv_content, encoding="utf-8")
+
+    staged, skipped, missing = stage_reports(
+        input_dir=str(mock_input_dir),
+        output_dir=str(mock_output_dir),
+        extraction_date="2026-06-17",
+        strict=True,
+    )
+
+    assert staged == len(MANUAL_REPORT_SOURCES)
+    assert skipped == 0
+    assert missing == 0
+
+    # Validar que los 23 datasets tengan sus directorios y archivos generados
+    for report_id in MANUAL_REPORT_SOURCES:
+        path = mock_output_dir / report_id / "extraction_date=2026-06-17"
+        assert (path / "data.csv").exists()
+        assert (path / "extraction_metadata.json").exists()
+
+
+def test_stage_subset_filtering(mock_input_dir: Path, mock_output_dir: Path) -> None:
+    """
+    Valida que al pasar --source-subset se filtren adecuadamente los reportes.
+    - pes_2025 debe stagear 21 reportes.
+    - beca18_universitarios_2012_2026 debe stagear 2 reportes.
+    """
+    from tools.stage_pronabec_manual_reports import MANUAL_REPORT_SOURCES
+
+    # Crear mock files para todos los 23 reportes registrados
+    for report_id, config in MANUAL_REPORT_SOURCES.items():
+        if "source_subset" in config and config["source_subset"] == "pes_2025":
+            csv_content = (
+                "modalidad,ano_convocatoria,becas_otorgadas,source_document_file,"
+                "source_document_title,source_page,source_figure,extraction_method\n"
+                "ORDINARIA,2012,3973,doc.pdf,title,7,1,manual_csv\n"
+            )
+        else:
+            csv_content = (
+                "Universidad,2012,Total\n"
+                "UNIVERSIDAD NACIONAL,1,1\n"
+            )
+        file_path = mock_input_dir / config["filename"]
+        file_path.write_text(csv_content, encoding="utf-8")
+
+    # 1. Probar filtrado por pes_2025
+    out_pes = mock_output_dir / "pes_2025"
+    out_pes.mkdir()
+    staged_pes, skipped_pes, missing_pes = stage_reports(
+        input_dir=str(mock_input_dir),
+        output_dir=str(out_pes),
+        extraction_date="2026-06-17",
+        source_subset="pes_2025",
+        strict=True,
+    )
+    assert staged_pes == 21
+    assert skipped_pes == 0
+    assert missing_pes == 0
+
+    # 2. Probar filtrado por beca18_universitarios_2012_2026
+    out_uni = mock_output_dir / "uni"
+    out_uni.mkdir()
+    staged_uni, skipped_uni, missing_uni = stage_reports(
+        input_dir=str(mock_input_dir),
+        output_dir=str(out_uni),
+        extraction_date="2026-06-17",
+        source_subset="beca18_universitarios_2012_2026",
+        strict=True,
+    )
+    assert staged_uni == 2
+    assert skipped_uni == 0
+    assert missing_uni == 0
+
+
 
