@@ -52,6 +52,7 @@ MANUAL_REPORT_SOURCES = {
         "source_document_file": "8170922-beca-18-cantidad-de-becarios-segun-universidad-de-estudio-2012-2026.pdf",
         "source_page": "1",
         "source_table": "1",
+        "source_subset": "beca18_universitarios_2012_2026",
     },
     "report_beca18_universitarios_carrera_anual": {
         "filename": "beca18_becarios_universidades_carrera_2012_2026.csv",
@@ -64,6 +65,7 @@ MANUAL_REPORT_SOURCES = {
         "source_document_file": "8170922-beca-18-cantidad-de-becarios-en-universidades-segun-carrera-de-estudio-2012-2026.pdf",
         "source_page": "1",
         "source_table": "1",
+        "source_subset": "beca18_universitarios_2012_2026",
     },
 }
 
@@ -271,10 +273,8 @@ def stage_reports(
                 if v.get("source_subset") == source_subset:
                     targets[k] = v
             else:
-                # Si no se define subset, solo se stagean los que no pertenecen a ningún subset
-                # para mantener compatibilidad con las pruebas existentes.
-                if v.get("source_subset") is None:
-                    targets[k] = v
+                # Si no se define subset ni report_name, se procesan todos los reportes
+                targets[k] = v
 
     for target_key, config in targets.items():
         possible_names = [config["filename"]] + config.get("alternative_filenames", [])
