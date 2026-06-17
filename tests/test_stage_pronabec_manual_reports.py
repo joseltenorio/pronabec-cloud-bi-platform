@@ -287,3 +287,96 @@ def test_empty_csv_raises_error(mock_input_dir: Path, mock_output_dir: Path) -> 
             report_name="report_beca18_universitarios_universidad_anual",
         )
     assert "El archivo CSV está vacío" in str(excinfo.value)
+
+
+def test_stage_pes_2025_metadata_and_mapping(mock_input_dir: Path, mock_output_dir: Path) -> None:
+    """
+    Valida el staging de un reporte de PES 2025 con metadatos específicos.
+    """
+    csv_content = "\ufeffAño,Modalidad,Becas\n2025,Beca 18,150\n"
+    source_file = mock_input_dir / "pronabec_report_beca18_becas_otorgadas_modalidad_anual.csv"
+    source_file.write_text(csv_content, encoding="utf-8-sig")
+
+    # Copiar un PDF simulado
+    pdf_file = mock_input_dir / "7219175-panorama-de-estudios-sociales-pronabec.pdf"
+    pdf_file.write_text("dummy PDF")
+
+    staged, skipped, missing = stage_reports(
+        input_dir=str(mock_input_dir),
+        output_dir=str(mock_output_dir),
+        extraction_date="2026-06-15",
+        report_name="report_beca18_becas_otorgadas_modalidad_anual",
+        strict=True,
+    )
+
+    assert staged == 1
+    assert skipped == 0
+    assert missing == 0
+
+    target_dir = (
+        mock_output_dir
+        / "report_beca18_becas_otorgadas_modalidad_anual"
+        / "extraction_date=2026-06-15"
+    )
+    target_csv = target_dir / "data.csv"
+    target_meta = target_dir / "extraction_metadata.json"
+
+    assert target_csv.exists()
+    assert target_meta.exists()
+
+    # Validar conservación de BOM y contenido
+    assert target_csv.read_text(encoding="utf-8-sig") == csv_content
+
+    # Validar metadatos requeridos de PES 2025
+    with open(target_meta, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+
+    assert meta["source_system"] == "pronabec_reports"
+    assert meta["source_dataset"] == "report_beca18_becas_otorgadas_modalidad_anual"
+    assert meta["source_subset"] == "pes_2025"
+    assert meta["source_document_file"] == "7219175-panorama-de-estudios-sociales-pronabec.pdf"
+    assert meta["records_read"] == 1
+    assert meta["records_written"] == 1
+    assert "file_sha256" in meta
+    assert "ingestion_timestamp" in meta
+
+
+def test_stage_pes_2025_strict_raises_error_if_any_missing(mock_input_dir: Path, mock_output_dir: Path) -> None:
+    """
+    Valida que al ejecutarse en modo estricto para pes_2025, si falta algún CSV obligatorio,
+    se lance FileNotFoundError.
+    """
+    # Solo creamos uno de los 21
+    source_file = mock_input_dir / "pronabec_report_beca18_becas_otorgadas_modalidad_anual.csv"
+    source_file.write_text("Año,Modalidad,Becas\n2025,Beca 18,100\n", encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError) as excinfo:
+        stage_reports(
+            input_dir=str(mock_input_dir),
+            output_dir=str(mock_output_dir),
+            extraction_date="2026-06-15",
+            source_subset="pes_2025",
+            strict=True,
+        )
+    assert "No se encontró el archivo fuente para el reporte" in str(excinfo.value)
+
+
+def test_stage_pes_2025_non_strict_tolerates_missing(mock_input_dir: Path, mock_output_dir: Path) -> None:
+    """
+    Valida que en modo no estricto para pes_2025, tolere archivos faltantes incrementando missing_count.
+    """
+    # Solo creamos uno de los 21
+    source_file = mock_input_dir / "pronabec_report_beca18_becas_otorgadas_modalidad_anual.csv"
+    source_file.write_text("Año,Modalidad,Becas\n2025,Beca 18,100\n", encoding="utf-8")
+
+    staged, skipped, missing = stage_reports(
+        input_dir=str(mock_input_dir),
+        output_dir=str(mock_output_dir),
+        extraction_date="2026-06-15",
+        source_subset="pes_2025",
+        strict=False,
+    )
+
+    assert staged == 1
+    assert missing == 20  # Los otros 20 faltan y se omiten sin fallar
+

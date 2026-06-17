@@ -13,6 +13,31 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Lista de los 21 reportes del Panorama de Estudios Sociales (PES 2025)
+PES_2025_REPORTS = [
+    "report_beca18_autoidentificacion_etnica_modalidad_2025",
+    "report_beca18_becas_otorgadas_modalidad_anual",
+    "report_beca18_colegio_gestion_2025",
+    "report_beca18_enp_promedio_caracteristica_2025",
+    "report_beca18_enp_promedio_region_2025",
+    "report_beca18_lengua_materna_modalidad_2025",
+    "report_beca18_migracion_region_acumulada",
+    "report_beca18_migracion_region_anual",
+    "report_beca18_no_continuaria_sin_beca_caracteristica_2025",
+    "report_beca18_padres_nivel_educativo_2025",
+    "report_beca18_periodo_ingreso_ies_genero_2025",
+    "report_beca18_preparacion_ies_meses_caracteristica_2025",
+    "report_beca18_preparacion_ies_tipo_2025",
+    "report_beca18_primera_generacion_region",
+    "report_beca18_razones_eleccion_carrera_gestion_ies_2025",
+    "report_beca18_razones_eleccion_carrera_sexo_2025",
+    "report_beca18_razones_eleccion_ies_gestion_2025",
+    "report_beca18_region_postulacion_2025",
+    "report_beca18_region_postulacion_acumulada",
+    "report_beca18_region_postulacion_anual",
+    "report_beca18_sexo_anual",
+]
+
 # Mapeo de reportes manuales soportados
 MANUAL_REPORT_SOURCES = {
     "report_beca18_universitarios_universidad_anual": {
@@ -34,6 +59,20 @@ MANUAL_REPORT_SOURCES = {
         "extraction_method": "manual_csv",
     },
 }
+
+# Agregar dinámicamente los reportes PES 2025 al mapeo
+for report_id in PES_2025_REPORTS:
+    MANUAL_REPORT_SOURCES[report_id] = {
+        "filename": f"pronabec_{report_id}.csv",
+        "alternative_filenames": [
+            f"{report_id}.csv"
+        ],
+        "source_document_title": f"Panorama de Estudios Sociales - Beca 18 ({report_id})",
+        "source_document_file": "7219175-panorama-de-estudios-sociales-pronabec.pdf",
+        "source_publication_url": None,
+        "extraction_method": "manual_csv",
+        "source_subset": "pes_2025",
+    }
 
 
 def validate_date(date_str: str) -> None:
@@ -113,6 +152,8 @@ def stage_reports(
     extraction_date: str,
     report_name: str | None = None,
     overwrite: bool = False,
+    source_subset: str | None = None,
+    strict: bool = False,
 ) -> tuple[int, int, int]:
     """
     Ejecuta el staging de los reportes manuales copiándolos a la carpeta de salida
@@ -130,21 +171,29 @@ def stage_reports(
     skipped_count = 0
     missing_count = 0
 
-    # Filtrar reportes según parámetro
+    # Filtrar reportes según parámetro y subconjunto
     targets = {}
     if report_name:
         if report_name not in MANUAL_REPORT_SOURCES:
             raise ValueError(f"Reporte desconocido o no soportado: {report_name}")
         targets[report_name] = MANUAL_REPORT_SOURCES[report_name]
     else:
-        targets = MANUAL_REPORT_SOURCES
+        for k, v in MANUAL_REPORT_SOURCES.items():
+            if source_subset:
+                if v.get("source_subset") == source_subset:
+                    targets[k] = v
+            else:
+                # Si no se define subset, solo se stagean los que no pertenecen a ningún subset
+                # para mantener compatibilidad con las pruebas existentes.
+                if v.get("source_subset") is None:
+                    targets[k] = v
 
     for target_key, config in targets.items():
         possible_names = [config["filename"]] + config.get("alternative_filenames", [])
         source_file = find_file_recursively(input_path, possible_names)
 
         if not source_file:
-            if report_name:
+            if report_name or strict:
                 raise FileNotFoundError(
                     f"No se encontró el archivo fuente para el reporte '{target_key}' "
                     f"bajo la ruta '{input_dir}' (buscando {possible_names})."
@@ -160,7 +209,7 @@ def stage_reports(
 
         # Validar sobreescritura
         if target_csv_path.exists() and not overwrite:
-            if report_name:
+            if report_name or strict:
                 raise FileExistsError(
                     f"El archivo destino ya existe y no se especificó --overwrite: {target_csv_path}"
                 )
@@ -185,6 +234,7 @@ def stage_reports(
 
         # Hash SHA-256 reproducible
         sha256 = calculate_sha256(target_csv_path)
+        staging_time = datetime.now(timezone.utc).isoformat()
 
         # Metadatos de extracción
         metadata = {
@@ -195,15 +245,27 @@ def stage_reports(
             "input_path": str(source_file.resolve()),
             "output_path": str(target_csv_path.resolve()),
             "extraction_date": extraction_date,
-            "staging_timestamp": datetime.now(timezone.utc).isoformat(),
+            "staging_timestamp": staging_time,
+            "ingestion_timestamp": staging_time,
+            "staged_at": staging_time,
             "extraction_method": config["extraction_method"],
             "source_document_title": config["source_document_title"],
             "source_publication_url": config.get("source_publication_url"),
             "row_count": row_count,
+            "records_read": row_count,
+            "records_written": row_count,
             "column_count": col_count,
             "columns": columns,
             "content_sha256": sha256,
+            "file_sha256": sha256,
         }
+
+        # Campos adicionales del subset
+        if "source_subset" in config:
+            metadata["source_subset"] = config["source_subset"]
+            metadata["source_file"] = source_file.name
+        if "source_document_file" in config:
+            metadata["source_document_file"] = config["source_document_file"]
 
         # Guardar metadatos en JSON formateado
         with open(target_metadata_path, "w", encoding="utf-8") as meta_f:
@@ -246,9 +308,19 @@ def main() -> None:
         help="Opcional. Nombre de un reporte específico a stagear.",
     )
     parser.add_argument(
+        "--source-subset",
+        default=None,
+        help="Opcional. Filtrar por un subconjunto específico (ej. pes_2025).",
+    )
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="Opcional. Sobrescribe archivos existentes en la carpeta de destino.",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Opcional. Lanza un error si no se encuentra alguno de los reportes esperados.",
     )
 
     args = parser.parse_args()
@@ -260,6 +332,8 @@ def main() -> None:
             extraction_date=args.extraction_date,
             report_name=args.report_name,
             overwrite=args.overwrite,
+            source_subset=args.source_subset,
+            strict=args.strict,
         )
         print("\nStaging finalizado:")
         print(f"Reports staged: {staged}")
