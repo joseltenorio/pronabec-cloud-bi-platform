@@ -186,9 +186,7 @@ def test_bigquery_ddl_generator_writes_bronze_and_silver_sql(tmp_path: Path) -> 
     rejected_silver_tables = [
         "presupuesto_mef_fuente",
         "presupuesto_mef_rubro",
-        "presupuesto_mef_departamento",
-        "presupuesto_mef_categoria",
-        "presupuesto_mef_subgenerica"
+        "presupuesto_mef_departamento"
     ]
     for table in rejected_silver_tables:
         assert f"silver.{table}" not in silver_sql
@@ -365,9 +363,7 @@ def test_mef_silver_schemas_integrity() -> None:
     rejected_datasets = [
         "presupuesto_mef_fuente",
         "presupuesto_mef_rubro",
-        "presupuesto_mef_departamento",
-        "presupuesto_mef_categoria",
-        "presupuesto_mef_subgenerica"
+        "presupuesto_mef_departamento"
     ]
     for dataset in rejected_datasets:
         schema_path = SILVER_SCHEMAS_DIR / f"{dataset}_schema.json"

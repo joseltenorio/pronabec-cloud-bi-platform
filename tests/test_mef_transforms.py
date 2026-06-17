@@ -341,8 +341,6 @@ def test_specs_cover_only_approved_silver_datasets() -> None:
         "presupuesto_fuente",
         "presupuesto_rubro",
         "presupuesto_departamento",
-        "presupuesto_categoria",
-        "presupuesto_subgenerica",
     }
 
     assert unsupported.isdisjoint(MEF_SPECS)
