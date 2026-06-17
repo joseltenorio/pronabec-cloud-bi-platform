@@ -25,6 +25,7 @@ class BigQueryWriteConfig:
     output_table: str
     write_disposition: str = "WRITE_APPEND"
     create_disposition: str = "CREATE_NEVER"
+    custom_gcs_temp_location: str | None = None
 
 
 def validate_bigquery_table_reference(output_table: str | None) -> str:
@@ -61,9 +62,10 @@ def validate_bigquery_table_reference(output_table: str | None) -> str:
 
 def validate_write_disposition(value: str | None) -> str:
     """Validate Beam BigQuery write disposition."""
+    allowed = {"WRITE_APPEND", "WRITE_TRUNCATE", "WRITE_EMPTY"}
     normalized = _validate_enum_value(
         value=value,
-        allowed_values=VALID_WRITE_DISPOSITIONS,
+        allowed_values=allowed,
         default="WRITE_APPEND",
         argument_name="--write-disposition",
     )
@@ -72,12 +74,27 @@ def validate_write_disposition(value: str | None) -> str:
 
 def validate_create_disposition(value: str | None) -> str:
     """Validate Beam BigQuery create disposition."""
+    allowed = {"CREATE_NEVER", "CREATE_IF_NEEDED"}
     normalized = _validate_enum_value(
         value=value,
-        allowed_values=VALID_CREATE_DISPOSITIONS,
+        allowed_values=allowed,
         default="CREATE_NEVER",
         argument_name="--create-disposition",
     )
+    return normalized
+
+
+def validate_gcs_temp_location(value: str | None) -> str | None:
+    """Validate a GCS temp location URI."""
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    if not normalized.startswith("gs://"):
+        raise ValueError(
+            f"Formato invalido de ubicacion temporal GCS: '{value}'. Debe empezar con 'gs://'."
+        )
     return normalized
 
 
@@ -85,12 +102,14 @@ def build_bigquery_write_config(
     output_table: str | None,
     write_disposition: str | None = None,
     create_disposition: str | None = None,
+    custom_gcs_temp_location: str | None = None,
 ) -> BigQueryWriteConfig:
     """Return a validated sink configuration for BigQuery writes."""
     return BigQueryWriteConfig(
         output_table=validate_bigquery_table_reference(output_table),
         write_disposition=validate_write_disposition(write_disposition),
         create_disposition=validate_create_disposition(create_disposition),
+        custom_gcs_temp_location=validate_gcs_temp_location(custom_gcs_temp_location),
     )
 
 
@@ -100,6 +119,7 @@ def build_bigquery_write_transform(config: BigQueryWriteConfig) -> WriteToBigQue
         table=config.output_table,
         write_disposition=config.write_disposition,
         create_disposition=config.create_disposition,
+        custom_gcs_temp_location=config.custom_gcs_temp_location,
     )
 
 

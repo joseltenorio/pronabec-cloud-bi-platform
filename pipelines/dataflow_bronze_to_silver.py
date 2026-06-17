@@ -8,6 +8,7 @@ import argparse
 import csv
 import io
 import json
+import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -358,16 +359,22 @@ def validate_arguments(args: argparse.Namespace) -> None:
             f"Formato de entrada inválido: {args.input_format}. Debe ser 'csv' o 'jsonl'."
         )
 
-    if not args.dry_run and not args.output_table:
-        raise ValueError(
-            "El argumento --output-table es requerido cuando --dry-run no esta activo."
-        )
+    if not args.dry_run:
+        if not args.output_table:
+            raise ValueError(
+                "El argumento --output-table es requerido cuando --dry-run no esta activo."
+            )
+        if not args.temp_location or not str(args.temp_location).strip():
+            raise ValueError(
+                "El argumento --temp-location es requerido cuando --dry-run no está activo y se escribe en BigQuery."
+            )
 
     if args.output_table:
         build_bigquery_write_config(
             args.output_table,
             write_disposition=args.write_disposition,
             create_disposition=args.create_disposition,
+            custom_gcs_temp_location=args.temp_location,
         )
 
     # 3. Validar runner
@@ -405,11 +412,22 @@ def build_pipeline_options(
     options_dict = {
         "runner": args.runner,
     }
+    if args.temp_location:
+        options_dict["temp_location"] = args.temp_location
+
+    project_id = args.project
+    if not project_id and args.output_table:
+        try:
+            project_id = args.output_table.split(":")[0]
+        except Exception:
+            pass
+
+    if project_id:
+        options_dict["project"] = project_id
+
     if args.runner == "DataflowRunner":
         options_dict.update({
-            "project": args.project,
             "region": args.region,
-            "temp_location": args.temp_location,
             "staging_location": args.staging_location,
         })
 
@@ -496,6 +514,16 @@ def run(argv: list[str] | None = None) -> None:
     # Intentar parsear argumentos de entrada de forma segura
     try:
         args, pipeline_args = parse_arguments(argv)
+        # Asegurar que el ID de proyecto esté en el entorno para DirectRunner
+        project_id = args.project
+        if not project_id and args.output_table:
+            try:
+                if ":" in args.output_table:
+                    project_id = args.output_table.split(":")[0]
+            except Exception:
+                pass
+        if project_id:
+            os.environ["GOOGLE_CLOUD_PROJECT"] = project_id
     except Exception as e:
         # En caso de fallo grave de parseo, registrar estado FAILED
         summary = {
@@ -619,6 +647,7 @@ def run(argv: list[str] | None = None) -> None:
                 args.output_table,
                 write_disposition=args.write_disposition,
                 create_disposition=args.create_disposition,
+                custom_gcs_temp_location=args.temp_location,
             )
             log_event(
                 logger,
@@ -627,6 +656,7 @@ def run(argv: list[str] | None = None) -> None:
                 output_table=bq_config.output_table,
                 write_disposition=bq_config.write_disposition,
                 create_disposition=bq_config.create_disposition,
+                custom_gcs_temp_location=bq_config.custom_gcs_temp_location,
             )
             (
                 transformed
