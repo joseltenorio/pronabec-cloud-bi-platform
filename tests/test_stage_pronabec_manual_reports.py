@@ -64,10 +64,40 @@ def test_stage_university_report_success(mock_input_dir: Path, mock_output_dir: 
     assert target_csv.exists()
     assert target_meta.exists()
 
-    # Validar contenido idéntico
-    assert target_csv.read_text(encoding="utf-8") == csv_content
+    # Validar contenido mapeado al contrato Bronze
+    import csv
+    with open(target_csv, "r", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        headers = next(reader)
+        rows = list(reader)
 
-    # Validar metadatos
+    # Validar cabeceras esperadas según esquema Bronze (formato ancho + metadata)
+    assert "universidad" in headers
+    assert "anio_2012" in headers
+    assert "anio_2013" in headers
+    assert "anio_2026_preliminar" in headers
+    assert "total" in headers
+    assert "source_document_file" in headers
+    assert "source_document_title" in headers
+    assert "extraction_method" in headers
+
+    # Validar que se conserva el formato ancho y el número de filas (no se hace unpivot)
+    assert len(rows) == 2
+
+    # Validar valores preservados
+    first_row = dict(zip(headers, rows[0]))
+    assert first_row["universidad"] == "UNIVERSIDAD NACIONAL"
+    assert first_row["anio_2012"] == "1"
+    assert first_row["anio_2013"] == "2"
+    assert first_row["anio_2026_preliminar"] == "3"
+    assert first_row["total"] == "6"
+
+    # Validar metadata documental presente por fila
+    assert first_row["source_document_file"] == "8170922-beca-18-cantidad-de-becarios-segun-universidad-de-estudio-2012-2026.pdf"
+    assert first_row["source_document_title"] == "Beca 18 - cantidad de becarios según universidad de estudio 2012-2026"
+    assert first_row["extraction_method"] == "manual_csv"
+
+    # Validar metadatos en extraction_metadata.json
     with open(target_meta, "r", encoding="utf-8") as f:
         metadata = json.load(f)
 
@@ -78,10 +108,6 @@ def test_stage_university_report_success(mock_input_dir: Path, mock_output_dir: 
     assert metadata["extraction_date"] == "2026-06-15"
     assert metadata["extraction_method"] == "manual_csv"
     assert metadata["row_count"] == 2
-    assert metadata["column_count"] == 5
-    assert metadata["columns"] == ["Universidad", "2012", "2013", "2026 (*)", "Total"]
-    assert "content_sha256" in metadata
-    assert "staging_timestamp" in metadata
 
 
 def test_stage_career_report_success_recursive(mock_input_dir: Path, mock_output_dir: Path) -> None:
@@ -119,7 +145,29 @@ def test_stage_career_report_success_recursive(mock_input_dir: Path, mock_output
     )
     target_csv = target_dir / "data.csv"
     assert target_csv.exists()
-    assert target_csv.read_text(encoding="utf-8") == csv_content
+
+    # Validar contenido mapeado al contrato Bronze
+    import csv
+    with open(target_csv, "r", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        headers = next(reader)
+        rows = list(reader)
+
+    # Validar estructura y preservación de formato ancho
+    assert "carrera_estudio" in headers
+    assert "anio_2012" in headers
+    assert "anio_2026_preliminar" in headers
+    assert "total" in headers
+    assert "source_document_file" in headers
+
+    assert len(rows) == 2
+
+    first_row = dict(zip(headers, rows[0]))
+    assert first_row["carrera_estudio"] == "INGENIERÍA DE SISTEMAS"
+    assert first_row["anio_2012"] == "-"
+    assert first_row["anio_2026_preliminar"] == "5"
+    assert first_row["total"] == "5"
+    assert first_row["source_document_file"] == "8170922-beca-18-cantidad-de-becarios-en-universidades-segun-carrera-de-estudio-2012-2026.pdf"
 
 
 def test_stage_all_reports_some_missing(mock_input_dir: Path, mock_output_dir: Path) -> None:
