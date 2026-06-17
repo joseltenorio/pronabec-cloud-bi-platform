@@ -145,38 +145,22 @@ OPTIONS (
 
 CREATE OR REPLACE TABLE `your-gcp-project-id.audit.data_quality_results`
 (
-  quality_check_id STRING OPTIONS(description = "Identificador único del resultado de calidad."),
-  run_id STRING OPTIONS(description = "Identificador de la ejecución general del pipeline."),
-  pipeline_name STRING OPTIONS(description = "Nombre lógico del pipeline."),
-  environment STRING OPTIONS(description = "Ambiente de ejecución."),
-
-  check_name STRING OPTIONS(description = "Nombre de la validación de calidad."),
-  check_category STRING OPTIONS(description = "Categoría del check: completeness, uniqueness, validity, consistency, freshness, volume."),
-  check_severity STRING OPTIONS(description = "Severidad esperada: INFO, WARNING, ERROR."),
-  source_dataset STRING OPTIONS(description = "Dataset evaluado."),
+  quality_run_id STRING OPTIONS(description = "Identificador único de la corrida de calidad."),
+  pipeline_run_id STRING OPTIONS(description = "Identificador de la ejecución general del pipeline."),
+  execution_timestamp TIMESTAMP OPTIONS(description = "Timestamp de ejecución del check."),
+  check_id STRING OPTIONS(description = "Identificador único de la regla de calidad."),
+  layer STRING OPTIONS(description = "Capa de datos: bronze, silver, gold."),
   table_name STRING OPTIONS(description = "Tabla evaluada."),
-  column_name STRING OPTIONS(description = "Columna evaluada, si aplica."),
-
-  execution_date DATE OPTIONS(description = "Fecha lógica de evaluación."),
-  status STRING OPTIONS(description = "Resultado del check: PASS, FAIL, WARNING."),
-  expected_value STRING OPTIONS(description = "Valor esperado o regla esperada."),
-  actual_value STRING OPTIONS(description = "Valor observado."),
-  failed_records_count INT64 OPTIONS(description = "Cantidad de registros que incumplen la regla."),
-  total_records_count INT64 OPTIONS(description = "Cantidad total de registros evaluados."),
-  failed_records_percentage NUMERIC OPTIONS(description = "Porcentaje de registros fallidos."),
-
-  query_text STRING OPTIONS(description = "Consulta SQL usada para ejecutar el check, si aplica."),
-  error_message STRING OPTIONS(description = "Mensaje de error, si el check no pudo ejecutarse."),
-
-  started_at TIMESTAMP OPTIONS(description = "Timestamp de inicio del check."),
-  finished_at TIMESTAMP OPTIONS(description = "Timestamp de fin del check."),
-  duration_seconds INT64 OPTIONS(description = "Duración del check en segundos."),
-
-  metadata JSON OPTIONS(description = "Metadatos adicionales del check en formato JSON."),
-  created_at TIMESTAMP OPTIONS(description = "Timestamp de creación del registro de auditoría.")
+  severity STRING OPTIONS(description = "Severidad del check: INFO, WARNING, ERROR."),
+  passed BOOL OPTIONS(description = "Indica si el check es exitoso (true) o fallido (false)."),
+  failed_rows INT64 OPTIONS(description = "Cantidad de registros que fallan la regla."),
+  details STRING OPTIONS(description = "Mensaje detallado con la justificación del resultado."),
+  query_file STRING OPTIONS(description = "Archivo SQL de donde proviene el check."),
+  source_system STRING OPTIONS(description = "Sistema origen de los datos."),
+  source_dataset STRING OPTIONS(description = "Dataset origen de los datos.")
 )
-PARTITION BY execution_date
-CLUSTER BY source_dataset, table_name, status
+PARTITION BY DATE(execution_timestamp)
+CLUSTER BY layer, table_name, severity
 OPTIONS (
-  description = "Resultados de validaciones de calidad de datos ejecutadas sobre Bronze, Silver o Gold."
+  description = "Resultados detallados de validaciones de calidad de datos."
 );
