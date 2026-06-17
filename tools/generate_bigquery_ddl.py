@@ -159,9 +159,9 @@ def render_bronze_table(
             raise ValueError(
                 f"MEF external table DDL for '{dataset}' requires --bronze-extraction-date to be BigQuery-compatible."
             )
-
+        date_folder = f"extraction_date={bronze_extraction_date}" if bronze_extraction_date else "extraction_date=*"
         table_name = f"{project_id}.bronze.mef_{slice_name}_raw"
-        source_uri = f"gs://{bucket}/bronze/mef/{slice_name}/extraction_date={bronze_extraction_date}/year=*/data.csv"
+        source_uri = f"gs://{bucket}/bronze/mef/{slice_name}/{date_folder}/year=*/data.csv"
         options = f"""OPTIONS (
   format = 'CSV',
   uris = ['{source_uri}'],
@@ -169,7 +169,8 @@ def render_bronze_table(
 )"""
     elif dataset.startswith("report_"):
         table_name = f"{project_id}.bronze.pronabec_{dataset}_raw"
-        source_uri = f"gs://{bucket}/bronze/pronabec_reports/{dataset}/extraction_date=*/data.csv"
+        date_folder = f"extraction_date={bronze_extraction_date}" if bronze_extraction_date else "extraction_date=*"
+        source_uri = f"gs://{bucket}/bronze/pronabec_reports/{dataset}/{date_folder}/data.csv"
         options = f"""OPTIONS (
   format = 'CSV',
   uris = ['{source_uri}'],
@@ -177,8 +178,9 @@ def render_bronze_table(
 )"""
     else:
         table_name = f"{project_id}.bronze.pronabec_{dataset}_raw"
+        date_folder = f"extraction_date={bronze_extraction_date}" if bronze_extraction_date else "extraction_date=*"
         source_uri = (
-            f"gs://{bucket}/bronze/pronabec/{dataset}/extraction_date=*/data.jsonl"
+            f"gs://{bucket}/bronze/pronabec/{dataset}/{date_folder}/data.jsonl"
         )
         options = f"""OPTIONS (
   format = 'NEWLINE_DELIMITED_JSON',
@@ -279,7 +281,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--bronze-extraction-date",
         default=None,
-        help="Fecha de extracción Bronze para URIs MEF (formato YYYY-MM-DD). También se puede definir con BRONZE_EXTRACTION_DATE.",
+        help="Fecha de extracción Bronze para URIs externas (formato YYYY-MM-DD). También se puede definir con BRONZE_EXTRACTION_DATE.",
     )
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--bronze-schemas-dir", default=DEFAULT_BRONZE_SCHEMAS_DIR)
