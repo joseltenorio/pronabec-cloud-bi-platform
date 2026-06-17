@@ -176,7 +176,7 @@ def test_stage_all_reports_some_missing(mock_input_dir: Path, mock_output_dir: P
     sino que stagee los que sí existan y marque los faltantes como missing.
     """
     # Solo creamos el de universidad
-    csv_content = "Col1,Col2\nVal1,Val2"
+    csv_content = "universidad,total\nVal1,Val2"
     source_file = mock_input_dir / "beca18_becarios_universidad_2012_2026.csv"
     source_file.write_text(csv_content, encoding="utf-8")
 
@@ -199,9 +199,10 @@ def test_report_name_filter(mock_input_dir: Path, mock_output_dir: Path) -> None
     incluso si el otro archivo fuente también existe en el input_dir.
     """
     # Crear ambos archivos manuales
-    csv_content = "Col1,Col2\nVal1,Val2"
-    (mock_input_dir / "beca18_becarios_universidad_2012_2026.csv").write_text(csv_content)
-    (mock_input_dir / "beca18_becarios_universidades_carrera_2012_2026.csv").write_text(csv_content)
+    csv_content_uni = "universidad,total\nVal1,Val2"
+    csv_content_car = "carrera de estudio,total\nVal1,Val2"
+    (mock_input_dir / "beca18_becarios_universidad_2012_2026.csv").write_text(csv_content_uni)
+    (mock_input_dir / "beca18_becarios_universidades_carrera_2012_2026.csv").write_text(csv_content_car)
 
     staged, skipped, missing = stage_reports(
         input_dir=str(mock_input_dir),
@@ -244,7 +245,7 @@ def test_overwrite_modes(mock_input_dir: Path, mock_output_dir: Path) -> None:
     Valida que falle si ya existe el archivo destino y no se habilita overwrite,
     y que reemplace correctamente si se habilita.
     """
-    csv_content = "Col1,Col2\nVal1,Val2"
+    csv_content = "universidad,total\nVal1,Val2"
     source_file = mock_input_dir / "beca18_becarios_universidad_2012_2026.csv"
     source_file.write_text(csv_content)
 
