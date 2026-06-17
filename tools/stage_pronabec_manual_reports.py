@@ -117,7 +117,7 @@ def analyze_csv(file_path: Path) -> tuple[int, int, list[str]]:
     cantidad de columnas y los nombres de las columnas.
     Prueba diferentes codificaciones de manera defensiva.
     """
-    encodings = ["utf-8", "utf-8-sig", "latin-1"]
+    encodings = ["utf-8-sig", "utf-8", "latin-1"]
     for encoding in encodings:
         try:
             with open(file_path, mode="r", encoding=encoding) as f:
@@ -165,7 +165,7 @@ def stage_csv_with_metadata(
     Lee el archivo CSV de origen, mapea sus cabeceras a los nombres del esquema Bronze,
     agrega las columnas de metadatos documentales requeridas por fila y guarda el resultado.
     """
-    encodings = ["utf-8", "utf-8-sig", "latin-1"]
+    encodings = ["utf-8-sig", "utf-8", "latin-1"]
     source_rows = []
     source_headers = []
 
@@ -192,7 +192,7 @@ def stage_csv_with_metadata(
     # Mapeo de cabeceras
     header_mapping = {}
     for h in source_headers:
-        h_clean = h.strip().lower()
+        h_clean = h.strip().lstrip('\ufeff').lower()
         if h_clean in ("universidad", "carrera de estudio", "carrera_estudio"):
             header_mapping[h] = "universidad" if "universidad" in schema_columns else "carrera_estudio"
         elif h_clean.isdigit():
@@ -203,6 +203,13 @@ def stage_csv_with_metadata(
             header_mapping[h] = "total"
         else:
             header_mapping[h] = h_clean
+
+    # Validación defensiva de la dimensión principal
+    mapped_targets = list(header_mapping.values())
+    if "carrera_estudio" in schema_columns and "carrera_estudio" not in mapped_targets:
+        raise ValueError(f"Falla de staging: No se mapeó 'carrera_estudio'. Cabeceras fuente: {source_headers}")
+    if "universidad" in schema_columns and "universidad" not in mapped_targets:
+        raise ValueError(f"Falla de staging: No se mapeó 'universidad'. Cabeceras fuente: {source_headers}")
 
     # Escribir el nuevo CSV con las columnas en el orden exacto del esquema
     with open(target_csv_path, mode="w", newline="", encoding="utf-8") as f:
