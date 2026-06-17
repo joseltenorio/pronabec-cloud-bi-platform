@@ -47,8 +47,10 @@ def deduce_source_metadata(table_name: str) -> tuple[str, str]:
     
     # Caso 3: Tablas del Ministerio de Economía y Finanzas (MEF)
     if table_name.startswith("presupuesto_mef"):
-        dataset = table_name.replace("presupuesto_mef_", "presupuesto_") if "_" in table_name else "presupuesto"
-        return "mef", dataset
+        if table_name == "presupuesto_mef":
+            return "mef", "presupuesto"
+        else:
+            return "mef", table_name.replace("presupuesto_mef_", "presupuesto_")
 
     return "unknown", "unknown"
 
