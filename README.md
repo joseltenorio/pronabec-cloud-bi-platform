@@ -220,6 +220,16 @@ Documentación técnica relacionada:
 
 - `docs/cloud/dataflow_launch_model.md`
 
+## Observabilidad cloud
+
+La plataforma utiliza logging estructurado para registrar eventos operativos de extracción, transformación, calidad y orquestación. Los eventos incluyen identificadores de corrida, fuente, dataset, fecha lógica de extracción, estado, conteos, rutas de salida y métricas relevantes.
+
+Cloud Logging centraliza eventos emitidos por Cloud Run Jobs, Dataflow y Composer. BigQuery Audit conserva resultados históricos de calidad y ejecución.
+
+Documentación técnica relacionada:
+
+- `docs/cloud/observability.md`
+
 ## Despliegue BigQuery
 
 El proyecto separa la generación de DDL Bronze/Silver de la ejecución de SQL manual versionado. Los contratos Bronze y Silver se derivan desde schemas JSON, mientras que datasets, tablas Audit, vistas Gold y reglas de calidad se mantienen como SQL explícito.
