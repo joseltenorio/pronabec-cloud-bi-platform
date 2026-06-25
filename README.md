@@ -171,7 +171,11 @@ El repositorio mantiene SQL versionado para:
 
 Los DDL de Bronze y Silver se generan desde schemas JSON versionados. Los archivos generados se consideran artefactos temporales y no forman parte del código fuente versionado.
 
+El SQL manual de datasets, Audit, Gold y Quality puede contener placeholders de proyecto y datasets. Para su ejecución, el proyecto utiliza una etapa de renderizado que produce versiones ejecutables en `build/generated/sql/`.
+
 Esta separación mantiene a los schemas JSON como fuente de verdad para contratos Bronze/Silver, mientras que Gold, Audit y Quality permanecen como SQL explícito debido a su lógica analítica y operativa.
+
+Los artefactos generados y renderizados no se versionan. El repositorio conserva los contratos, SQL fuente y herramientas de generación, pero no los archivos derivados.
 
 ## Estructura del repositorio
 
