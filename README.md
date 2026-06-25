@@ -222,6 +222,16 @@ Documentación técnica relacionada:
 
 - `docs/cloud/bigquery_deployment.md`
 
+## Orquestación batch
+
+El proyecto define un DAG de Cloud Composer para coordinar procesos batch de la plataforma Medallion. Composer actúa como capa de orquestación y ejecuta Cloud Run Jobs registrados para extracción PRONABEC, extracción MEF y controles de calidad.
+
+La lógica de procesamiento permanece separada en los módulos Python, Cloud Run Jobs, Dataflow y BigQuery. El DAG mantiene dependencias, parámetros operativos, reintentos y control de concurrencia.
+
+Documentación técnica relacionada:
+
+- `docs/cloud/composer_orchestration.md`
+
 ## Estructura del repositorio
 
 ```text
