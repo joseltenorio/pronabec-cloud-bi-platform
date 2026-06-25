@@ -210,6 +210,16 @@ Documentación técnica relacionada:
 
 - `docs/cloud/cloud_run_jobs.md`
 
+## Lanzamiento cloud de Dataflow
+
+La transformación Bronze a Silver se ejecuta mediante Apache Beam/Dataflow. Para mantener Composer como orquestador y no como runtime de procesamiento, el proyecto utiliza Cloud Run Jobs lanzadores que ejecutan el pipeline `pipelines.dataflow_bronze_to_silver` con `DataflowRunner`.
+
+Este modelo permite coordinar extracción, transformación y calidad desde Composer, manteniendo la ejecución distribuida en Dataflow y la lógica del proyecto empaquetada en la imagen batch.
+
+Documentación técnica relacionada:
+
+- `docs/cloud/dataflow_launch_model.md`
+
 ## Despliegue BigQuery
 
 El proyecto separa la generación de DDL Bronze/Silver de la ejecución de SQL manual versionado. Los contratos Bronze y Silver se derivan desde schemas JSON, mientras que datasets, tablas Audit, vistas Gold y reglas de calidad se mantienen como SQL explícito.
