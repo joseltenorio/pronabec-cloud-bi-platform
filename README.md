@@ -29,6 +29,9 @@ La arquitectura sigue un enfoque batch cloud-native basado en capas Medallion.
 Fuentes públicas y reportes oficiales
         |
         v
+Cloud Run Jobs / Staging local controlado
+        |
+        v
 Cloud Storage / Bronze
         |
         v
@@ -177,6 +180,48 @@ Esta separación mantiene a los schemas JSON como fuente de verdad para contrato
 
 Los artefactos generados y renderizados no se versionan. El repositorio conserva los contratos, SQL fuente y herramientas de generación, pero no los archivos derivados.
 
+## Configuración cloud
+
+La configuración cloud del proyecto se organiza mediante plantillas versionadas y variables de entorno no sensibles. El repositorio define parámetros para Google Cloud, Cloud Storage, BigQuery, Dataflow, Cloud Run Jobs, Composer, calidad, auditoría y logging.
+
+Los valores reales de entorno, credenciales y secretos no se versionan. La configuración funcional se mantiene separada de la lógica de extracción, transformación y validación.
+
+Documentación técnica relacionada:
+
+- `docs/cloud/configuration_model.md`
+
+## Cloud Run Jobs
+
+El repositorio incluye scripts para publicar la imagen batch en Artifact Registry y registrar Cloud Run Jobs asociados a extracción PRONABEC, extracción MEF y ejecución de controles de calidad.
+
+Los jobs utilizan una imagen común y comandos diferenciados por módulo Python, manteniendo separación entre runtime, configuración y lógica de procesamiento.
+
+La imagen Docker del proyecto contiene los módulos necesarios para ejecutar procesos Python relacionados con:
+
+- extracción de fuentes públicas PRONABEC;
+- extracción y scraping controlado de información presupuestal MEF;
+- staging de reportes documentales PRONABEC;
+- ejecución de controles de calidad;
+- acceso a configuración versionada, contratos, schemas y SQL del proyecto.
+
+La imagen no incluye datos reales, credenciales, archivos temporales, logs locales ni salidas generadas durante ejecuciones previas.
+
+Documentación técnica relacionada:
+
+- `docs/cloud/cloud_run_jobs.md`
+
+## Despliegue BigQuery
+
+El proyecto separa la generación de DDL Bronze/Silver de la ejecución de SQL manual versionado. Los contratos Bronze y Silver se derivan desde schemas JSON, mientras que datasets, tablas Audit, vistas Gold y reglas de calidad se mantienen como SQL explícito.
+
+Los DDL generados se escriben como artefactos temporales en `build/generated/sql/` y no se versionan.
+
+La ejecución de SQL manual utiliza una etapa de renderizado para reemplazar placeholders de proyecto y datasets antes de enviar las consultas a BigQuery.
+
+Documentación técnica relacionada:
+
+- `docs/cloud/bigquery_deployment.md`
+
 ## Estructura del repositorio
 
 ```text
@@ -236,7 +281,11 @@ Contiene SQL versionado para datasets, auditoría, vistas Gold y controles de ca
 
 ### `tools/`
 
-Contiene utilidades de soporte para generación de DDL, profiling, exploración de fuentes y staging de reportes manuales.
+Contiene utilidades de soporte para generación de DDL, renderizado de SQL, profiling, exploración de fuentes y staging de reportes manuales.
+
+### `scripts/`
+
+Contiene wrappers operativos para PowerShell orientados a generación de DDL, renderizado de SQL, despliegue BigQuery, publicación de imagen batch y registro de Cloud Run Jobs.
 
 ### `tests/`
 
@@ -244,7 +293,7 @@ Contiene pruebas unitarias y de validación para schemas, transformaciones, gene
 
 ## Estado técnico actual
 
-El repositorio contiene una implementación local avanzada del core de la plataforma de datos:
+El repositorio contiene una implementación local avanzada del core de la plataforma de datos y componentes iniciales de automatización cloud:
 
 - schemas Bronze y Silver versionados;
 - extracción PRONABEC;
@@ -259,6 +308,12 @@ El repositorio contiene una implementación local avanzada del core de la plataf
 - reglas SQL de calidad;
 - runner de calidad con persistencia en Audit;
 - vistas Gold analíticas;
+- generación de DDL BigQuery desde schemas;
+- renderizado de SQL manual parametrizado;
+- script de despliegue SQL BigQuery;
+- runtime Docker para jobs batch;
+- publicación de imagen en Artifact Registry;
+- registro de Cloud Run Jobs para extracción y calidad;
 - pruebas automatizadas para componentes críticos.
 
 La plataforma está diseñada para ejecución batch. No implementa streaming ni procesamiento en tiempo real, ya que las fuentes consideradas no requieren baja latencia.
@@ -271,6 +326,7 @@ La plataforma está diseñada para ejecución batch. No implementa streaming ni 
 - Google BigQuery
 - Google Cloud Dataflow
 - Cloud Run Jobs
+- Artifact Registry
 - Cloud Composer / Apache Airflow
 - Cloud Logging
 - Cloud Monitoring
@@ -287,6 +343,8 @@ El repositorio no versiona datos reales, credenciales, archivos `.env`, llaves p
 
 Los archivos locales de datos y evidencias operativas se mantienen fuera del control de versiones mediante reglas de `.gitignore` y `.dockerignore`.
 
+Las imágenes Docker no empaquetan credenciales ni datasets locales. Los jobs cloud utilizan variables operativas y service accounts para interactuar con recursos de Google Cloud.
+
 ## Convenciones del proyecto
 
 El proyecto mantiene una separación explícita entre:
@@ -294,9 +352,12 @@ El proyecto mantiene una separación explícita entre:
 - contratos de datos versionados;
 - DDL generado temporalmente;
 - SQL analítico versionado;
+- SQL renderizado no versionado;
 - datos reales no versionados;
 - documentación técnica;
 - evidencias de ejecución;
-- pruebas automatizadas.
+- pruebas automatizadas;
+- runtime de ejecución batch;
+- scripts operativos de despliegue.
 
 Esta separación permite mantener trazabilidad, reducir riesgo de exponer información local y sostener una evolución incremental de la plataforma.
