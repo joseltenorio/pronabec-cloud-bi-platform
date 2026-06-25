@@ -14,9 +14,16 @@ param(
     [string]$GoldDataset = $(if ($env:BQ_GOLD_DATASET) { $env:BQ_GOLD_DATASET } else { "gold" }),
     [string]$AuditDataset = $(if ($env:BQ_AUDIT_DATASET) { $env:BQ_AUDIT_DATASET } else { "audit" }),
 
+    [string]$DataflowTempLocation = $(if ($env:DATAFLOW_TEMP_LOCATION) { $env:DATAFLOW_TEMP_LOCATION } else { "" }),
+    [string]$DataflowStagingLocation = $(if ($env:DATAFLOW_STAGING_LOCATION) { $env:DATAFLOW_STAGING_LOCATION } else { "" }),
+
     [string]$PronabecJobName = "pronabec-extract-job",
     [string]$MefJobName = "mef-extract-job",
-    [string]$QualityJobName = "quality-checks-job"
+    [string]$QualityJobName = "quality-checks-job",
+
+    [string]$DataflowPronabecConvocatoriasJobName = "dataflow-pronabec-convocatorias-job",
+    [string]$DataflowMefPresupuestoJobName = "dataflow-mef-presupuesto-job",
+    [string]$DataflowReportUniversitariosJobName = "dataflow-report-universitarios-job"
 )
 
 $ErrorActionPreference = "Stop"
@@ -50,6 +57,15 @@ function Test-CloudRunJobExists {
     return -not [string]::IsNullOrWhiteSpace($result)
 }
 
+function Join-CloudRunArgs {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Args
+    )
+
+    return ($Args -join ",")
+}
+
 function Upsert-CloudRunJob {
     param(
         [Parameter(Mandatory = $true)]
@@ -59,7 +75,9 @@ function Upsert-CloudRunJob {
         [string[]]$Args,
 
         [Parameter(Mandatory = $true)]
-        [string]$Description
+        [string]$Description,
+
+        [int]$TaskTimeoutSeconds = 3600
     )
 
     $CommonArgs = @(
@@ -67,12 +85,12 @@ function Upsert-CloudRunJob {
         "--region", $Region,
         "--image", $Image,
         "--service-account", $ServiceAccount,
-        "--set-env-vars", "GCP_PROJECT_ID=$ProjectId,GCS_BUCKET=$BucketName,BQ_BRONZE_DATASET=$BronzeDataset,BQ_SILVER_DATASET=$SilverDataset,BQ_GOLD_DATASET=$GoldDataset,BQ_AUDIT_DATASET=$AuditDataset,STRUCTURED_LOGGING=true,LOG_LEVEL=INFO",
+        "--set-env-vars", "GCP_PROJECT_ID=$ProjectId,GCS_BUCKET=$BucketName,BQ_BRONZE_DATASET=$BronzeDataset,BQ_SILVER_DATASET=$SilverDataset,BQ_GOLD_DATASET=$GoldDataset,BQ_AUDIT_DATASET=$AuditDataset,DATAFLOW_TEMP_LOCATION=$DataflowTempLocation,DATAFLOW_STAGING_LOCATION=$DataflowStagingLocation,STRUCTURED_LOGGING=true,LOG_LEVEL=INFO",
         "--max-retries", "1",
-        "--task-timeout", "3600s"
+        "--task-timeout", "$($TaskTimeoutSeconds)s"
     )
 
-    $JoinedArgs = ($Args -join ",")
+    $JoinedArgs = Join-CloudRunArgs -Args $Args
 
     if (Test-CloudRunJobExists -JobName $JobName) {
         Write-Host "Actualizando Cloud Run Job: $JobName"
@@ -99,6 +117,25 @@ Assert-RequiredValue -Name "Region" -Value $Region
 Assert-RequiredValue -Name "Image" -Value $Image
 Assert-RequiredValue -Name "ServiceAccount" -Value $ServiceAccount
 Assert-RequiredValue -Name "BucketName" -Value $BucketName
+Assert-RequiredValue -Name "DataflowTempLocation" -Value $DataflowTempLocation
+Assert-RequiredValue -Name "DataflowStagingLocation" -Value $DataflowStagingLocation
+
+$DataflowCommonArgs = @(
+    "-m",
+    "pipelines.dataflow_bronze_to_silver",
+    "--runner",
+    "DataflowRunner",
+    "--project",
+    $ProjectId,
+    "--region",
+    $Region,
+    "--temp-location",
+    $DataflowTempLocation,
+    "--staging-location",
+    $DataflowStagingLocation,
+    "--dlq-output-root",
+    "gs://$BucketName/dlq"
+)
 
 Upsert-CloudRunJob `
     -JobName $PronabecJobName `
@@ -114,6 +151,72 @@ Upsert-CloudRunJob `
     -Args @(
         "-m",
         "pipelines.scrape_mef_budget"
+    )
+
+Upsert-CloudRunJob `
+    -JobName $DataflowPronabecConvocatoriasJobName `
+    -Description "Lanzador Dataflow PRONABEC convocatorias Bronze a Silver" `
+    -TaskTimeoutSeconds 7200 `
+    -Args @(
+        $DataflowCommonArgs +
+        @(
+            "--source-system",
+            "pronabec",
+            "--source-dataset",
+            "convocatorias",
+            "--input-path",
+            "gs://$BucketName/bronze/pronabec/convocatorias/extraction_date=`${BRONZE_EXTRACTION_DATE}/data.jsonl",
+            "--input-format",
+            "jsonl",
+            "--output-table",
+            "$ProjectId`:$SilverDataset.pronabec_convocatorias",
+            "--summary-output-path",
+            "gs://$BucketName/audit/processing_summary/pronabec_convocatorias_`${BRONZE_EXTRACTION_DATE}.json"
+        )
+    )
+
+Upsert-CloudRunJob `
+    -JobName $DataflowMefPresupuestoJobName `
+    -Description "Lanzador Dataflow MEF presupuesto Bronze a Silver" `
+    -TaskTimeoutSeconds 7200 `
+    -Args @(
+        $DataflowCommonArgs +
+        @(
+            "--source-system",
+            "mef",
+            "--source-dataset",
+            "presupuesto",
+            "--input-path",
+            "gs://$BucketName/bronze/mef/presupuesto/extraction_date=`${BRONZE_EXTRACTION_DATE}/year=*/data.csv",
+            "--input-format",
+            "csv",
+            "--output-table",
+            "$ProjectId`:$SilverDataset.presupuesto_mef",
+            "--summary-output-path",
+            "gs://$BucketName/audit/processing_summary/presupuesto_mef_`${BRONZE_EXTRACTION_DATE}.json"
+        )
+    )
+
+Upsert-CloudRunJob `
+    -JobName $DataflowReportUniversitariosJobName `
+    -Description "Lanzador Dataflow PRONABEC reports universitarios Bronze a Silver" `
+    -TaskTimeoutSeconds 7200 `
+    -Args @(
+        $DataflowCommonArgs +
+        @(
+            "--source-system",
+            "pronabec_reports",
+            "--source-dataset",
+            "report_beca18_universitarios_universidad_anual",
+            "--input-path",
+            "gs://$BucketName/bronze/pronabec_reports/report_beca18_universitarios_universidad_anual/extraction_date=`${BRONZE_EXTRACTION_DATE}/data.csv",
+            "--input-format",
+            "csv",
+            "--output-table",
+            "$ProjectId`:$SilverDataset.pronabec_report_beca18_universitarios_universidad_anual",
+            "--summary-output-path",
+            "gs://$BucketName/audit/processing_summary/pronabec_report_beca18_universitarios_universidad_anual_`${BRONZE_EXTRACTION_DATE}.json"
+        )
     )
 
 Upsert-CloudRunJob `
