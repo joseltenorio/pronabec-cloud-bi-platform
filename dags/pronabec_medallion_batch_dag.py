@@ -17,9 +17,16 @@ PRONABEC_EXTRACT_JOB = "{{ var.value.pronabec_extract_job_name }}"
 MEF_EXTRACT_JOB = "{{ var.value.mef_extract_job_name }}"
 QUALITY_CHECKS_JOB = "{{ var.value.quality_checks_job_name }}"
 
+DATAFLOW_PRONABEC_CONVOCATORIAS_JOB = "{{ var.value.dataflow_pronabec_convocatorias_job_name }}"
+DATAFLOW_MEF_PRESUPUESTO_JOB = "{{ var.value.dataflow_mef_presupuesto_job_name }}"
+DATAFLOW_REPORT_UNIVERSITARIOS_JOB = "{{ var.value.dataflow_report_universitarios_job_name }}"
+
 EXTRACTION_DATE = "{{ dag_run.conf.get('extraction_date', ds) }}"
 RUN_PRONABEC = "{{ dag_run.conf.get('run_pronabec', true) }}"
 RUN_MEF = "{{ dag_run.conf.get('run_mef', true) }}"
+RUN_DATAFLOW_PRONABEC = "{{ dag_run.conf.get('run_dataflow_pronabec', true) }}"
+RUN_DATAFLOW_MEF = "{{ dag_run.conf.get('run_dataflow_mef', true) }}"
+RUN_DATAFLOW_REPORTS = "{{ dag_run.conf.get('run_dataflow_reports', true) }}"
 RUN_QUALITY = "{{ dag_run.conf.get('run_quality', true) }}"
 
 
@@ -48,13 +55,13 @@ fi
 
 with DAG(
     dag_id="pronabec_medallion_batch",
-    description="Orquestación batch Medallion para extracción, validación y control operativo de PRONABEC Cloud BI Platform.",
+    description="Orquestación batch Medallion para extracción, transformación Bronze a Silver y calidad de PRONABEC Cloud BI Platform.",
     default_args=default_args,
     start_date=datetime(2026, 1, 1),
     schedule_interval=None,
     catchup=False,
     max_active_runs=1,
-    tags=["pronabec", "medallion", "batch", "cloud-run", "composer"],
+    tags=["pronabec", "medallion", "batch", "cloud-run", "dataflow", "composer"],
     params={
         "extraction_date": Param(
             default="",
@@ -70,6 +77,21 @@ with DAG(
             default=True,
             type="boolean",
             description="Controla la ejecución del job de extracción MEF.",
+        ),
+        "run_dataflow_pronabec": Param(
+            default=True,
+            type="boolean",
+            description="Controla la transformación PRONABEC Bronze a Silver.",
+        ),
+        "run_dataflow_mef": Param(
+            default=True,
+            type="boolean",
+            description="Controla la transformación MEF Bronze a Silver.",
+        ),
+        "run_dataflow_reports": Param(
+            default=True,
+            type="boolean",
+            description="Controla la transformación de reportes PRONABEC Bronze a Silver.",
         ),
         "run_quality": Param(
             default=True,
@@ -96,6 +118,30 @@ with DAG(
         ),
     )
 
+    run_dataflow_pronabec_convocatorias = BashOperator(
+        task_id="run_dataflow_pronabec_convocatorias",
+        bash_command=cloud_run_execute_command(
+            job_name=DATAFLOW_PRONABEC_CONVOCATORIAS_JOB,
+            enabled_expression=RUN_DATAFLOW_PRONABEC,
+        ),
+    )
+
+    run_dataflow_mef_presupuesto = BashOperator(
+        task_id="run_dataflow_mef_presupuesto",
+        bash_command=cloud_run_execute_command(
+            job_name=DATAFLOW_MEF_PRESUPUESTO_JOB,
+            enabled_expression=RUN_DATAFLOW_MEF,
+        ),
+    )
+
+    run_dataflow_report_universitarios = BashOperator(
+        task_id="run_dataflow_report_universitarios",
+        bash_command=cloud_run_execute_command(
+            job_name=DATAFLOW_REPORT_UNIVERSITARIOS_JOB,
+            enabled_expression=RUN_DATAFLOW_REPORTS,
+        ),
+    )
+
     run_quality_checks = BashOperator(
         task_id="run_quality_checks",
         bash_command=cloud_run_execute_command(
@@ -107,4 +153,8 @@ with DAG(
 
     end = EmptyOperator(task_id="end")
 
-    start >> [run_pronabec_extract, run_mef_extract] >> run_quality_checks >> end
+    start >> [run_pronabec_extract, run_mef_extract]
+    [run_pronabec_extract, run_mef_extract] >> run_dataflow_pronabec_convocatorias
+    run_dataflow_pronabec_convocatorias >> run_dataflow_mef_presupuesto
+    run_dataflow_mef_presupuesto >> run_dataflow_report_universitarios
+    run_dataflow_report_universitarios >> run_quality_checks >> end
