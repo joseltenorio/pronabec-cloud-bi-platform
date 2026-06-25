@@ -108,3 +108,181 @@ def _parse_log_level(level: str) -> int:
     }
 
     return valid_levels.get(normalized, logging.INFO)
+
+def _clean_event_fields(fields: dict[str, Any]) -> dict[str, Any]:
+    """Retira campos vacíos para evitar ruido en Cloud Logging."""
+    return {
+        key: value
+        for key, value in fields.items()
+        if value is not None and value != ""
+    }
+
+
+def log_pipeline_event(
+    logger: logging.Logger,
+    *,
+    event_type: str,
+    pipeline_name: str,
+    pipeline_run_id: str | None = None,
+    status: str | None = None,
+    source_system: str | None = None,
+    source_dataset: str | None = None,
+    extraction_date: str | None = None,
+    message: str | None = None,
+    **fields: Any,
+) -> None:
+    """
+    Emite un evento estructurado estándar para procesos batch.
+
+    Args:
+        logger: Logger configurado del componente.
+        event_type: Tipo de evento operativo.
+        pipeline_name: Nombre lógico del pipeline o job.
+        pipeline_run_id: Identificador de corrida.
+        status: Estado del evento o ejecución.
+        source_system: Familia o sistema fuente.
+        source_dataset: Dataset o slice procesado.
+        extraction_date: Fecha lógica de extracción.
+        message: Mensaje legible del evento.
+        **fields: Campos adicionales del evento.
+    """
+    event_fields = _clean_event_fields(
+        {
+            "event_type": event_type,
+            "pipeline_name": pipeline_name,
+            "pipeline_run_id": pipeline_run_id,
+            "status": status,
+            "source_system": source_system,
+            "source_dataset": source_dataset,
+            "extraction_date": extraction_date,
+            **fields,
+        }
+    )
+
+    logger.info(
+        message or event_type,
+        extra={"extra_fields": event_fields},
+    )
+
+
+def log_pipeline_started(
+    logger: logging.Logger,
+    *,
+    pipeline_name: str,
+    pipeline_run_id: str | None = None,
+    source_system: str | None = None,
+    source_dataset: str | None = None,
+    extraction_date: str | None = None,
+    **fields: Any,
+) -> None:
+    """Emite evento estándar de inicio de pipeline."""
+    log_pipeline_event(
+        logger,
+        event_type="pipeline_started",
+        pipeline_name=pipeline_name,
+        pipeline_run_id=pipeline_run_id,
+        status="STARTED",
+        source_system=source_system,
+        source_dataset=source_dataset,
+        extraction_date=extraction_date,
+        message="Pipeline execution started.",
+        **fields,
+    )
+
+
+def log_pipeline_completed(
+    logger: logging.Logger,
+    *,
+    pipeline_name: str,
+    pipeline_run_id: str | None = None,
+    source_system: str | None = None,
+    source_dataset: str | None = None,
+    extraction_date: str | None = None,
+    records_read: int | None = None,
+    records_valid: int | None = None,
+    records_rejected: int | None = None,
+    rejection_rate: float | None = None,
+    output_path: str | None = None,
+    output_table: str | None = None,
+    duration_seconds: float | None = None,
+    **fields: Any,
+) -> None:
+    """Emite evento estándar de finalización exitosa."""
+    log_pipeline_event(
+        logger,
+        event_type="pipeline_completed",
+        pipeline_name=pipeline_name,
+        pipeline_run_id=pipeline_run_id,
+        status="SUCCEEDED",
+        source_system=source_system,
+        source_dataset=source_dataset,
+        extraction_date=extraction_date,
+        message="Pipeline execution completed.",
+        records_read=records_read,
+        records_valid=records_valid,
+        records_rejected=records_rejected,
+        rejection_rate=rejection_rate,
+        output_path=output_path,
+        output_table=output_table,
+        duration_seconds=duration_seconds,
+        **fields,
+    )
+
+
+def log_pipeline_failed(
+    logger: logging.Logger,
+    *,
+    pipeline_name: str,
+    pipeline_run_id: str | None = None,
+    source_system: str | None = None,
+    source_dataset: str | None = None,
+    extraction_date: str | None = None,
+    error_code: str | None = None,
+    error_message: str | None = None,
+    duration_seconds: float | None = None,
+    **fields: Any,
+) -> None:
+    """Emite evento estándar de fallo de pipeline."""
+    log_pipeline_event(
+        logger,
+        event_type="pipeline_failed",
+        pipeline_name=pipeline_name,
+        pipeline_run_id=pipeline_run_id,
+        status="FAILED",
+        source_system=source_system,
+        source_dataset=source_dataset,
+        extraction_date=extraction_date,
+        message="Pipeline execution failed.",
+        error_code=error_code,
+        error_message=error_message,
+        duration_seconds=duration_seconds,
+        **fields,
+    )
+
+
+def log_pipeline_metric(
+    logger: logging.Logger,
+    *,
+    pipeline_name: str,
+    metric_name: str,
+    metric_value: int | float | str,
+    pipeline_run_id: str | None = None,
+    source_system: str | None = None,
+    source_dataset: str | None = None,
+    extraction_date: str | None = None,
+    **fields: Any,
+) -> None:
+    """Emite una métrica operativa como evento estructurado."""
+    log_pipeline_event(
+        logger,
+        event_type="pipeline_metric",
+        pipeline_name=pipeline_name,
+        pipeline_run_id=pipeline_run_id,
+        source_system=source_system,
+        source_dataset=source_dataset,
+        extraction_date=extraction_date,
+        message="Pipeline metric emitted.",
+        metric_name=metric_name,
+        metric_value=metric_value,
+        **fields,
+    )
