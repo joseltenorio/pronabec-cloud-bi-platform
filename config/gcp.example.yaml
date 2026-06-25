@@ -1,51 +1,119 @@
 project:
   id: your-gcp-project-id
+  name: your-gcp-project-id
+  number: "000000000000"
   region: us-central1
   zone: us-central1-a
+  environment: dev
+
+locations:
+  bigquery: US
+  cloud_storage: US
 
 service_accounts:
-  cloud_run_jobs: project-cloud-bi-runner@your-gcp-project-id.iam.gserviceaccount.com
-  dataflow: project-cloud-bi-dataflow@your-gcp-project-id.iam.gserviceaccount.com
-  composer: project-cloud-bi-composer@your-gcp-project-id.iam.gserviceaccount.com
+  cloud_run_jobs: your-cloudrun-sa@your-gcp-project-id.iam.gserviceaccount.com
+  dataflow: your-dataflow-sa@your-gcp-project-id.iam.gserviceaccount.com
+  composer: your-composer-sa@your-gcp-project-id.iam.gserviceaccount.com
+  cicd: your-cicd-sa@your-gcp-project-id.iam.gserviceaccount.com
+
+artifact_registry:
+  location: us-central1
+  repository: pronabec-containers
+  image_name: pronabec-cloud-bi-platform
+  image_tag: latest
+  image_uri: us-central1-docker.pkg.dev/your-gcp-project-id/pronabec-containers/pronabec-cloud-bi-platform:latest
+
+cloud_run_jobs:
+  region: us-central1
+  image: us-central1-docker.pkg.dev/your-gcp-project-id/pronabec-containers/pronabec-cloud-bi-platform:latest
+  service_account: your-cloudrun-sa@your-gcp-project-id.iam.gserviceaccount.com
+  jobs:
+    pronabec_extract:
+      name: pronabec-extract-job
+      command:
+        - -m
+        - pipelines.extract_pronabec
+    mef_extract:
+      name: mef-extract-job
+      command:
+        - -m
+        - pipelines.scrape_mef_budget
+    quality_checks:
+      name: quality-checks-job
+      command:
+        - -m
+        - pipelines.quality_checks
 
 cloud_storage:
-  bucket_name: project-cloud-bi-platform-lake
+  bucket_name: your-gcs-bucket-name
   location: US
   storage_class: STANDARD
   uniform_bucket_level_access: true
+  prefixes:
+    bronze: bronze
+    dlq: dlq
+    quality: quality
+    audit: audit
+    evidence: evidence
+    dataflow_temp: dataflow/temp
+    dataflow_staging: dataflow/staging
+  locations:
+    dlq: gs://your-gcs-bucket-name/dlq
+    quality: gs://your-gcs-bucket-name/quality
+    audit: gs://your-gcs-bucket-name/audit
+    evidence: gs://your-gcs-bucket-name/evidence
+    dataflow_temp: gs://your-gcs-bucket-name/dataflow/temp
+    dataflow_staging: gs://your-gcs-bucket-name/dataflow/staging
 
 bigquery:
   location: US
   datasets:
     bronze:
-      description: "Dataset para tablas externas o staging raw."
+      name: bronze
+      description: Dataset para tablas externas o staging raw.
     silver:
-      description: "Dataset para tablas limpias, normalizadas y validadas."
+      name: silver
+      description: Dataset para tablas limpias, normalizadas y validadas.
     gold:
-      description: "Dataset para vistas y marts analíticos consumidos por Power BI."
+      name: gold
+      description: Dataset para vistas y marts analíticos.
     audit:
-      description: "Dataset para auditoría de ejecuciones y resultados de calidad."
+      name: audit
+      description: Dataset para auditoría de ejecuciones, resultados de calidad y métricas operativas.
     ml:
-      description: "Dataset para modelos y predicciones de BigQuery ML."
+      name: ml
+      description: Dataset reservado para modelos y predicciones analíticas.
 
 dataflow:
   runner: DataflowRunner
-  temp_location: gs://project-cloud-bi-platform-lake/temp/dataflow
-  staging_location: gs://project-cloud-bi-platform-lake/staging/dataflow
+  region: us-central1
+  temp_location: gs://your-gcs-bucket-name/dataflow/temp
+  staging_location: gs://your-gcs-bucket-name/dataflow/staging
   max_num_workers: 2
   worker_machine_type: n1-standard-2
+  service_account: your-dataflow-sa@your-gcp-project-id.iam.gserviceaccount.com
 
 composer:
   environment_name: project-cloud-bi-composer
   location: us-central1
+  service_account: your-composer-sa@your-gcp-project-id.iam.gserviceaccount.com
+
+quality:
+  checks_file: sql/quality/data_quality_checks.sql
+  location: gs://your-gcs-bucket-name/quality
+  fail_on_error: true
+  dry_run: false
 
 logging:
   structured_logging: true
+  level: INFO
 
 monitoring:
-  recommended_alerts:
-    - pipeline_failure
-    - dataflow_job_failure
-    - empty_gold_tables
-    - high_rejected_records_rate
-    - budget_threshold
+  recommended_metrics:
+    - pipeline_status
+    - records_read
+    - records_valid
+    - records_rejected
+    - rejection_rate
+    - dataflow_job_status
+    - quality_check_status
