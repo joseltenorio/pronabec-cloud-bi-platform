@@ -243,54 +243,40 @@ silver.concepto_pago
 
 ## Descripción
 
-Contiene cantidades y porcentajes de becarios distribuidos por departamento, provincia y tipo de beca. Es una fuente clave para análisis territorial y cobertura por programa.
+Contiene cantidades y porcentajes de becarios distribuidos por departamento, provincia y tipo de beca. En Bronze se conserva completo, incluyendo filas de detalle provincial y filas agregadas regionales o nacionales. En Silver solo se promueve el detalle provincial histórico de Beca 18 2016.
 
 ## Tabla Silver esperada
 
 ```text
-silver.becarios_provincia
+silver.pronabec_beca18_becarios_provincia_2016
 ```
 
-| Campo             | Tipo esperado | Descripción                                        | Uso analítico             |
-| ----------------- | ------------- | -------------------------------------------------- | ------------------------- |
-| source_row_id     | STRING        | Identificador técnico de la fila en la fuente      | Trazabilidad              |
-| nro_fila          | INTEGER       | Número de fila de origen                           | Trazabilidad              |
-| departamento      | STRING        | Departamento                                       | Análisis territorial      |
-| provincia         | STRING        | Provincia                                          | Análisis territorial      |
-| b18_n             | INTEGER       | Cantidad de becarios Beca 18                       | Cobertura por programa    |
-| b18_pct           | NUMERIC       | Porcentaje de Beca 18                              | Participación territorial |
-| permanencia_n     | INTEGER       | Cantidad de becarios Permanencia                   | Cobertura por programa    |
-| permanencia_pct   | NUMERIC       | Porcentaje Permanencia                             | Participación territorial |
-| bicentenario_n    | INTEGER       | Cantidad de becarios Bicentenario                  | Cobertura por programa    |
-| bicentenario_pct  | NUMERIC       | Porcentaje Bicentenario                            | Participación territorial |
-| especial_n        | INTEGER       | Cantidad de becarios de becas especiales           | Cobertura por programa    |
-| especial_pct      | NUMERIC       | Porcentaje de becas especiales                     | Participación territorial |
-| ffaa_n            | INTEGER       | Cantidad de becarios FF.AA.                        | Cobertura por programa    |
-| ffaa_pct          | NUMERIC       | Porcentaje FF.AA.                                  | Participación territorial |
-| vraem_n           | INTEGER       | Cantidad de becarios VRAEM                         | Cobertura por programa    |
-| vraem_pct         | NUMERIC       | Porcentaje VRAEM                                   | Participación territorial |
-| repec_n           | INTEGER       | Cantidad de becarios REPEC                         | Cobertura por programa    |
-| repec_pct         | NUMERIC       | Porcentaje REPEC                                   | Participación territorial |
-| internacional_n   | INTEGER       | Cantidad de becarios Internacional                 | Cobertura por programa    |
-| internacional_pct | NUMERIC       | Porcentaje Internacional                           | Participación territorial |
-| otros_n           | INTEGER       | Cantidad de becarios de otros programas            | Cobertura por programa    |
-| otros_pct         | NUMERIC       | Porcentaje de otros programas                      | Participación territorial |
-| fecha_carga       | TIMESTAMP     | Fecha y hora de extracción o carga desde la fuente | Auditoría                 |
+| Campo | Tipo esperado | Descripción | Uso analítico |
+| :--- | :--- | :--- | :--- |
+| source_row_id | INTEGER | Identificador técnico de la fila en Bronze | Trazabilidad |
+| region | STRING | Región o departamento | Análisis territorial |
+| provincia | STRING | Provincia | Análisis territorial |
+| becarios_b18_count | INTEGER | Cantidad de becarios Beca 18 derivada de `b18_n` | Cobertura histórica Beca 18 |
+| source_snapshot_date | DATE | Fecha de carga fuente derivada de `fecha_carga` | Contexto temporal del snapshot |
+| source_system | STRING | Sistema origen | Auditoría |
+| source_dataset | STRING | Dataset origen (`becarios_provincia`) | Auditoría |
+| extraction_date | DATE | Fecha lógica de extracción | Auditoría |
+| ingestion_timestamp | TIMESTAMP | Timestamp de ingesta Silver | Auditoría |
+| pipeline_run_id | STRING | Identificador de corrida | Auditoría |
 
 ## Reglas de calidad iniciales
 
-- `departamento` no debe ser nulo.
+- `region` no debe ser nula.
 - `provincia` no debe ser nula.
-- Las cantidades deben ser mayores o iguales a cero.
-- Los porcentajes deben convertirse desde texto con coma decimal a `NUMERIC`.
-- Los porcentajes deben validarse en el rango 0 a 100.
-- `fecha_carga` debe convertirse a `TIMESTAMP` cuando el formato lo permita.
+- Las filas con `provincia` igual a `TOTAL`, `TOTAL DE BENEFICIARIOS`, `TOTAL GLOBAL` o que empiecen con `TOTAL` no pasan a Silver.
+- `b18_n` se convierte a `INTEGER`; valores vacíos o inválidos quedan como `NULL`.
+- `fecha_carga` se convierte desde `DD/MM/YYYY HH:MM:SS` a `DATE` en `source_snapshot_date`.
 
 ## Consideraciones de transformación
 
-- Los campos terminados en `_n` representan cantidades.
-- Los campos terminados en `_pct` representan porcentajes.
-- En Gold puede evaluarse una versión normalizada en formato largo con columnas `tipo_beca`, `cantidad` y `porcentaje`.
+- `aggregation_scope` no existe en Silver porque los agregados no se conservan.
+- Los totales regionales y nacionales permanecen en Bronze para trazabilidad.
+- Las columnas de otros programas y porcentajes permanecen en Bronze, pero no forman parte del contrato Silver vigente.
 
 ---
 
@@ -452,13 +438,15 @@ silver.becarios_pais_estudio
 
 ## Descripción
 
-Dataset de alto volumen que contiene las convocatorias de PRONABEC desagregadas por carrera, institución educativa, sede y región.
+Dataset de alto volumen que contiene las convocatorias de PRONABEC desagregadas por carrera, institución educativa, sede y región. Se conserva en Bronze por trazabilidad, pero no se promueve a Silver en esta versión porque no será usado directamente en Gold/Power BI.
 
-## Tabla Silver esperada
+## Alcance en la plataforma
 
 ```text
-silver.convocatorias_carrera_sede
+bronze.pronabec_convocatorias_carrera_sede_raw
 ```
+
+No existe tabla `silver.pronabec_convocatorias_carrera_sede`, schema Silver, transform Silver ni job Dataflow Silver para este dataset.
 
 | Campo | Tipo esperado | Descripción | Uso analítico |
 | :--- | :--- | :--- | :--- |
@@ -485,16 +473,14 @@ silver.convocatorias_carrera_sede
 
 ## Reglas de calidad iniciales
 
-- `id_convocatoria` y `carrera` no deben ser nulos.
-- `ruc` debe conservarse como `STRING` para evitar la pérdida de ceros iniciales o problemas con formato numérico.
-- `telefono` debe conservarse como `STRING`.
-- Columnas opcionales como `resolucion`, `region`, `web`, `representante`, `telefono` y `email` pueden venir vacías y deben conservarse como nulos.
-- `fecha_carga` debe convertirse a `TIMESTAMP`.
+- En Bronze se preservan los valores fuente como trazabilidad.
+- No se aplican reglas Silver en esta versión.
+- Los Gold futuros no deben depender de `silver.pronabec_convocatorias_carrera_sede`.
 
 ## Consideraciones de transformación
 
 - En la capa Bronze, todos los campos de este dataset se almacenan como `STRING` y `NULLABLE` para garantizar la trazabilidad y resiliencia ante cambios.
-- El alto volumen de este dataset requiere que el pipeline Dataflow maneje tolerancias adecuadas frente a valores nulos en columnas administrativas secundarias.
+- Si en otra versión se requiere oferta académica en Silver, debe definirse un contrato nuevo y pruebas específicas antes de promover este dataset.
 
 ---
 

@@ -21,8 +21,9 @@ Los siguientes datasets PRONABEC fueron aprobados para Silver:
 
 1. `pronabec_convocatorias`
 2. `pronabec_ubigeo_postulacion`
-3. `pronabec_becarios_pais_estudio`
-4. `pronabec_colegios_elegibles`
+3. `pronabec_beca18_becarios_provincia_2016`
+4. `pronabec_becarios_pais_estudio`
+5. `pronabec_colegios_elegibles`
 
 ---
 
@@ -81,7 +82,29 @@ Los registros con valores nulos en cualquiera de estos campos no deben cargarse 
 
 ---
 
-### 3. pronabec_becarios_pais_estudio
+### 3. pronabec_beca18_becarios_provincia_2016
+
+- **Dataset origen**: `becarios_provincia` en Bronze.
+- **Propósito analítico**: expone una fotografía histórica 2016 de beneficiarios Beca 18 a nivel de detalle provincial. Bronze conserva tanto detalle como agregados; Silver conserva únicamente filas provinciales.
+
+#### Columnas conservadas
+
+- `source_row_id` (`INT64` / `INTEGER`): identificador técnico para trazabilidad hacia Bronze.
+- `region` (`STRING`): departamento o región del detalle provincial.
+- `provincia` (`STRING`): provincia del detalle Beca 18.
+- `becarios_b18_count` (`INT64` / `INTEGER`): cantidad de becarios Beca 18, derivada de `b18_n`.
+- `source_snapshot_date` (`DATE`): fecha de carga publicada por PRONABEC, derivada de `fecha_carga`.
+
+#### Columnas descartadas y filtrado
+
+- `nro_fila`: eliminado por redundancia con `source_row_id`.
+- `b18_pct` y las columnas de otros programas (`permanencia_*`, `bicentenario_*`, `especial_*`, `ffaa_*`, `vraem_*`, `repec_*`, `internacional_*`, `otros_*`) no forman parte del contrato Silver.
+- Las filas agregadas se excluyen de Silver cuando `region` o `provincia` vienen vacías, o cuando `provincia` normalizada inicia con `TOTAL`, incluyendo `TOTAL`, `TOTAL DE BENEFICIARIOS` y `TOTAL GLOBAL`.
+- `aggregation_scope` no existe en Silver porque los agregados regionales y nacionales permanecen solo en Bronze.
+
+---
+
+### 4. pronabec_becarios_pais_estudio
 
 - **Dataset origen**: `BECARIOS_PAIS_ESTUDIO` en Bronze.
 - **Propósito analítico**: permite analizar becarios por convocatoria, modalidad, país de estudio, institución y sexo. Es uno de los datasets más útiles para observar movilidad académica, distribución institucional y composición por sexo.
@@ -102,7 +125,7 @@ Los registros con valores nulos en cualquiera de estos campos no deben cargarse 
 
 ---
 
-### 4. pronabec_colegios_elegibles
+### 5. pronabec_colegios_elegibles
 
 - **Dataset origen**: `COLEGIOS_ELEGIBLES` / `colegios_habiles` en Bronze.
 - **Propósito analítico**: permite analizar instituciones educativas elegibles para postulación a becas, considerando UGEL, distrito, tipo de gestión y modalidad educativa.
@@ -148,3 +171,4 @@ Se elimina `nro_fila` de Silver porque cumple una función similar y no aporta v
 - Los campos textuales como `tipo_gestion_colegio`, `convocatoria`, `modalidad`, `institucion` o `carrera` pueden contener diferencias de escritura, espacios, mayúsculas, acentos o variaciones semánticas. En este contrato se conservan como texto seleccionado, sin canonización avanzada.
 - La normalización textual profunda, corrección de encoding, homologación de nombres y fuzzy matching no forman parte de esta definición de schema.
 - Las claves geográficas dependen de `codigo_ubigeo` y nombres territoriales. No se incorporan coordenadas ni geometrías espaciales.
+- Los Gold futuros no deben depender de `silver.pronabec_convocatorias_carrera_sede`; `convocatorias_carrera_sede` queda Bronze-only en esta versión.

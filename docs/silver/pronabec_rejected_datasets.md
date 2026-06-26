@@ -17,7 +17,7 @@ Un dataset se clasifica como `BRONZE_ONLY` si cumple una o más de las siguiente
 
 ## Datasets clasificados como Bronze-Only
 
-Los siguientes cinco datasets PRONABEC no pasan a Silver y permanecen estrictamente en la capa Bronze:
+Los siguientes datasets PRONABEC no pasan a Silver y permanecen estrictamente en la capa Bronze:
 
 ---
 
@@ -53,6 +53,13 @@ Los siguientes cinco datasets PRONABEC no pasan a Silver y permanecen estrictame
 
 - **Decisión**: `BRONZE_ONLY`
 - **Motivo técnico y analítico**: aunque conceptualmente podría aportar al análisis de pérdida o deserción de becas, los registros disponibles no permiten interpretar con claridad la cobertura real del fenómeno. Además, no existen denominadores adecuados, como total de becarios por año o total de beneficiarios expuestos al riesgo, por lo que no se pueden calcular tasas de pérdida, retención o deserción de forma confiable. Usar conteos crudos en dashboards generaría una visión distorsionada del desempeño del programa.
+
+---
+
+### 6. convocatorias_carrera_sede
+
+- **Decisión**: `BRONZE_ONLY`
+- **Motivo técnico y analítico**: se conserva en Bronze por trazabilidad de la oferta académica publicada por PRONABEC, pero no se promueve a Silver en esta versión porque no será usado directamente en Gold/Power BI. Los modelos Gold futuros no deben depender de `silver.pronabec_convocatorias_carrera_sede`.
 
 ---
 
