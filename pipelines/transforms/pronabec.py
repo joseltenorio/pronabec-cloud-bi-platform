@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any, Callable
 
 from pipelines.common.text_normalization import (
@@ -14,12 +14,13 @@ from pipelines.transforms.base import parse_int_safe
 
 
 TransformContext = dict[str, Any]
-TransformFn = Callable[[dict[str, Any], TransformContext], dict[str, Any]]
+TransformFn = Callable[[dict[str, Any], TransformContext], dict[str, Any] | None]
 
 
 SUPPORTED_PRONABEC_DATASETS = {
     "convocatorias",
     "ubigeo_postulacion",
+    "becarios_provincia",
     "becarios_pais_estudio",
     "colegios_habiles",
 }
@@ -88,6 +89,39 @@ def _with_metadata(
     return {**values, **_metadata(dataset_name, context)}
 
 
+def parse_source_snapshot_date(value: Any) -> date | None:
+    """Parsea fechas fuente PRONABEC en formato DD/MM/YYYY HH:MM:SS."""
+    text = clean_text_value(value)
+    if text is None:
+        return None
+
+    for fmt in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def is_becarios_provincia_aggregate_row(
+    region: str | None,
+    provincia: str | None,
+) -> bool:
+    """Identifica filas agregadas que no deben pasar a Silver."""
+    if region is None or provincia is None:
+        return True
+
+    normalized_provincia = provincia.upper()
+    if normalized_provincia in {
+        "TOTAL",
+        "TOTAL DE BENEFICIARIOS",
+        "TOTAL GLOBAL",
+    }:
+        return True
+
+    return normalized_provincia.startswith("TOTAL")
+
+
 def transform_pronabec_convocatorias(
     record: dict[str, Any],
     context: TransformContext,
@@ -151,6 +185,30 @@ def transform_pronabec_becarios_pais_estudio(
     return _with_metadata(dataset_name, context, res)
 
 
+def transform_pronabec_becarios_provincia(
+    record: dict[str, Any],
+    context: TransformContext,
+) -> dict[str, Any] | None:
+    """Transform Bronze becarios_provincia into province-level Beca 18 detail."""
+    dataset_name = "becarios_provincia"
+    region = clean_text_value(record.get("region"))
+    provincia = clean_text_value(record.get("provincia"))
+
+    if is_becarios_provincia_aggregate_row(region, provincia):
+        return None
+
+    res = {
+        "source_row_id": parse_int_safe(record.get("source_row_id")),
+        "region": region,
+        "provincia": provincia,
+        "becarios_b18_count": parse_int_safe(record.get("b18_n")),
+        "source_snapshot_date": parse_source_snapshot_date(record.get("fecha_carga")),
+    }
+    output = _with_metadata(dataset_name, context, res)
+    output["source_system"] = "PRONABEC"
+    return output
+
+
 def transform_pronabec_colegios_elegibles(
     record: dict[str, Any],
     context: TransformContext,
@@ -180,6 +238,7 @@ def transform_pronabec_colegios_elegibles(
 TRANSFORMS_BY_DATASET: dict[str, TransformFn] = {
     "convocatorias": transform_pronabec_convocatorias,
     "ubigeo_postulacion": transform_pronabec_ubigeo_postulacion,
+    "becarios_provincia": transform_pronabec_becarios_provincia,
     "becarios_pais_estudio": transform_pronabec_becarios_pais_estudio,
     "colegios_habiles": transform_pronabec_colegios_elegibles,
 }
@@ -189,7 +248,7 @@ def transform_pronabec_record(
     dataset_name: str,
     record: dict[str, Any],
     context: TransformContext,
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
     """Route a PRONABEC Bronze record to the selected dataset transform."""
     transform = TRANSFORMS_BY_DATASET.get(dataset_name)
     if transform is None:

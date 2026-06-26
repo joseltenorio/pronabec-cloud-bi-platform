@@ -441,7 +441,7 @@ def transform_bronze_record(
     extraction_date: str,
     pipeline_run_id: str,
     ingestion_timestamp: str | None = None,
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
     """Apply a supported Bronze to Silver transform, or metadata-only fallback."""
     if source_system == "pronabec":
         return transform_pronabec_record(
@@ -492,15 +492,18 @@ def transform_bronze_records(
                 "pipeline_run_id": pipeline_run_id,
             },
         )
+    transformed = transform_bronze_record(
+        record,
+        source_system=source_system,
+        source_dataset=source_dataset,
+        extraction_date=extraction_date,
+        pipeline_run_id=pipeline_run_id,
+        ingestion_timestamp=ingestion_timestamp,
+    )
     return [
-        transform_bronze_record(
-            record,
-            source_system=source_system,
-            source_dataset=source_dataset,
-            extraction_date=extraction_date,
-            pipeline_run_id=pipeline_run_id,
-            ingestion_timestamp=ingestion_timestamp,
-        )
+        transformed
+        for transformed in [transformed]
+        if transformed is not None
     ]
 
 
