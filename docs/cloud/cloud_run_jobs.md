@@ -98,6 +98,29 @@ El job utiliza la lógica de extracción versionada en:
 pipelines/scrape_mef_budget.py
 ```
 
+### `pronabec-stage-reports-job`
+
+Ejecuta el staging de reportes documentales PRONABEC desde Cloud Storage Landing hacia Bronze. Es un único job parametrizable; Composer o una ejecución manual cambian `SOURCE_SUBSET` para procesar `pes_2025` o `beca18_universitarios_2012_2026`.
+
+El job ejecuta:
+
+```text
+python tools/stage_pronabec_manual_reports.py \
+  --input-uri gs://$GCS_BUCKET_NAME/$PRONABEC_REPORTS_LANDING_PREFIX/$SOURCE_SUBSET \
+  --output-uri gs://$GCS_BUCKET_NAME/$PRONABEC_REPORTS_BRONZE_PREFIX \
+  --extraction-date $BRONZE_EXTRACTION_DATE \
+  --source-subset $SOURCE_SUBSET \
+  --strict
+```
+
+Overrides esperados por ejecución:
+
+```text
+SOURCE_SUBSET=pes_2025
+SOURCE_SUBSET=beca18_universitarios_2012_2026
+BRONZE_EXTRACTION_DATE=<fecha del DAG>
+```
+
 ### `quality-checks-job`
 
 Ejecuta controles de calidad sobre BigQuery. Su responsabilidad es evaluar reglas SQL y registrar resultados estructurados en la capa Audit.
