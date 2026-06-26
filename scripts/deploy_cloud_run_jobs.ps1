@@ -81,15 +81,34 @@ function Upsert-CloudRunJob {
         [Parameter(Mandatory = $true)]
         [string]$Description,
 
+        [string[]]$SetEnvVars = @(),
+
         [int]$TaskTimeoutSeconds = 3600
     )
+
+    $BaseEnvVars = @(
+        "GCP_PROJECT_ID=$ProjectId",
+        "GCS_BUCKET=$BucketName",
+        "GCS_BUCKET_NAME=$BucketName",
+        "BQ_BRONZE_DATASET=$BronzeDataset",
+        "BQ_SILVER_DATASET=$SilverDataset",
+        "BQ_GOLD_DATASET=$GoldDataset",
+        "BQ_AUDIT_DATASET=$AuditDataset",
+        "DATAFLOW_TEMP_LOCATION=$DataflowTempLocation",
+        "DATAFLOW_STAGING_LOCATION=$DataflowStagingLocation",
+        "PRONABEC_REPORTS_LANDING_PREFIX=$PronabecReportsLandingPrefix",
+        "PRONABEC_REPORTS_BRONZE_PREFIX=$PronabecReportsBronzePrefix",
+        "STRUCTURED_LOGGING=true",
+        "LOG_LEVEL=INFO"
+    )
+    $EnvVars = ($BaseEnvVars + $SetEnvVars) -join ","
 
     $CommonArgs = @(
         "--project", $ProjectId,
         "--region", $Region,
         "--image", $Image,
         "--service-account", $ServiceAccount,
-        "--set-env-vars", "GCP_PROJECT_ID=$ProjectId,GCS_BUCKET=$BucketName,GCS_BUCKET_NAME=$BucketName,BQ_BRONZE_DATASET=$BronzeDataset,BQ_SILVER_DATASET=$SilverDataset,BQ_GOLD_DATASET=$GoldDataset,BQ_AUDIT_DATASET=$AuditDataset,DATAFLOW_TEMP_LOCATION=$DataflowTempLocation,DATAFLOW_STAGING_LOCATION=$DataflowStagingLocation,PRONABEC_REPORTS_LANDING_PREFIX=$PronabecReportsLandingPrefix,PRONABEC_REPORTS_BRONZE_PREFIX=$PronabecReportsBronzePrefix,STRUCTURED_LOGGING=true,LOG_LEVEL=INFO",
+        "--set-env-vars", $EnvVars,
         "--max-retries", "1",
         "--task-timeout", "$($TaskTimeoutSeconds)s"
     )
@@ -162,15 +181,8 @@ Upsert-CloudRunJob `
     -Description "Staging PRONABEC reports desde GCS Landing hacia Bronze" `
     -Args @(
         "tools/stage_pronabec_manual_reports.py",
-        "--input-uri",
-        "gs://$BucketName/$PronabecReportsLandingPrefix/`${SOURCE_SUBSET}",
-        "--output-uri",
-        "gs://$BucketName/$PronabecReportsBronzePrefix",
-        "--extraction-date",
-        "`${BRONZE_EXTRACTION_DATE}",
-        "--source-subset",
-        "`${SOURCE_SUBSET}",
-        "--strict"
+        "--strict",
+        "--overwrite"
     )
 
 Upsert-CloudRunJob `

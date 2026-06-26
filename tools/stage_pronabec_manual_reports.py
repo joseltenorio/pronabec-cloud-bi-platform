@@ -8,6 +8,7 @@ import argparse
 import csv
 import hashlib
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -27,6 +28,8 @@ SUPPORTED_SOURCE_SUBSETS = (
     "pes_2025",
     "beca18_universitarios_2012_2026",
 )
+DEFAULT_REPORTS_LANDING_PREFIX = "landing/pronabec_reports"
+DEFAULT_REPORTS_BRONZE_PREFIX = "bronze/pronabec_reports"
 
 # Lista de los 21 reportes del Panorama de Estudios Sociales (PES 2025)
 PES_2025_REPORTS = [
@@ -143,6 +146,59 @@ def validate_date(date_str: str) -> None:
         raise ValueError(
             f"Formato de fecha inválido: {date_str}. Debe ser YYYY-MM-DD."
         ) from e
+
+
+def get_env_value(name: str) -> str | None:
+    """Obtiene una variable de entorno no vacía."""
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        return None
+    return value.strip()
+
+
+def resolve_gcs_runtime_options(
+    input_uri: str | None,
+    output_uri: str | None,
+    extraction_date: str | None,
+    source_subset: str | None,
+) -> tuple[str, str, str, str]:
+    """Resuelve opciones GCS explícitas o derivadas desde variables de entorno."""
+    bucket_name = get_env_value("GCS_BUCKET_NAME") or get_env_value("GCS_BUCKET")
+    resolved_source_subset = source_subset or get_env_value("SOURCE_SUBSET")
+    resolved_extraction_date = extraction_date or get_env_value("BRONZE_EXTRACTION_DATE")
+    landing_prefix = (
+        get_env_value("PRONABEC_REPORTS_LANDING_PREFIX")
+        or DEFAULT_REPORTS_LANDING_PREFIX
+    ).strip("/")
+    bronze_prefix = (
+        get_env_value("PRONABEC_REPORTS_BRONZE_PREFIX")
+        or DEFAULT_REPORTS_BRONZE_PREFIX
+    ).strip("/")
+
+    if not resolved_source_subset or not resolved_extraction_date:
+        raise ValueError(
+            "Modo GCS por entorno requiere GCS_BUCKET_NAME, SOURCE_SUBSET y BRONZE_EXTRACTION_DATE."
+        )
+
+    if (not input_uri or not output_uri) and not bucket_name:
+        raise ValueError(
+            "Modo GCS por entorno requiere GCS_BUCKET_NAME, SOURCE_SUBSET y BRONZE_EXTRACTION_DATE."
+        )
+
+    resolved_input_uri = input_uri
+    if not resolved_input_uri:
+        resolved_input_uri = f"gs://{bucket_name}/{landing_prefix}/{resolved_source_subset}"
+
+    resolved_output_uri = output_uri
+    if not resolved_output_uri:
+        resolved_output_uri = f"gs://{bucket_name}/{bronze_prefix}"
+
+    return (
+        resolved_input_uri,
+        resolved_output_uri,
+        resolved_extraction_date,
+        resolved_source_subset,
+    )
 
 
 def find_file_recursively(root_dir: Path, target_names: list[str]) -> Path | None:
@@ -564,10 +620,7 @@ def stage_reports_gcs(
     skipped_count = 0
     missing_count = 0
 
-    temp_root = Path("tmp") / "stage_pronabec_reports_gcs"
-    temp_root.mkdir(parents=True, exist_ok=True)
-
-    with tempfile.TemporaryDirectory(dir=temp_root) as work_dir:
+    with tempfile.TemporaryDirectory(prefix="stage_pronabec_reports_gcs_") as work_dir:
         work_path = Path(work_dir)
 
         for target_key, config in targets.items():
@@ -682,7 +735,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--extraction-date",
-        required=True,
+        default=None,
         help="Fecha de extracción en formato YYYY-MM-DD.",
     )
     parser.add_argument(
@@ -710,25 +763,31 @@ def main() -> None:
 
     try:
         local_mode = args.input_dir is not None or args.output_dir is not None
-        gcs_mode = args.input_uri is not None or args.output_uri is not None
+        explicit_gcs_mode = args.input_uri is not None or args.output_uri is not None
+        env_gcs_mode = not local_mode and not explicit_gcs_mode
+        gcs_mode = explicit_gcs_mode or env_gcs_mode
 
-        if local_mode and gcs_mode:
+        if local_mode and explicit_gcs_mode:
             raise ValueError("Use solo modo local (--input-dir/--output-dir) o solo modo GCS (--input-uri/--output-uri).")
         if local_mode and (not args.input_dir or not args.output_dir):
             raise ValueError("Modo local requiere --input-dir y --output-dir.")
-        if gcs_mode and (not args.input_uri or not args.output_uri):
-            raise ValueError("Modo GCS requiere --input-uri y --output-uri.")
-        if not local_mode and not gcs_mode:
-            raise ValueError("Debe especificar modo local o modo GCS.")
+        if local_mode and not args.extraction_date:
+            raise ValueError("Modo local requiere --extraction-date.")
 
         if gcs_mode:
-            staged, skipped, missing = stage_reports_gcs(
+            input_uri, output_uri, extraction_date, source_subset = resolve_gcs_runtime_options(
                 input_uri=args.input_uri,
                 output_uri=args.output_uri,
                 extraction_date=args.extraction_date,
+                source_subset=args.source_subset,
+            )
+            staged, skipped, missing = stage_reports_gcs(
+                input_uri=input_uri,
+                output_uri=output_uri,
+                extraction_date=extraction_date,
                 report_name=args.report_name,
                 overwrite=args.overwrite,
-                source_subset=args.source_subset,
+                source_subset=source_subset,
                 strict=args.strict,
             )
         else:
