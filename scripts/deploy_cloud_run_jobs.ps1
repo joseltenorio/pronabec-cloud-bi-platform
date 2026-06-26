@@ -26,6 +26,10 @@ param(
     [string]$PronabecReportsBronzePrefix = $(if ($env:PRONABEC_REPORTS_BRONZE_PREFIX) { $env:PRONABEC_REPORTS_BRONZE_PREFIX } else { "bronze/pronabec_reports" }),
 
     [string]$DataflowPronabecConvocatoriasJobName = "dataflow-pronabec-convocatorias-job",
+    [string]$DataflowPronabecUbigeoPostulacionJobName = "dataflow-pronabec-ubigeo-postulacion-job",
+    [string]$DataflowPronabecBecariosPaisEstudioJobName = "dataflow-pronabec-becarios-pais-estudio-job",
+    [string]$DataflowPronabecColegiosHabilesJobName = "dataflow-pronabec-colegios-habiles-job",
+    [string]$DataflowPronabecBecariosProvinciaJobName = "dataflow-pronabec-becarios-provincia-job",
     [string]$DataflowMefPresupuestoJobName = "dataflow-mef-presupuesto-job",
     [string]$DataflowReportUniversitariosJobName = "dataflow-report-universitarios-job"
 )
@@ -204,6 +208,94 @@ Upsert-CloudRunJob `
             "$ProjectId`:$SilverDataset.pronabec_convocatorias",
             "--summary-output-path",
             "gs://$BucketName/audit/processing_summary/pronabec_convocatorias_`${BRONZE_EXTRACTION_DATE}.json"
+        )
+    )
+
+Upsert-CloudRunJob `
+    -JobName $DataflowPronabecUbigeoPostulacionJobName `
+    -Description "Lanzador Dataflow PRONABEC ubigeo postulación Bronze a Silver" `
+    -TaskTimeoutSeconds 7200 `
+    -Args @(
+        $DataflowCommonArgs +
+        @(
+            "--source-system",
+            "pronabec",
+            "--source-dataset",
+            "ubigeo_postulacion",
+            "--input-path",
+            "gs://$BucketName/bronze/pronabec/ubigeo_postulacion/extraction_date=`${BRONZE_EXTRACTION_DATE}/data.jsonl",
+            "--input-format",
+            "jsonl",
+            "--output-table",
+            "$ProjectId`:$SilverDataset.pronabec_ubigeo_postulacion",
+            "--summary-output-path",
+            "gs://$BucketName/audit/processing_summary/pronabec_ubigeo_postulacion_`${BRONZE_EXTRACTION_DATE}.json"
+        )
+    )
+
+Upsert-CloudRunJob `
+    -JobName $DataflowPronabecBecariosPaisEstudioJobName `
+    -Description "Lanzador Dataflow PRONABEC becarios país estudio Bronze a Silver" `
+    -TaskTimeoutSeconds 7200 `
+    -Args @(
+        $DataflowCommonArgs +
+        @(
+            "--source-system",
+            "pronabec",
+            "--source-dataset",
+            "becarios_pais_estudio",
+            "--input-path",
+            "gs://$BucketName/bronze/pronabec/becarios_pais_estudio/extraction_date=`${BRONZE_EXTRACTION_DATE}/data.jsonl",
+            "--input-format",
+            "jsonl",
+            "--output-table",
+            "$ProjectId`:$SilverDataset.pronabec_becarios_pais_estudio",
+            "--summary-output-path",
+            "gs://$BucketName/audit/processing_summary/pronabec_becarios_pais_estudio_`${BRONZE_EXTRACTION_DATE}.json"
+        )
+    )
+
+Upsert-CloudRunJob `
+    -JobName $DataflowPronabecColegiosHabilesJobName `
+    -Description "Lanzador Dataflow PRONABEC colegios hábiles Bronze a Silver" `
+    -TaskTimeoutSeconds 7200 `
+    -Args @(
+        $DataflowCommonArgs +
+        @(
+            "--source-system",
+            "pronabec",
+            "--source-dataset",
+            "colegios_habiles",
+            "--input-path",
+            "gs://$BucketName/bronze/pronabec/colegios_habiles/extraction_date=`${BRONZE_EXTRACTION_DATE}/data.jsonl",
+            "--input-format",
+            "jsonl",
+            "--output-table",
+            "$ProjectId`:$SilverDataset.pronabec_colegios_elegibles",
+            "--summary-output-path",
+            "gs://$BucketName/audit/processing_summary/pronabec_colegios_elegibles_`${BRONZE_EXTRACTION_DATE}.json"
+        )
+    )
+
+Upsert-CloudRunJob `
+    -JobName $DataflowPronabecBecariosProvinciaJobName `
+    -Description "Lanzador Dataflow PRONABEC becarios provincia Bronze a Silver" `
+    -TaskTimeoutSeconds 7200 `
+    -Args @(
+        $DataflowCommonArgs +
+        @(
+            "--source-system",
+            "pronabec",
+            "--source-dataset",
+            "becarios_provincia",
+            "--input-path",
+            "gs://$BucketName/bronze/pronabec/becarios_provincia/extraction_date=`${BRONZE_EXTRACTION_DATE}/data.jsonl",
+            "--input-format",
+            "jsonl",
+            "--output-table",
+            "$ProjectId`:$SilverDataset.pronabec_beca18_becarios_provincia_2016",
+            "--summary-output-path",
+            "gs://$BucketName/audit/processing_summary/pronabec_beca18_becarios_provincia_2016_`${BRONZE_EXTRACTION_DATE}.json"
         )
     )
 
