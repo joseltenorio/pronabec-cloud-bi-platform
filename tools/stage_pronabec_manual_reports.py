@@ -14,6 +14,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+SUPPORTED_SOURCE_SUBSETS = (
+    "pes_2025",
+    "beca18_universitarios_2012_2026",
+)
+
 # Lista de los 21 reportes del Panorama de Estudios Sociales (PES 2025)
 PES_2025_REPORTS = [
     "report_beca18_autoidentificacion_etnica_modalidad_2025",
@@ -82,6 +87,43 @@ for report_id in PES_2025_REPORTS:
         "extraction_method": "manual_csv",
         "source_subset": "pes_2025",
     }
+
+
+def dataset_name_from_landing_filename(filename: str) -> str:
+    """Deriva el dataset Bronze desde un CSV de Landing."""
+    path_name = Path(filename).name
+    if path_name.lower().endswith(".pdf"):
+        raise ValueError(f"El archivo no es un CSV de datos: {filename}")
+    if not path_name.lower().endswith(".csv"):
+        raise ValueError(f"El archivo debe tener extensión .csv: {filename}")
+
+    dataset_name = path_name[:-4]
+    if dataset_name.startswith("pronabec_"):
+        dataset_name = dataset_name.removeprefix("pronabec_")
+
+    if not dataset_name:
+        raise ValueError(f"No se pudo derivar dataset desde: {filename}")
+
+    return dataset_name
+
+
+def validate_source_subset(source_subset: str) -> None:
+    """Valida que el subset de reportes sea soportado."""
+    if source_subset not in SUPPORTED_SOURCE_SUBSETS:
+        valid_values = ", ".join(SUPPORTED_SOURCE_SUBSETS)
+        raise ValueError(
+            f"source_subset no soportado: {source_subset}. Valores válidos: {valid_values}"
+        )
+
+
+def expected_reports_for_subset(source_subset: str) -> list[str]:
+    """Devuelve los datasets esperados para un subset de reportes PRONABEC."""
+    validate_source_subset(source_subset)
+    return [
+        report_id
+        for report_id, config in MANUAL_REPORT_SOURCES.items()
+        if config.get("source_subset") == source_subset
+    ]
 
 
 def validate_date(date_str: str) -> None:
@@ -257,6 +299,8 @@ def stage_reports(
     Bronze local y generando sus metadatos correspondientes.
     """
     validate_date(extraction_date)
+    if source_subset:
+        validate_source_subset(source_subset)
 
     input_path = Path(input_dir)
     if not input_path.exists() or not input_path.is_dir():
@@ -277,7 +321,7 @@ def stage_reports(
     else:
         for k, v in MANUAL_REPORT_SOURCES.items():
             if source_subset:
-                if v.get("source_subset") == source_subset:
+                if k in expected_reports_for_subset(source_subset):
                     targets[k] = v
             else:
                 # Si no se define subset ni report_name, se procesan todos los reportes
