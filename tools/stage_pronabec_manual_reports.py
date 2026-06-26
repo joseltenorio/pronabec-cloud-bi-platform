@@ -10,9 +10,18 @@ import hashlib
 import json
 import shutil
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from pipelines.common.gcs import (
+    join_gcs_uri,
+    list_gcs_objects,
+    read_gcs_bytes,
+    write_gcs_bytes,
+    write_gcs_text,
+)
 
 SUPPORTED_SOURCE_SUBSETS = (
     "pes_2025",
@@ -144,6 +153,19 @@ def find_file_recursively(root_dir: Path, target_names: list[str]) -> Path | Non
     return None
 
 
+def find_gcs_csv(input_uri: str, target_names: list[str]) -> str | None:
+    """Busca un CSV esperado dentro de una URI Landing, ignorando documentos."""
+    for object_uri in list_gcs_objects(input_uri):
+        object_name = object_uri.rsplit("/", 1)[-1]
+        if "/_documents/" in object_uri:
+            continue
+        if not object_name.lower().endswith(".csv"):
+            continue
+        if object_name in target_names:
+            return object_uri
+    return None
+
+
 def calculate_sha256(file_path: Path) -> str:
     """Calcula el hash SHA-256 de un archivo de forma eficiente."""
     sha256_hash = hashlib.sha256()
@@ -151,6 +173,11 @@ def calculate_sha256(file_path: Path) -> str:
         for byte_block in iter(lambda: f.read(4096), b""):
             sha256_hash.update(byte_block)
     return sha256_hash.hexdigest()
+
+
+def calculate_bytes_sha256(content: bytes) -> str:
+    """Calcula SHA-256 para contenido en memoria."""
+    return hashlib.sha256(content).hexdigest()
 
 
 def analyze_csv(file_path: Path) -> tuple[int, int, list[str]]:
@@ -284,6 +311,120 @@ def stage_csv_with_metadata(
     return len(source_rows), len(schema_columns), schema_columns
 
 
+def target_configs(
+    report_name: str | None = None,
+    source_subset: str | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Resuelve los reportes objetivo para staging."""
+    if source_subset:
+        validate_source_subset(source_subset)
+
+    targets: dict[str, dict[str, Any]] = {}
+    if report_name:
+        if report_name not in MANUAL_REPORT_SOURCES:
+            raise ValueError(f"Reporte desconocido o no soportado: {report_name}")
+        targets[report_name] = MANUAL_REPORT_SOURCES[report_name]
+        return targets
+
+    for report_id, config in MANUAL_REPORT_SOURCES.items():
+        if source_subset:
+            if report_id in expected_reports_for_subset(source_subset):
+                targets[report_id] = config
+        else:
+            targets[report_id] = config
+
+    return targets
+
+
+def should_rewrite_with_metadata(target_key: str, source_file: Path) -> tuple[bool, list[str]]:
+    """Determina si un CSV debe reescribirse para agregar metadata documental."""
+    project_root = Path(__file__).resolve().parent.parent
+    schema_path = project_root / "config" / "schemas" / "bronze" / f"{target_key}_schema.json"
+
+    should_rewrite = False
+    schema_columns: list[str] = []
+
+    if target_key in (
+        "report_beca18_universitarios_universidad_anual",
+        "report_beca18_universitarios_carrera_anual",
+    ) and schema_path.exists():
+        try:
+            with open(schema_path, "r", encoding="utf-8") as f:
+                schema_data = json.load(f)
+            schema_columns = [field["name"] for field in schema_data]
+
+            _, _, source_cols = analyze_csv(source_file)
+            if "source_document_file" in schema_columns and "source_document_file" not in source_cols:
+                should_rewrite = True
+        except Exception as e:
+            print(f"Warning leyendo esquema o CSV para {target_key}: {e}")
+
+    return should_rewrite, schema_columns
+
+
+def build_metadata(
+    target_key: str,
+    source_file_name: str,
+    target_csv_ref: str,
+    extraction_date: str,
+    config: dict[str, Any],
+    row_count: int,
+    col_count: int,
+    columns: list[str],
+    sha256: str,
+    source_subset: str | None = None,
+    source_path: str | None = None,
+    landing_uri: str | None = None,
+    output_path: str | None = None,
+    source_method: str | None = None,
+) -> dict[str, Any]:
+    """Construye metadata común para staging local y GCS."""
+    staging_time = datetime.now(timezone.utc).isoformat()
+    resolved_subset = source_subset or config.get("source_subset")
+    resolved_method = source_method or config["extraction_method"]
+
+    metadata = {
+        "source_system": "pronabec_reports",
+        "source_dataset": target_key,
+        "source_file_name": source_file_name,
+        "bronze_file_name": "data.csv",
+        "extraction_date": extraction_date,
+        "staging_timestamp": staging_time,
+        "ingestion_timestamp": staging_time,
+        "staged_at": staging_time,
+        "created_at": staging_time,
+        "extraction_method": resolved_method,
+        "source_method": resolved_method,
+        "source_document_title": config["source_document_title"],
+        "source_publication_url": config.get("source_publication_url"),
+        "row_count": row_count,
+        "records_read": row_count,
+        "records_written": row_count,
+        "column_count": col_count,
+        "columns": columns,
+        "sha256": sha256,
+        "content_sha256": sha256,
+        "file_sha256": sha256,
+    }
+
+    if source_path:
+        metadata["source_path"] = source_path
+        metadata["input_path"] = source_path
+    if landing_uri:
+        metadata["landing_uri"] = landing_uri
+    if output_path:
+        metadata["output_path"] = output_path
+    else:
+        metadata["output_path"] = target_csv_ref
+
+    if resolved_subset:
+        metadata["source_subset"] = resolved_subset
+        metadata["source_file"] = source_file_name
+    if "source_document_file" in config:
+        metadata["source_document_file"] = config["source_document_file"]
+
+    return metadata
+
 
 def stage_reports(
     input_dir: str,
@@ -312,20 +453,7 @@ def stage_reports(
     skipped_count = 0
     missing_count = 0
 
-    # Filtrar reportes según parámetro y subconjunto
-    targets = {}
-    if report_name:
-        if report_name not in MANUAL_REPORT_SOURCES:
-            raise ValueError(f"Reporte desconocido o no soportado: {report_name}")
-        targets[report_name] = MANUAL_REPORT_SOURCES[report_name]
-    else:
-        for k, v in MANUAL_REPORT_SOURCES.items():
-            if source_subset:
-                if k in expected_reports_for_subset(source_subset):
-                    targets[k] = v
-            else:
-                # Si no se define subset ni report_name, se procesan todos los reportes
-                targets[k] = v
+    targets = target_configs(report_name=report_name, source_subset=source_subset)
 
     for target_key, config in targets.items():
         possible_names = [config["filename"]] + config.get("alternative_filenames", [])
@@ -359,25 +487,7 @@ def stage_reports(
         # Crear directorios
         target_dataset_dir.mkdir(parents=True, exist_ok=True)
 
-        # Verificar si existe esquema Bronze para validar si faltan columnas de metadatos documentales
-        project_root = Path(__file__).resolve().parent.parent
-        schema_path = project_root / "config" / "schemas" / "bronze" / f"{target_key}_schema.json"
-
-        should_rewrite = False
-        schema_columns = []
-
-        if target_key in ("report_beca18_universitarios_universidad_anual", "report_beca18_universitarios_carrera_anual") and schema_path.exists():
-            try:
-                with open(schema_path, "r", encoding="utf-8") as f:
-                    schema_data = json.load(f)
-                schema_columns = [field["name"] for field in schema_data]
-
-                # Leer cabeceras del CSV de origen para ver si ya contiene "source_document_file"
-                _, _, source_cols = analyze_csv(source_file)
-                if "source_document_file" in schema_columns and "source_document_file" not in source_cols:
-                    should_rewrite = True
-            except Exception as e:
-                print(f"Warning leyendo esquema o CSV para {target_key}: {e}")
+        should_rewrite, schema_columns = should_rewrite_with_metadata(target_key, source_file)
 
         if should_rewrite:
             try:
@@ -404,40 +514,20 @@ def stage_reports(
                     target_csv_path.unlink()
                 raise ValueError(f"Error analizando el archivo CSV {source_file}: {str(e)}") from e
 
-        # Hash SHA-256 reproducible
         sha256 = calculate_sha256(target_csv_path)
-        staging_time = datetime.now(timezone.utc).isoformat()
-
-        # Metadatos de extracción
-        metadata = {
-            "source_system": "pronabec_reports",
-            "source_dataset": target_key,
-            "source_file_name": source_file.name,
-            "bronze_file_name": "data.csv",
-            "input_path": str(source_file.resolve()),
-            "output_path": str(target_csv_path.resolve()),
-            "extraction_date": extraction_date,
-            "staging_timestamp": staging_time,
-            "ingestion_timestamp": staging_time,
-            "staged_at": staging_time,
-            "extraction_method": config["extraction_method"],
-            "source_document_title": config["source_document_title"],
-            "source_publication_url": config.get("source_publication_url"),
-            "row_count": row_count,
-            "records_read": row_count,
-            "records_written": row_count,
-            "column_count": col_count,
-            "columns": columns,
-            "content_sha256": sha256,
-            "file_sha256": sha256,
-        }
-
-        # Campos adicionales del subset
-        if "source_subset" in config:
-            metadata["source_subset"] = config["source_subset"]
-            metadata["source_file"] = source_file.name
-        if "source_document_file" in config:
-            metadata["source_document_file"] = config["source_document_file"]
+        metadata = build_metadata(
+            target_key=target_key,
+            source_file_name=source_file.name,
+            target_csv_ref=str(target_csv_path.resolve()),
+            extraction_date=extraction_date,
+            config=config,
+            row_count=row_count,
+            col_count=col_count,
+            columns=columns,
+            sha256=sha256,
+            source_path=str(source_file.resolve()),
+            output_path=str(target_csv_path.resolve()),
+        )
 
         # Guardar metadatos en JSON formateado
         with open(target_metadata_path, "w", encoding="utf-8") as meta_f:
@@ -454,20 +544,141 @@ def stage_reports(
     return staged_count, skipped_count, missing_count
 
 
+def stage_reports_gcs(
+    input_uri: str,
+    output_uri: str,
+    extraction_date: str,
+    report_name: str | None = None,
+    overwrite: bool = False,
+    source_subset: str | None = None,
+    strict: bool = False,
+) -> tuple[int, int, int]:
+    """Ejecuta staging desde GCS Landing hacia GCS Bronze."""
+    validate_date(extraction_date)
+    if not source_subset:
+        raise ValueError("--source-subset es obligatorio para staging GCS.")
+    validate_source_subset(source_subset)
+
+    targets = target_configs(report_name=report_name, source_subset=source_subset)
+    staged_count = 0
+    skipped_count = 0
+    missing_count = 0
+
+    temp_root = Path("tmp") / "stage_pronabec_reports_gcs"
+    temp_root.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(dir=temp_root) as work_dir:
+        work_path = Path(work_dir)
+
+        for target_key, config in targets.items():
+            possible_names = [config["filename"]] + config.get("alternative_filenames", [])
+            source_uri = find_gcs_csv(input_uri, possible_names)
+
+            if not source_uri:
+                if report_name or strict:
+                    raise FileNotFoundError(
+                        f"No se encontró el CSV fuente para el reporte '{target_key}' "
+                        f"bajo la ruta '{input_uri}' (buscando {possible_names})."
+                    )
+                print(f"Skipped {target_key}: Archivo fuente no encontrado.")
+                missing_count += 1
+                continue
+
+            source_file_name = source_uri.rsplit("/", 1)[-1]
+            source_file = work_path / source_file_name
+            target_csv_path = work_path / f"{target_key}_data.csv"
+            source_file.write_bytes(read_gcs_bytes(source_uri))
+
+            target_dataset_uri = join_gcs_uri(
+                output_uri,
+                target_key,
+                f"extraction_date={extraction_date}",
+            )
+            target_csv_uri = join_gcs_uri(target_dataset_uri, "data.csv")
+            target_metadata_uri = join_gcs_uri(target_dataset_uri, "extraction_metadata.json")
+
+            if not overwrite:
+                existing_outputs = set(list_gcs_objects(target_dataset_uri))
+                if target_csv_uri in existing_outputs:
+                    if report_name or strict:
+                        raise FileExistsError(
+                            f"El archivo destino ya existe y no se especificó --overwrite: {target_csv_uri}"
+                        )
+                    print(f"Skipped {target_key}: El archivo destino ya existe y no se especificó --overwrite.")
+                    skipped_count += 1
+                    continue
+
+            should_rewrite, schema_columns = should_rewrite_with_metadata(target_key, source_file)
+            if should_rewrite:
+                row_count, col_count, columns = stage_csv_with_metadata(
+                    source_file=source_file,
+                    target_csv_path=target_csv_path,
+                    schema_columns=schema_columns,
+                    config=config,
+                )
+            else:
+                shutil.copyfile(source_file, target_csv_path)
+                row_count, col_count, columns = analyze_csv(target_csv_path)
+
+            staged_bytes = target_csv_path.read_bytes()
+            sha256 = calculate_bytes_sha256(staged_bytes)
+            metadata = build_metadata(
+                target_key=target_key,
+                source_file_name=source_file_name,
+                target_csv_ref=target_csv_uri,
+                extraction_date=extraction_date,
+                config=config,
+                row_count=row_count,
+                col_count=col_count,
+                columns=columns,
+                sha256=sha256,
+                source_subset=source_subset,
+                landing_uri=source_uri,
+                output_path=target_csv_uri,
+                source_method="manual_landing_csv",
+            )
+
+            write_gcs_bytes(target_csv_uri, staged_bytes, content_type="text/csv")
+            write_gcs_text(
+                target_metadata_uri,
+                json.dumps(metadata, indent=2, ensure_ascii=False),
+            )
+
+            print(f"Staged {target_key}")
+            print(f"  source: {source_uri}")
+            print(f"  target: {target_csv_uri}")
+            print(f"  rows: {row_count}")
+            print(f"  columns: {col_count}")
+
+            staged_count += 1
+
+    return staged_count, skipped_count, missing_count
+
+
 def main() -> None:
     """Función de entrada para ejecución CLI."""
     parser = argparse.ArgumentParser(
-        description="Stagea reportes manuales PRONABEC como archivos Bronze locales."
+        description="Stagea reportes manuales PRONABEC como archivos Bronze locales o GCS."
     )
     parser.add_argument(
         "--input-dir",
-        required=True,
+        default=None,
         help="Directorio de origen que contiene los reportes CSV manuales.",
     )
     parser.add_argument(
         "--output-dir",
-        required=True,
+        default=None,
         help="Directorio destino Bronze local.",
+    )
+    parser.add_argument(
+        "--input-uri",
+        default=None,
+        help="URI GCS Landing de origen que contiene los reportes CSV.",
+    )
+    parser.add_argument(
+        "--output-uri",
+        default=None,
+        help="URI GCS Bronze destino.",
     )
     parser.add_argument(
         "--extraction-date",
@@ -498,15 +709,38 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
-        staged, skipped, missing = stage_reports(
-            input_dir=args.input_dir,
-            output_dir=args.output_dir,
-            extraction_date=args.extraction_date,
-            report_name=args.report_name,
-            overwrite=args.overwrite,
-            source_subset=args.source_subset,
-            strict=args.strict,
-        )
+        local_mode = args.input_dir is not None or args.output_dir is not None
+        gcs_mode = args.input_uri is not None or args.output_uri is not None
+
+        if local_mode and gcs_mode:
+            raise ValueError("Use solo modo local (--input-dir/--output-dir) o solo modo GCS (--input-uri/--output-uri).")
+        if local_mode and (not args.input_dir or not args.output_dir):
+            raise ValueError("Modo local requiere --input-dir y --output-dir.")
+        if gcs_mode and (not args.input_uri or not args.output_uri):
+            raise ValueError("Modo GCS requiere --input-uri y --output-uri.")
+        if not local_mode and not gcs_mode:
+            raise ValueError("Debe especificar modo local o modo GCS.")
+
+        if gcs_mode:
+            staged, skipped, missing = stage_reports_gcs(
+                input_uri=args.input_uri,
+                output_uri=args.output_uri,
+                extraction_date=args.extraction_date,
+                report_name=args.report_name,
+                overwrite=args.overwrite,
+                source_subset=args.source_subset,
+                strict=args.strict,
+            )
+        else:
+            staged, skipped, missing = stage_reports(
+                input_dir=args.input_dir,
+                output_dir=args.output_dir,
+                extraction_date=args.extraction_date,
+                report_name=args.report_name,
+                overwrite=args.overwrite,
+                source_subset=args.source_subset,
+                strict=args.strict,
+            )
         print("\nStaging finalizado:")
         print(f"Reports staged: {staged}")
         print(f"Reports skipped: {skipped}")
