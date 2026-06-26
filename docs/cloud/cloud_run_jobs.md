@@ -102,15 +102,18 @@ pipelines/scrape_mef_budget.py
 
 Ejecuta el staging de reportes documentales PRONABEC desde Cloud Storage Landing hacia Bronze. Es un único job parametrizable; Composer o una ejecución manual cambian `SOURCE_SUBSET` para procesar `pes_2025` o `beca18_universitarios_2012_2026`.
 
-El job ejecuta:
+El job no depende de expansión shell en los argumentos. Como la imagen usa `ENTRYPOINT ["python"]`, los parámetros cloud se resuelven dentro de `tools/stage_pronabec_manual_reports.py` a partir de variables de entorno. El job se registra con argumentos mínimos:
 
 ```text
-python tools/stage_pronabec_manual_reports.py \
-  --input-uri gs://$GCS_BUCKET_NAME/$PRONABEC_REPORTS_LANDING_PREFIX/$SOURCE_SUBSET \
-  --output-uri gs://$GCS_BUCKET_NAME/$PRONABEC_REPORTS_BRONZE_PREFIX \
-  --extraction-date $BRONZE_EXTRACTION_DATE \
-  --source-subset $SOURCE_SUBSET \
-  --strict
+python tools/stage_pronabec_manual_reports.py --strict --overwrite
+```
+
+Variables base permanentes del job:
+
+```text
+GCS_BUCKET_NAME=<bucket>
+PRONABEC_REPORTS_LANDING_PREFIX=landing/pronabec_reports
+PRONABEC_REPORTS_BRONZE_PREFIX=bronze/pronabec_reports
 ```
 
 Overrides esperados por ejecución:
@@ -120,6 +123,15 @@ SOURCE_SUBSET=pes_2025
 SOURCE_SUBSET=beca18_universitarios_2012_2026
 BRONZE_EXTRACTION_DATE=<fecha del DAG>
 ```
+
+Con esos valores, el script construye:
+
+```text
+gs://<bucket>/landing/pronabec_reports/<SOURCE_SUBSET>
+gs://<bucket>/bronze/pronabec_reports
+```
+
+El job usa `--overwrite` para permitir reejecutar la misma `BRONZE_EXTRACTION_DATE` sin fallar por archivos Bronze existentes.
 
 ### `quality-checks-job`
 
