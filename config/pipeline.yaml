@@ -14,6 +14,7 @@ execution:
 storage:
   bucket_env_var: GCS_BUCKET_NAME
   prefixes:
+    landing: landing
     bronze: bronze
     silver: silver
     gold: gold
@@ -28,6 +29,18 @@ gcs_paths:
   rejected_records: "dlq/{dataset}/extraction_date={extraction_date}/rejected_records.jsonl"
   pronabec_reports_bronze_csv: "bronze/pronabec_reports/{dataset}/extraction_date={extraction_date}/data.csv"
   pronabec_reports_source_document: "bronze/pronabec_reports/_documents/{document_file}"
+
+pronabec_reports:
+  local_manual_dir_env_var: PRONABEC_REPORTS_LOCAL_MANUAL_DIR
+  local_manual_dir: data/manual/pronabec_reports
+  landing_prefix_env_var: PRONABEC_REPORTS_LANDING_PREFIX
+  landing_prefix: landing/pronabec_reports
+  bronze_prefix_env_var: PRONABEC_REPORTS_BRONZE_PREFIX
+  bronze_prefix: bronze/pronabec_reports
+  subsets_env_var: PRONABEC_REPORTS_SUBSETS
+  subsets:
+    - pes_2025
+    - beca18_universitarios_2012_2026
 
 bigquery:
   datasets:

@@ -94,6 +94,34 @@ def test_get_pipeline_settings_reads_project_pipeline_config() -> None:
     assert settings["timezone"] == "America/Lima"
     assert "bronze" in settings["bigquery_datasets"]
     assert "pronabec_bronze_normalized" in settings["gcs_paths"]
+    assert settings["pronabec_reports"]["local_manual_dir"] == "data/manual/pronabec_reports"
+    assert settings["pronabec_reports"]["landing_prefix"] == "landing/pronabec_reports"
+    assert settings["pronabec_reports"]["bronze_prefix"] == "bronze/pronabec_reports"
+    assert settings["pronabec_reports"]["subsets"] == [
+        "pes_2025",
+        "beca18_universitarios_2012_2026",
+    ]
+
+
+def test_get_pipeline_settings_reads_pronabec_reports_env_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PRONABEC_REPORTS_LOCAL_MANUAL_DIR", "custom/manual")
+    monkeypatch.setenv("PRONABEC_REPORTS_LANDING_PREFIX", "landing/pronabec_reports")
+    monkeypatch.setenv("PRONABEC_REPORTS_BRONZE_PREFIX", "bronze/pronabec_reports")
+    monkeypatch.setenv("PRONABEC_REPORTS_SUBSETS", "pes_2025,beca18_universitarios_2012_2026")
+
+    settings = get_pipeline_settings("config/pipeline.yaml")
+
+    assert settings["pronabec_reports"] == {
+        "local_manual_dir": "custom/manual",
+        "landing_prefix": "landing/pronabec_reports",
+        "bronze_prefix": "bronze/pronabec_reports",
+        "subsets": [
+            "pes_2025",
+            "beca18_universitarios_2012_2026",
+        ],
+    }
 
 
 def test_build_gcs_path_renders_template() -> None:
