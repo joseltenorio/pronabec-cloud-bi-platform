@@ -9,7 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from tools.stage_pronabec_manual_reports import stage_reports
+from tools.stage_pronabec_manual_reports import (
+    dataset_name_from_landing_filename,
+    expected_reports_for_subset,
+    stage_reports,
+    validate_source_subset,
+)
 
 
 @pytest.fixture
@@ -26,6 +31,36 @@ def mock_output_dir(tmp_path: Path) -> Path:
     output_dir = tmp_path / "output_bronze"
     output_dir.mkdir()
     return output_dir
+
+
+def test_dataset_name_from_landing_filename_removes_pronabec_prefix() -> None:
+    assert (
+        dataset_name_from_landing_filename("pronabec_report_beca18_sexo_anual.csv")
+        == "report_beca18_sexo_anual"
+    )
+
+
+def test_dataset_name_from_landing_filename_rejects_non_csv() -> None:
+    with pytest.raises(ValueError) as excinfo:
+        dataset_name_from_landing_filename("_documents/source.pdf")
+
+    assert "no es un CSV de datos" in str(excinfo.value)
+
+
+def test_expected_reports_for_subset_returns_registered_reports() -> None:
+    reports = expected_reports_for_subset("beca18_universitarios_2012_2026")
+
+    assert reports == [
+        "report_beca18_universitarios_universidad_anual",
+        "report_beca18_universitarios_carrera_anual",
+    ]
+
+
+def test_validate_source_subset_rejects_unknown_subset() -> None:
+    with pytest.raises(ValueError) as excinfo:
+        validate_source_subset("unknown_subset")
+
+    assert "source_subset no soportado" in str(excinfo.value)
 
 
 def test_stage_university_report_success(mock_input_dir: Path, mock_output_dir: Path) -> None:
