@@ -45,6 +45,11 @@ def build_gs_uri(bucket_name: str, object_path: str) -> str:
     return f"gs://{clean_bucket}/{clean_path}"
 
 
+def is_gcs_uri(path: str) -> bool:
+    """Indica si una ruta usa el esquema gs://."""
+    return isinstance(path, str) and path.startswith("gs://")
+
+
 def parse_gs_uri(uri: str) -> tuple[str, str]:
     """
     Divide una URI gs://bucket/path en bucket y object_path.
@@ -68,6 +73,67 @@ def parse_gs_uri(uri: str) -> tuple[str, str]:
         raise GCSPathError(f"URI GCS inválida: {uri}")
 
     return parts[0], parts[1]
+
+
+def parse_gcs_uri(uri: str) -> tuple[str, str]:
+    """Alias semántico de parse_gs_uri para helpers genéricos de GCS."""
+    return parse_gs_uri(uri)
+
+
+def join_gcs_uri(base_uri: str, *parts: str) -> str:
+    """
+    Une una URI base gs://bucket/prefix con segmentos adicionales.
+    """
+    bucket_name, object_path = parse_gcs_uri(base_uri)
+    clean_parts = [object_path.strip("/")]
+
+    for part in parts:
+        clean_part = str(part).strip("/")
+        if clean_part:
+            clean_parts.append(clean_part)
+
+    return build_gs_uri(bucket_name, "/".join(clean_parts))
+
+
+def list_gcs_objects(uri: str) -> list[str]:
+    """
+    Lista objetos bajo una URI prefijo de Cloud Storage.
+    """
+    bucket_name, prefix = parse_gcs_uri(uri)
+    storage_client = get_storage_client()
+    blobs = storage_client.list_blobs(bucket_name, prefix=prefix.rstrip("/") + "/")
+    return [build_gs_uri(bucket_name, blob.name) for blob in blobs]
+
+
+def read_gcs_bytes(uri: str) -> bytes:
+    """Lee un objeto de Cloud Storage como bytes."""
+    bucket_name, object_path = parse_gcs_uri(uri)
+    storage_client = get_storage_client()
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(object_path)
+    return blob.download_as_bytes()
+
+
+def write_gcs_bytes(
+    uri: str,
+    content: bytes,
+    content_type: str | None = None,
+) -> None:
+    """Escribe bytes en un objeto de Cloud Storage."""
+    bucket_name, object_path = parse_gcs_uri(uri)
+    storage_client = get_storage_client()
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(object_path)
+    blob.upload_from_string(content, content_type=content_type)
+
+
+def write_gcs_text(uri: str, content: str) -> None:
+    """Escribe texto UTF-8 en un objeto de Cloud Storage."""
+    write_gcs_bytes(
+        uri,
+        content.encode("utf-8"),
+        content_type="text/plain; charset=utf-8",
+    )
 
 
 def build_pronabec_raw_path(

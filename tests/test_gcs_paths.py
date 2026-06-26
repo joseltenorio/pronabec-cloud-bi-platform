@@ -8,18 +8,27 @@ from pipelines.common.gcs import (
     build_pronabec_normalized_path,
     build_pronabec_raw_path,
     build_rejected_records_path,
+    is_gcs_uri,
+    join_gcs_uri,
+    list_gcs_objects,
     parse_gs_uri,
+    parse_gcs_uri,
+    read_gcs_bytes,
     upload_csv,
     upload_json,
     upload_jsonl,
+    write_gcs_bytes,
+    write_gcs_text,
 )
 
 
 class FakeBlob:
-    def __init__(self) -> None:
+    def __init__(self, name: str = "") -> None:
+        self.name = name
         self.uploaded_content = None
         self.uploaded_content_type = None
         self.uploaded_filename = None
+        self.download_content = b""
 
     def upload_from_string(self, content: str, content_type: str) -> None:
         self.uploaded_content = content
@@ -29,23 +38,39 @@ class FakeBlob:
         self.uploaded_filename = filename
         self.uploaded_content_type = content_type
 
+    def download_as_bytes(self) -> bytes:
+        return self.download_content
+
 
 class FakeBucket:
     def __init__(self) -> None:
         self.blobs = {}
 
     def blob(self, object_path: str) -> FakeBlob:
-        blob = FakeBlob()
-        self.blobs[object_path] = blob
-        return blob
+        if object_path not in self.blobs:
+            self.blobs[object_path] = FakeBlob(name=object_path)
+        return self.blobs[object_path]
 
 
 class FakeStorageClient:
     def __init__(self) -> None:
         self.fake_bucket = FakeBucket()
+        self.listed_blobs = []
 
     def bucket(self, bucket_name: str) -> FakeBucket:
         return self.fake_bucket
+
+    def list_blobs(self, bucket_name: str, prefix: str):
+        return [
+            blob
+            for blob in self.listed_blobs
+            if blob.name.startswith(prefix)
+        ]
+
+
+def test_is_gcs_uri() -> None:
+    assert is_gcs_uri("gs://bucket/path.csv") is True
+    assert is_gcs_uri("data/manual/file.csv") is False
 
 
 def test_build_gs_uri_returns_valid_uri() -> None:
@@ -91,9 +116,78 @@ def test_parse_gs_uri_returns_bucket_and_object_path() -> None:
     assert object_path == "bronze/pronabec/data.jsonl"
 
 
+def test_parse_gcs_uri_alias_returns_bucket_and_object_path() -> None:
+    assert parse_gcs_uri("gs://bucket/landing/file.csv") == (
+        "bucket",
+        "landing/file.csv",
+    )
+
+
 def test_parse_gs_uri_raises_for_invalid_uri() -> None:
     with pytest.raises(GCSPathError):
         parse_gs_uri("https://example.com/file.csv")
+
+
+def test_parse_gcs_uri_raises_for_missing_object_path() -> None:
+    with pytest.raises(GCSPathError):
+        parse_gcs_uri("gs://bucket")
+
+
+def test_join_gcs_uri_joins_segments() -> None:
+    uri = join_gcs_uri(
+        "gs://bucket/landing/pronabec_reports/",
+        "/pes_2025/",
+        "data.csv",
+    )
+
+    assert uri == "gs://bucket/landing/pronabec_reports/pes_2025/data.csv"
+
+
+def test_list_gcs_objects_uses_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeStorageClient()
+    client.listed_blobs = [
+        FakeBlob("landing/pronabec_reports/pes_2025/a.csv"),
+        FakeBlob("landing/pronabec_reports/pes_2025/_documents/doc.pdf"),
+        FakeBlob("landing/pronabec_reports/other/b.csv"),
+    ]
+    monkeypatch.setattr("pipelines.common.gcs.get_storage_client", lambda: client)
+
+    objects = list_gcs_objects("gs://bucket/landing/pronabec_reports/pes_2025")
+
+    assert objects == [
+        "gs://bucket/landing/pronabec_reports/pes_2025/a.csv",
+        "gs://bucket/landing/pronabec_reports/pes_2025/_documents/doc.pdf",
+    ]
+
+
+def test_read_gcs_bytes_downloads_blob(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeStorageClient()
+    client.fake_bucket.blob("landing/file.csv").download_content = b"a,b\n1,2\n"
+    monkeypatch.setattr("pipelines.common.gcs.get_storage_client", lambda: client)
+
+    assert read_gcs_bytes("gs://bucket/landing/file.csv") == b"a,b\n1,2\n"
+
+
+def test_write_gcs_bytes_uploads_blob(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeStorageClient()
+    monkeypatch.setattr("pipelines.common.gcs.get_storage_client", lambda: client)
+
+    write_gcs_bytes("gs://bucket/bronze/data.csv", b"a,b\n", content_type="text/csv")
+
+    blob = client.fake_bucket.blobs["bronze/data.csv"]
+    assert blob.uploaded_content == b"a,b\n"
+    assert blob.uploaded_content_type == "text/csv"
+
+
+def test_write_gcs_text_uploads_utf8_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = FakeStorageClient()
+    monkeypatch.setattr("pipelines.common.gcs.get_storage_client", lambda: client)
+
+    write_gcs_text("gs://bucket/bronze/metadata.json", "{}")
+
+    blob = client.fake_bucket.blobs["bronze/metadata.json"]
+    assert blob.uploaded_content == b"{}"
+    assert blob.uploaded_content_type == "text/plain; charset=utf-8"
 
 
 def test_build_pronabec_raw_path() -> None:
