@@ -18,17 +18,28 @@ Este documento detalla las especificaciones técnicas y metodológicas de la nue
 ## 3. Flujo de Datos en la Plataforma
 ```text
 PDF Oficial PRONABEC (Manual)
-  → Tabulación controlada a CSV
-  → Cloud Storage Bronze
-  → BigQuery Bronze External Table
-  → BigQuery Silver Typed Table
-  → BigQuery Gold / Power BI
+  -> Tabulación controlada a CSV
+  -> gs://<bucket>/landing/pronabec_reports/pes_2025/
+  -> Cloud Run Job de staging
+  -> gs://<bucket>/bronze/pronabec_reports/<dataset>/extraction_date=YYYY-MM-DD/
+  -> Dataflow Bronze to Silver
+  -> BigQuery Silver
+  -> BigQuery Gold
+  -> Power BI
 ```
 
 ## 4. Rutas de Almacenamiento
 ### Local (Scratch / No versionado)
 * Carpeta de entrada con CSVs y PDF para desarrollo y pruebas:
   `data/manual/pronabec_reports/pes_2025/`
+
+Esta ruta local se mantiene solo para desarrollo. En cloud productivo, la entrada oficial es Landing.
+
+### Google Cloud Storage Landing
+* CSVs tabulados originales, conservando nombres reales:
+  `gs://<GCS_BUCKET_NAME>/landing/pronabec_reports/pes_2025/*.csv`
+* PDFs oficiales asociados:
+  `gs://<GCS_BUCKET_NAME>/landing/pronabec_reports/pes_2025/_documents/*.pdf`
 
 ### Bronze Local de Pruebas
 * Carpeta temporal con estructura de partición por fecha de extracción:
@@ -37,8 +48,10 @@ PDF Oficial PRONABEC (Manual)
 ### Google Cloud Storage Bronze (Data Lake)
 * Datos tabulados en CSV:
   `gs://<GCS_BUCKET_NAME>/bronze/pronabec_reports/<dataset>/extraction_date=YYYY-MM-DD/data.csv`
-* Trazabilidad documental (PDF original):
-  `gs://<GCS_BUCKET_NAME>/bronze/pronabec_reports/_documents/7219175-panorama-de-estudios-sociales-pronabec.pdf`
+* Metadatos de staging:
+  `gs://<GCS_BUCKET_NAME>/bronze/pronabec_reports/<dataset>/extraction_date=YYYY-MM-DD/extraction_metadata.json`
+
+El nombre del dataset se deriva del nombre del CSV en Landing removiendo el prefijo `pronabec_` y la extensión `.csv`. Por ejemplo, `pronabec_report_beca18_sexo_anual.csv` produce el dataset `report_beca18_sexo_anual`, pero el archivo Bronze se mantiene como `data.csv`.
 
 ## 5. Datasets Incluidos
 Esta familia de datos agrupa 21 datasets tabulados correspondientes a gráficos, figuras o secciones específicas del reporte:

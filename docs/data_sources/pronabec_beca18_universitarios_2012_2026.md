@@ -24,11 +24,14 @@ Para procesar y catalogar esta información dentro de la plataforma de datos se 
 El ciclo de vida de los datos de este informe sigue la arquitectura Medallion del proyecto:
 ```text
 PDF Oficial PRONABEC 
-→ CSV tabulado controlado local (data/manual/pronabec_reports/beca18_universitarios_2012_2026/)
-→ Cloud Storage Bronze (gs://<GCS_BUCKET_NAME>/bronze/pronabec_reports/<dataset>/extraction_date=YYYY-MM-DD/)
-→ BigQuery Bronze External Table BQ (CSV externo, ignore_leading_rows = 1)
-→ BigQuery Silver Native Typed Table (formato relacional largo, tipado fuerte)
-→ futura capa Gold para agregaciones y reporting en Power BI
+-> CSV tabulado controlado
+-> gs://<bucket>/landing/pronabec_reports/beca18_universitarios_2012_2026/
+-> Cloud Run Job de staging
+-> gs://<bucket>/bronze/pronabec_reports/<dataset>/extraction_date=YYYY-MM-DD/
+-> Dataflow Bronze to Silver
+-> BigQuery Silver
+-> BigQuery Gold
+-> Power BI
 ```
 
 ## 5. Especificaciones de Ubicación
@@ -37,18 +40,27 @@ PDF Oficial PRONABEC
 Los archivos se colocan en el directorio:
 `data/manual/pronabec_reports/beca18_universitarios_2012_2026/`
 
+Esta ruta se mantiene para desarrollo local. El flujo productivo usa Cloud Storage Landing.
+
 Contenido esperado:
 - Los dos archivos PDF fuentes originales.
 - `pronabec_report_beca18_universitarios_universidad_anual.csv` (saneado y tabulado).
 - `pronabec_report_beca18_universitarios_carrera_anual.csv` (saneado y tabulado).
 
+### Ubicación en Cloud Storage Landing
+* **CSVs tabulados originales:**
+  * `gs://<GCS_BUCKET_NAME>/landing/pronabec_reports/beca18_universitarios_2012_2026/*.csv`
+* **PDFs de documentación:**
+  * `gs://<GCS_BUCKET_NAME>/landing/pronabec_reports/beca18_universitarios_2012_2026/_documents/*.pdf`
+
 ### Ubicación en Cloud Storage Bronze
 * **CSVs de Datos:**
   * `gs://<GCS_BUCKET_NAME>/bronze/pronabec_reports/report_beca18_universitarios_universidad_anual/extraction_date=YYYY-MM-DD/data.csv`
   * `gs://<GCS_BUCKET_NAME>/bronze/pronabec_reports/report_beca18_universitarios_carrera_anual/extraction_date=YYYY-MM-DD/data.csv`
-* **PDFs de Documentación:**
-  * `gs://<GCS_BUCKET_NAME>/bronze/pronabec_reports/_documents/8170922-beca-18-cantidad-de-becarios-segun-universidad-de-estudio-2012-2026.pdf`
-  * `gs://<GCS_BUCKET_NAME>/bronze/pronabec_reports/_documents/8170922-beca-18-cantidad-de-becarios-en-universidades-segun-carrera-de-estudio-2012-2026.pdf`
+* **Metadatos de staging:**
+  * `gs://<GCS_BUCKET_NAME>/bronze/pronabec_reports/<dataset>/extraction_date=YYYY-MM-DD/extraction_metadata.json`
+
+Bronze conserva el nombre técnico `data.csv` para cada dataset. El dataset se deriva del CSV de Landing removiendo el prefijo `pronabec_` y la extensión `.csv`.
 
 ## 6. Naturaleza de los Datos
 * **Datos Agregados:** Esta fuente corresponde a tabulados oficiales precalculados agregados por año.

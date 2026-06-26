@@ -122,6 +122,8 @@ Los jobs MEF ejecutan scraping tabular controlado sobre información presupuesta
 
 Los procesos de staging de reportes PRONABEC preparan archivos tabulados derivados de fuentes documentales oficiales. La lógica conserva metadata documental y separa esta familia de fuentes de la API pública PRONABEC.
 
+La entrada cloud oficial es `gs://<bucket>/landing/pronabec_reports/<source_subset>/`. Landing conserva los CSV originales con sus nombres reales y los PDFs bajo `_documents/`. El staging escribe en `gs://<bucket>/bronze/pronabec_reports/<dataset>/extraction_date=YYYY-MM-DD/`, siempre con `data.csv` y `extraction_metadata.json`.
+
 ### Calidad de datos
 
 Los jobs de calidad ejecutan reglas SQL y registran resultados estructurados en la capa Audit. Esta responsabilidad se mantiene separada de la extracción y de la transformación para conservar trazabilidad operativa.
@@ -133,6 +135,7 @@ Los jobs utilizan una imagen común y comandos diferenciados mediante argumentos
 ```text
 python -m pipelines.extract_pronabec
 python -m pipelines.scrape_mef_budget
+python tools/stage_pronabec_manual_reports.py --input-uri gs://<bucket>/landing/pronabec_reports/<subset> --output-uri gs://<bucket>/bronze/pronabec_reports --extraction-date <YYYY-MM-DD> --source-subset <subset> --strict
 python -m pipelines.quality_checks
 ```
 
@@ -153,6 +156,10 @@ BQ_GOLD_DATASET
 BQ_AUDIT_DATASET
 STRUCTURED_LOGGING
 LOG_LEVEL
+BRONZE_EXTRACTION_DATE
+SOURCE_SUBSET
+PRONABEC_REPORTS_LANDING_PREFIX
+PRONABEC_REPORTS_BRONZE_PREFIX
 ```
 
 Estas variables permiten ejecutar los mismos módulos Python bajo un entorno cloud sin modificar el código fuente.
@@ -169,6 +176,9 @@ Cloud Run Jobs participa principalmente en la preparación y control de la entra
 
 ```text
 Cloud Run Jobs
+    |
+    v
+Cloud Storage Landing
     |
     v
 Cloud Storage Bronze

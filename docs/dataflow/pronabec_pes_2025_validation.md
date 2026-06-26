@@ -5,15 +5,26 @@ Este documento detalla el proceso de staging y validación de los 21 conjuntos d
 ## 1. Contexto de PES 2025
 El **Panorama de Estudios Sociales (PES 2025)** de PRONABEC es una recopilación estadística oficial e histórica sobre los becarios del programa Beca 18. Esta información pertenece al sistema de origen `pronabec_reports` y, a diferencia de otras fuentes dinámicas de PRONABEC, no proviene de APIs ni endpoints JSON (como jqGrid), sino de la tabulación manual y estructuración controlada de los gráficos y tablas expuestos en el documento PDF oficial: `7219175-panorama-de-estudios-sociales-pronabec.pdf`.
 
-Los archivos fuente originales en formato CSV real viven localmente en:
+Los archivos fuente originales en formato CSV real viven localmente para desarrollo en:
 `data/manual/pronabec_reports/pes_2025/`
 (Esta ruta de datos crudos se encuentra excluida del control de versiones).
+
+En cloud productivo, la ruta oficial de entrada es:
+`gs://<BUCKET_NAME>/landing/pronabec_reports/pes_2025/*.csv`
+
+Los PDFs oficiales asociados se conservan bajo:
+`gs://<BUCKET_NAME>/landing/pronabec_reports/pes_2025/_documents/*.pdf`
 
 El proceso de **Staging** se encarga de estructurar y copiar estos archivos locales hacia la zona temporal local representativa de la capa Bronze:
 `tmp/bronze/pronabec_reports/<dataset>/extraction_date=2026-06-15/data.csv`
 
-En producción, la ingesta en BigQuery Bronze consumirá los mismos archivos particionados cargados en Google Cloud Storage en la ruta:
+En producción, un Cloud Run Job stagea los CSV de Landing hacia Bronze. La ingesta posterior consume los archivos particionados en Google Cloud Storage en la ruta:
 `gs://<BUCKET_NAME>/bronze/pronabec_reports/<dataset>/extraction_date=YYYY-MM-DD/data.csv`
+
+Cada partición Bronze incluye también:
+`gs://<BUCKET_NAME>/bronze/pronabec_reports/<dataset>/extraction_date=YYYY-MM-DD/extraction_metadata.json`
+
+El pipeline periódico debe usar la misma `extraction_date` para PRONABEC API, MEF y reportes PRONABEC, de modo que los dry-runs y ejecuciones cloud comparen una misma fecha lógica.
 
 ---
 

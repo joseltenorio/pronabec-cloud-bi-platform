@@ -14,7 +14,7 @@ El repositorio define el DAG:
 pronabec_medallion_batch
 ```
 
-Este DAG coordina procesos batch asociados a la plataforma Medallion. La primera versión orquesta Cloud Run Jobs responsables de extracción PRONABEC, extracción MEF y ejecución de controles de calidad.
+Este DAG coordina procesos batch asociados a la plataforma Medallion. Orquesta Cloud Run Jobs responsables de extracción PRONABEC, extracción MEF, staging de reportes documentales PRONABEC desde Landing hacia Bronze, transformaciones Dataflow y ejecución de controles de calidad.
 
 ## Responsabilidades del DAG
 
@@ -23,6 +23,7 @@ El DAG mantiene las siguientes responsabilidades:
 - iniciar la ejecución batch del flujo;
 - ejecutar el job de extracción PRONABEC;
 - ejecutar el job de extracción MEF;
+- ejecutar staging de reportes documentales PRONABEC desde `landing/pronabec_reports/` hacia Bronze;
 - ejecutar controles de calidad;
 - propagar parámetros operativos como fecha de extracción e identificador de ejecución;
 - controlar reintentos y concurrencia;
@@ -38,6 +39,10 @@ Ejecuta el Cloud Run Job asociado a la extracción PRONABEC. Este job conserva d
 
 Ejecuta el Cloud Run Job asociado a la extracción MEF. Este job procesa información presupuestal pública y conserva la salida en la zona Bronze bajo las reglas del modelo de datos crudo.
 
+### `stage_pronabec_reports_pes_2025` y `stage_pronabec_reports_universitarios`
+
+Ejecutan el Cloud Run Job parametrizable de staging de reportes PRONABEC. Cada tarea cambia `SOURCE_SUBSET` y usa la misma `EXTRACTION_DATE` del DAG para leer desde Landing y escribir Bronze.
+
 ### `run_quality_checks`
 
 Ejecuta el Cloud Run Job de calidad. Este job evalúa reglas SQL sobre BigQuery y registra resultados estructurados en la capa Audit.
@@ -50,10 +55,12 @@ El DAG acepta parámetros de ejecución para controlar su comportamiento sin mod
 extraction_date
 run_pronabec
 run_mef
+run_pronabec_reports_staging
+run_dataflow_reports
 run_quality
 ```
 
-`extraction_date` representa la fecha lógica asociada a la ejecución. Los parámetros booleanos permiten habilitar o deshabilitar familias de tareas dentro de una corrida controlada.
+`extraction_date` representa la fecha lógica asociada a la ejecución. La misma fecha se propaga a PRONABEC API, MEF y PRONABEC reports para alinear particiones Bronze. Los parámetros booleanos permiten habilitar o deshabilitar familias de tareas dentro de una corrida controlada.
 
 ## Variables Airflow
 
@@ -64,6 +71,9 @@ gcp_project_id
 gcp_region
 pronabec_extract_job_name
 mef_extract_job_name
+pronabec_reports_stage_job_name
+pronabec_reports_landing_prefix
+pronabec_reports_bronze_prefix
 quality_checks_job_name
 ```
 
@@ -74,6 +84,21 @@ Estas variables identifican el proyecto, región y nombres de Cloud Run Jobs reg
 Composer ejecuta comandos `gcloud run jobs execute` para disparar procesos batch ya registrados. Cada ejecución espera la finalización del job antes de avanzar a la siguiente dependencia.
 
 Este diseño mantiene a Composer como orquestador y evita duplicar lógica de extracción o validación dentro del DAG.
+
+El orden operativo para reportes documentales garantiza que Dataflow de reportes no inicie antes de completar el staging:
+
+```text
+start
+  -> extract_pronabec
+  -> extract_mef
+  -> stage_pronabec_reports_pes_2025
+  -> stage_pronabec_reports_universitarios
+  -> dataflow_pronabec
+  -> dataflow_mef
+  -> dataflow_reports
+  -> quality_checks
+  -> end
+```
 
 ## Reintentos y concurrencia
 
