@@ -12,6 +12,7 @@ import pytest
 from tools.stage_pronabec_manual_reports import (
     dataset_name_from_landing_filename,
     expected_reports_for_subset,
+    stage_reports_gcs,
     stage_reports,
     validate_source_subset,
 )
@@ -425,6 +426,62 @@ def test_stage_pes_2025_metadata_and_mapping(mock_input_dir: Path, mock_output_d
     assert meta["records_written"] == 1
     assert "file_sha256" in meta
     assert "ingestion_timestamp" in meta
+
+
+def test_stage_gcs_report_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    source_uri = (
+        "gs://bucket/landing/pronabec_reports/pes_2025/"
+        "pronabec_report_beca18_sexo_anual.csv"
+    )
+    written: dict[str, bytes | str] = {}
+
+    monkeypatch.setattr(
+        "tools.stage_pronabec_manual_reports.list_gcs_objects",
+        lambda uri: [source_uri],
+    )
+    monkeypatch.setattr(
+        "tools.stage_pronabec_manual_reports.read_gcs_bytes",
+        lambda uri: b"anio,sexo,becarios\n2025,F,10\n",
+    )
+    monkeypatch.setattr(
+        "tools.stage_pronabec_manual_reports.write_gcs_bytes",
+        lambda uri, content, content_type=None: written.update({uri: content}),
+    )
+    monkeypatch.setattr(
+        "tools.stage_pronabec_manual_reports.write_gcs_text",
+        lambda uri, content: written.update({uri: content}),
+    )
+
+    staged, skipped, missing = stage_reports_gcs(
+        input_uri="gs://bucket/landing/pronabec_reports/pes_2025",
+        output_uri="gs://bucket/bronze/pronabec_reports",
+        extraction_date="2026-06-26",
+        report_name="report_beca18_sexo_anual",
+        source_subset="pes_2025",
+        strict=True,
+    )
+
+    target_csv_uri = (
+        "gs://bucket/bronze/pronabec_reports/report_beca18_sexo_anual/"
+        "extraction_date=2026-06-26/data.csv"
+    )
+    target_meta_uri = (
+        "gs://bucket/bronze/pronabec_reports/report_beca18_sexo_anual/"
+        "extraction_date=2026-06-26/extraction_metadata.json"
+    )
+
+    assert (staged, skipped, missing) == (1, 0, 0)
+    assert written[target_csv_uri] == b"anio,sexo,becarios\n2025,F,10\n"
+
+    metadata = json.loads(written[target_meta_uri])
+    assert metadata["source_system"] == "pronabec_reports"
+    assert metadata["source_subset"] == "pes_2025"
+    assert metadata["source_dataset"] == "report_beca18_sexo_anual"
+    assert metadata["extraction_date"] == "2026-06-26"
+    assert metadata["source_method"] == "manual_landing_csv"
+    assert metadata["landing_uri"] == source_uri
+    assert metadata["row_count"] == 1
+    assert "sha256" in metadata
 
 
 def test_stage_pes_2025_strict_raises_error_if_any_missing(mock_input_dir: Path, mock_output_dir: Path) -> None:
