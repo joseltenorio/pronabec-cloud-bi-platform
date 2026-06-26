@@ -13,6 +13,7 @@ from tools.stage_pronabec_manual_reports import (
     dataset_name_from_landing_filename,
     expected_reports_for_subset,
     find_gcs_csv,
+    resolve_gcs_runtime_options,
     stage_reports_gcs,
     stage_reports,
     validate_source_subset,
@@ -72,6 +73,131 @@ def test_validate_source_subset_rejects_unknown_subset() -> None:
         validate_source_subset("unknown_subset")
 
     assert "source_subset no soportado" in str(excinfo.value)
+
+
+def test_resolve_gcs_runtime_options_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GCS_BUCKET_NAME", "bucket")
+    monkeypatch.setenv("PRONABEC_REPORTS_LANDING_PREFIX", "landing/pronabec_reports")
+    monkeypatch.setenv("PRONABEC_REPORTS_BRONZE_PREFIX", "bronze/pronabec_reports")
+    monkeypatch.setenv("SOURCE_SUBSET", "pes_2025")
+    monkeypatch.setenv("BRONZE_EXTRACTION_DATE", "2026-06-26")
+
+    input_uri, output_uri, extraction_date, source_subset = resolve_gcs_runtime_options(
+        input_uri=None,
+        output_uri=None,
+        extraction_date=None,
+        source_subset=None,
+    )
+
+    assert input_uri == "gs://bucket/landing/pronabec_reports/pes_2025"
+    assert output_uri == "gs://bucket/bronze/pronabec_reports"
+    assert extraction_date == "2026-06-26"
+    assert source_subset == "pes_2025"
+
+
+def test_resolve_gcs_runtime_options_uses_gcs_bucket_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GCS_BUCKET_NAME", raising=False)
+    monkeypatch.setenv("GCS_BUCKET", "fallback-bucket")
+    monkeypatch.setenv("SOURCE_SUBSET", "pes_2025")
+    monkeypatch.setenv("BRONZE_EXTRACTION_DATE", "2026-06-26")
+
+    input_uri, output_uri, _, _ = resolve_gcs_runtime_options(
+        input_uri=None,
+        output_uri=None,
+        extraction_date=None,
+        source_subset=None,
+    )
+
+    assert input_uri == "gs://fallback-bucket/landing/pronabec_reports/pes_2025"
+    assert output_uri == "gs://fallback-bucket/bronze/pronabec_reports"
+
+
+def test_resolve_gcs_runtime_options_rejects_missing_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in (
+        "GCS_BUCKET_NAME",
+        "GCS_BUCKET",
+        "SOURCE_SUBSET",
+        "BRONZE_EXTRACTION_DATE",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    with pytest.raises(ValueError) as excinfo:
+        resolve_gcs_runtime_options(
+            input_uri=None,
+            output_uri=None,
+            extraction_date=None,
+            source_subset=None,
+        )
+
+    assert (
+        "Modo GCS por entorno requiere GCS_BUCKET_NAME, SOURCE_SUBSET y BRONZE_EXTRACTION_DATE"
+        in str(excinfo.value)
+    )
+
+
+def test_resolve_gcs_runtime_options_rejects_missing_bucket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("GCS_BUCKET_NAME", raising=False)
+    monkeypatch.delenv("GCS_BUCKET", raising=False)
+    monkeypatch.setenv("SOURCE_SUBSET", "pes_2025")
+    monkeypatch.setenv("BRONZE_EXTRACTION_DATE", "2026-06-26")
+
+    with pytest.raises(ValueError) as excinfo:
+        resolve_gcs_runtime_options(None, None, None, None)
+
+    assert "GCS_BUCKET_NAME" in str(excinfo.value)
+
+
+def test_resolve_gcs_runtime_options_rejects_missing_source_subset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GCS_BUCKET_NAME", "bucket")
+    monkeypatch.delenv("SOURCE_SUBSET", raising=False)
+    monkeypatch.setenv("BRONZE_EXTRACTION_DATE", "2026-06-26")
+
+    with pytest.raises(ValueError) as excinfo:
+        resolve_gcs_runtime_options(None, None, None, None)
+
+    assert "SOURCE_SUBSET" in str(excinfo.value)
+
+
+def test_resolve_gcs_runtime_options_rejects_missing_extraction_date(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GCS_BUCKET_NAME", "bucket")
+    monkeypatch.setenv("SOURCE_SUBSET", "pes_2025")
+    monkeypatch.delenv("BRONZE_EXTRACTION_DATE", raising=False)
+
+    with pytest.raises(ValueError) as excinfo:
+        resolve_gcs_runtime_options(None, None, None, None)
+
+    assert "BRONZE_EXTRACTION_DATE" in str(excinfo.value)
+
+
+def test_resolve_gcs_runtime_options_keeps_explicit_gcs_args(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in ("GCS_BUCKET_NAME", "GCS_BUCKET"):
+        monkeypatch.delenv(name, raising=False)
+
+    resolved = resolve_gcs_runtime_options(
+        input_uri="gs://bucket/landing/pronabec_reports/pes_2025",
+        output_uri="gs://bucket/bronze/pronabec_reports",
+        extraction_date="2026-06-26",
+        source_subset="pes_2025",
+    )
+
+    assert resolved == (
+        "gs://bucket/landing/pronabec_reports/pes_2025",
+        "gs://bucket/bronze/pronabec_reports",
+        "2026-06-26",
+        "pes_2025",
+    )
 
 
 def test_stage_university_report_success(mock_input_dir: Path, mock_output_dir: Path) -> None:
@@ -549,6 +675,79 @@ def test_stage_gcs_strict_raises_when_expected_csv_is_missing(
         )
 
     assert "No se encontró el CSV fuente" in str(excinfo.value)
+
+
+def test_stage_gcs_uses_tempfile_without_repo_tmp(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source_uri = (
+        "gs://bucket/landing/pronabec_reports/pes_2025/"
+        "pronabec_report_beca18_sexo_anual.csv"
+    )
+    temp_calls: list[dict[str, object]] = []
+
+    class FakeTemporaryDirectory:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            temp_calls.append({"args": args, "kwargs": kwargs})
+            self.path = tmp_path / "cloud_temp"
+
+        def __enter__(self) -> str:
+            self.path.mkdir()
+            return str(self.path)
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "tools.stage_pronabec_manual_reports.tempfile.TemporaryDirectory",
+        FakeTemporaryDirectory,
+    )
+    monkeypatch.setattr(
+        "tools.stage_pronabec_manual_reports.list_gcs_objects",
+        lambda uri: [source_uri] if uri.endswith("pes_2025") else [],
+    )
+    monkeypatch.setattr(
+        "tools.stage_pronabec_manual_reports.read_gcs_bytes",
+        lambda uri: b"anio,sexo,becarios\n2025,F,10\n",
+    )
+    monkeypatch.setattr(
+        "tools.stage_pronabec_manual_reports.write_gcs_bytes",
+        lambda uri, content, content_type=None: None,
+    )
+    monkeypatch.setattr(
+        "tools.stage_pronabec_manual_reports.write_gcs_text",
+        lambda uri, content: None,
+    )
+
+    staged, _, _ = stage_reports_gcs(
+        input_uri="gs://bucket/landing/pronabec_reports/pes_2025",
+        output_uri="gs://bucket/bronze/pronabec_reports",
+        extraction_date="2026-06-26",
+        report_name="report_beca18_sexo_anual",
+        source_subset="pes_2025",
+        strict=True,
+        overwrite=True,
+    )
+
+    assert staged == 1
+    assert temp_calls
+    assert temp_calls[0]["kwargs"].get("prefix") == "stage_pronabec_reports_gcs_"
+    assert "dir" not in temp_calls[0]["kwargs"]
+
+
+def test_deploy_script_stage_reports_job_avoids_shell_literals() -> None:
+    script = Path("scripts/deploy_cloud_run_jobs.ps1").read_text(encoding="utf-8")
+    start = script.index("-JobName $PronabecReportsStageJobName")
+    end = script.index("Upsert-CloudRunJob `", start + 1)
+    stage_job_block = script[start:end]
+
+    assert "`${SOURCE_SUBSET}" not in stage_job_block
+    assert "`${BRONZE_EXTRACTION_DATE}" not in stage_job_block
+    assert "--overwrite" in stage_job_block
+    assert "GCS_BUCKET_NAME" in script
+    assert "PRONABEC_REPORTS_LANDING_PREFIX" in script
+    assert "PRONABEC_REPORTS_BRONZE_PREFIX" in script
 
 
 def test_stage_pes_2025_strict_raises_error_if_any_missing(mock_input_dir: Path, mock_output_dir: Path) -> None:
