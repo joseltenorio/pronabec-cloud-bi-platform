@@ -19,7 +19,11 @@ param(
 
     [string]$PronabecJobName = "pronabec-extract-job",
     [string]$MefJobName = "mef-extract-job",
+    [string]$PronabecReportsStageJobName = $(if ($env:PRONABEC_REPORTS_STAGE_JOB_NAME) { $env:PRONABEC_REPORTS_STAGE_JOB_NAME } else { "pronabec-stage-reports-job" }),
     [string]$QualityJobName = "quality-checks-job",
+
+    [string]$PronabecReportsLandingPrefix = $(if ($env:PRONABEC_REPORTS_LANDING_PREFIX) { $env:PRONABEC_REPORTS_LANDING_PREFIX } else { "landing/pronabec_reports" }),
+    [string]$PronabecReportsBronzePrefix = $(if ($env:PRONABEC_REPORTS_BRONZE_PREFIX) { $env:PRONABEC_REPORTS_BRONZE_PREFIX } else { "bronze/pronabec_reports" }),
 
     [string]$DataflowPronabecConvocatoriasJobName = "dataflow-pronabec-convocatorias-job",
     [string]$DataflowMefPresupuestoJobName = "dataflow-mef-presupuesto-job",
@@ -85,7 +89,7 @@ function Upsert-CloudRunJob {
         "--region", $Region,
         "--image", $Image,
         "--service-account", $ServiceAccount,
-        "--set-env-vars", "GCP_PROJECT_ID=$ProjectId,GCS_BUCKET=$BucketName,BQ_BRONZE_DATASET=$BronzeDataset,BQ_SILVER_DATASET=$SilverDataset,BQ_GOLD_DATASET=$GoldDataset,BQ_AUDIT_DATASET=$AuditDataset,DATAFLOW_TEMP_LOCATION=$DataflowTempLocation,DATAFLOW_STAGING_LOCATION=$DataflowStagingLocation,STRUCTURED_LOGGING=true,LOG_LEVEL=INFO",
+        "--set-env-vars", "GCP_PROJECT_ID=$ProjectId,GCS_BUCKET=$BucketName,GCS_BUCKET_NAME=$BucketName,BQ_BRONZE_DATASET=$BronzeDataset,BQ_SILVER_DATASET=$SilverDataset,BQ_GOLD_DATASET=$GoldDataset,BQ_AUDIT_DATASET=$AuditDataset,DATAFLOW_TEMP_LOCATION=$DataflowTempLocation,DATAFLOW_STAGING_LOCATION=$DataflowStagingLocation,PRONABEC_REPORTS_LANDING_PREFIX=$PronabecReportsLandingPrefix,PRONABEC_REPORTS_BRONZE_PREFIX=$PronabecReportsBronzePrefix,STRUCTURED_LOGGING=true,LOG_LEVEL=INFO",
         "--max-retries", "1",
         "--task-timeout", "$($TaskTimeoutSeconds)s"
     )
@@ -151,6 +155,22 @@ Upsert-CloudRunJob `
     -Args @(
         "-m",
         "pipelines.scrape_mef_budget"
+    )
+
+Upsert-CloudRunJob `
+    -JobName $PronabecReportsStageJobName `
+    -Description "Staging PRONABEC reports desde GCS Landing hacia Bronze" `
+    -Args @(
+        "tools/stage_pronabec_manual_reports.py",
+        "--input-uri",
+        "gs://$BucketName/$PronabecReportsLandingPrefix/`${SOURCE_SUBSET}",
+        "--output-uri",
+        "gs://$BucketName/$PronabecReportsBronzePrefix",
+        "--extraction-date",
+        "`${BRONZE_EXTRACTION_DATE}",
+        "--source-subset",
+        "`${SOURCE_SUBSET}",
+        "--strict"
     )
 
 Upsert-CloudRunJob `
