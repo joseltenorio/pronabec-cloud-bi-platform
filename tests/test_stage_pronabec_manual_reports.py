@@ -12,6 +12,7 @@ import pytest
 from tools.stage_pronabec_manual_reports import (
     dataset_name_from_landing_filename,
     expected_reports_for_subset,
+    find_gcs_csv,
     stage_reports_gcs,
     stage_reports,
     validate_source_subset,
@@ -38,6 +39,15 @@ def test_dataset_name_from_landing_filename_removes_pronabec_prefix() -> None:
     assert (
         dataset_name_from_landing_filename("pronabec_report_beca18_sexo_anual.csv")
         == "report_beca18_sexo_anual"
+    )
+
+
+def test_dataset_name_from_landing_filename_handles_universitarios_carrera() -> None:
+    assert (
+        dataset_name_from_landing_filename(
+            "pronabec_report_beca18_universitarios_carrera_anual.csv"
+        )
+        == "report_beca18_universitarios_carrera_anual"
     )
 
 
@@ -482,6 +492,63 @@ def test_stage_gcs_report_success(monkeypatch: pytest.MonkeyPatch) -> None:
     assert metadata["landing_uri"] == source_uri
     assert metadata["row_count"] == 1
     assert "sha256" in metadata
+
+
+def test_find_gcs_csv_ignores_documents_and_pdfs(monkeypatch: pytest.MonkeyPatch) -> None:
+    objects = [
+        "gs://bucket/landing/pronabec_reports/pes_2025/_documents/source.pdf",
+        "gs://bucket/landing/pronabec_reports/pes_2025/report_beca18_sexo_anual.pdf",
+        "gs://bucket/landing/pronabec_reports/pes_2025/pronabec_report_beca18_sexo_anual.csv",
+    ]
+    monkeypatch.setattr(
+        "tools.stage_pronabec_manual_reports.list_gcs_objects",
+        lambda uri: objects,
+    )
+
+    source_uri = find_gcs_csv(
+        "gs://bucket/landing/pronabec_reports/pes_2025",
+        ["pronabec_report_beca18_sexo_anual.csv"],
+    )
+
+    assert source_uri == (
+        "gs://bucket/landing/pronabec_reports/pes_2025/"
+        "pronabec_report_beca18_sexo_anual.csv"
+    )
+
+
+def test_stage_gcs_rejects_unknown_subset() -> None:
+    with pytest.raises(ValueError) as excinfo:
+        stage_reports_gcs(
+            input_uri="gs://bucket/landing/pronabec_reports/unknown",
+            output_uri="gs://bucket/bronze/pronabec_reports",
+            extraction_date="2026-06-26",
+            source_subset="unknown",
+        )
+
+    assert "source_subset no soportado" in str(excinfo.value)
+
+
+def test_stage_gcs_strict_raises_when_expected_csv_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "tools.stage_pronabec_manual_reports.list_gcs_objects",
+        lambda uri: [
+            "gs://bucket/landing/pronabec_reports/pes_2025/_documents/source.pdf",
+        ],
+    )
+
+    with pytest.raises(FileNotFoundError) as excinfo:
+        stage_reports_gcs(
+            input_uri="gs://bucket/landing/pronabec_reports/pes_2025",
+            output_uri="gs://bucket/bronze/pronabec_reports",
+            extraction_date="2026-06-26",
+            report_name="report_beca18_sexo_anual",
+            source_subset="pes_2025",
+            strict=True,
+        )
+
+    assert "No se encontró el CSV fuente" in str(excinfo.value)
 
 
 def test_stage_pes_2025_strict_raises_error_if_any_missing(mock_input_dir: Path, mock_output_dir: Path) -> None:
