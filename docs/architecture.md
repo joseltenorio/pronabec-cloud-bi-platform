@@ -11,9 +11,13 @@ Fuentes de datos públicas
     |
     |-- API pública de PRONABEC
     |-- Datos presupuestales del MEF
+    |-- Reportes documentales PRONABEC tabulados en CSV
     |
     v
 Cloud Run Jobs
+    |
+    v
+Cloud Storage - Landing
     |
     v
 Cloud Storage - Bronze
@@ -45,6 +49,7 @@ Trabajos de extracción planificados:
 
 - Extracción desde la API pública de PRONABEC.
 - Extracción de información presupuestal del MEF.
+- Staging de reportes documentales PRONABEC desde Landing hacia Bronze.
 
 ### Cloud Storage
 
@@ -55,8 +60,14 @@ Estructura planificada:
 ```text
 gs://<bucket-name>/bronze/pronabec/<dataset>/extraction_date=YYYY-MM-DD/
 gs://<bucket-name>/bronze/mef/presupuesto/extraction_date=YYYY-MM-DD/
+gs://<bucket-name>/landing/pronabec_reports/<source_subset>/*.csv
+gs://<bucket-name>/landing/pronabec_reports/<source_subset>/_documents/*.pdf
+gs://<bucket-name>/bronze/pronabec_reports/<dataset>/extraction_date=YYYY-MM-DD/data.csv
+gs://<bucket-name>/bronze/pronabec_reports/<dataset>/extraction_date=YYYY-MM-DD/extraction_metadata.json
 gs://<bucket-name>/dlq/<dataset>/extraction_date=YYYY-MM-DD/
 ```
+
+Para reportes documentales PRONABEC, `landing/pronabec_reports/` es la ruta oficial de entrada cloud. Landing conserva los CSV originales con sus nombres reales y los PDFs bajo `_documents/`. Bronze conserva el layout técnico por dataset y `extraction_date`; el archivo de datos se llama siempre `data.csv`.
 
 ### Dataflow
 
@@ -101,6 +112,8 @@ extract_pronabec_api_to_gcs
   |
 scrape_mef_budget_to_gcs
   |
+stage_pronabec_reports_landing_to_bronze
+  |
 run_dataflow_bronze_to_silver
   |
 run_bigquery_gold_sql
@@ -109,6 +122,8 @@ run_data_quality_checks
   |
 end
 ```
+
+El pipeline periódico puede usar una única `extraction_date` lógica para PRONABEC API, MEF y PRONABEC reports, de forma que las particiones Bronze de una corrida queden alineadas.
 
 ### Cloud Logging y Cloud Monitoring
 
@@ -170,4 +185,18 @@ BigQuery Gold
   |
   v
 Power BI
+```
+
+## Flujo de reportes documentales PRONABEC
+
+```text
+PDF / reporte oficial PRONABEC
+  -> CSV tabulado controlado
+  -> gs://<bucket>/landing/pronabec_reports/<subset>/
+  -> Cloud Run Job de staging
+  -> gs://<bucket>/bronze/pronabec_reports/<dataset>/extraction_date=YYYY-MM-DD/
+  -> Dataflow Bronze to Silver
+  -> BigQuery Silver
+  -> BigQuery Gold
+  -> Power BI
 ```
