@@ -72,8 +72,6 @@ gcp_region
 pronabec_extract_job_name
 mef_extract_job_name
 pronabec_reports_stage_job_name
-pronabec_reports_landing_prefix
-pronabec_reports_bronze_prefix
 quality_checks_job_name
 ```
 
@@ -99,6 +97,15 @@ start
   -> quality_checks
   -> end
 ```
+
+El Cloud Run Job de staging recibe `SOURCE_SUBSET` por tarea:
+
+```text
+stage_pronabec_reports_pes_2025 -> SOURCE_SUBSET=pes_2025
+stage_pronabec_reports_universitarios -> SOURCE_SUBSET=beca18_universitarios_2012_2026
+```
+
+Ambas tareas usan `BRONZE_EXTRACTION_DATE={{ dag_run.conf.get('extraction_date', ds) }}`, el mismo valor lógico usado por las extracciones PRONABEC y MEF.
 
 ## Reintentos y concurrencia
 
