@@ -31,6 +31,14 @@ param(
     [string]$DataflowPronabecColegiosHabilesJobName = "dataflow-pronabec-colegios-habiles-job",
     [string]$DataflowPronabecBecariosProvinciaJobName = "dataflow-pronabec-becarios-provincia-job",
     [string]$DataflowMefPresupuestoJobName = "dataflow-mef-presupuesto-job",
+    [string]$DataflowMefPresupuestoTemporalJobName = "dataflow-mef-presupuesto-temporal-job",
+    [string]$DataflowMefProductoJobName = "dataflow-mef-producto-job",
+    [string]$DataflowMefProductoTemporalJobName = "dataflow-mef-producto-temporal-job",
+    [string]$DataflowMefActividadJobName = "dataflow-mef-actividad-job",
+    [string]$DataflowMefActividadTemporalJobName = "dataflow-mef-actividad-temporal-job",
+    [string]$DataflowMefGenericaJobName = "dataflow-mef-generica-job",
+    [string]$DataflowMefGenericaTemporalJobName = "dataflow-mef-generica-temporal-job",
+    [string]$DataflowMefHierarchyJobName = "dataflow-mef-hierarchy-job",
     [string]$DataflowReportUniversitariosJobName = "dataflow-report-universitarios-job"
 )
 
@@ -318,6 +326,182 @@ Upsert-CloudRunJob `
             "$ProjectId`:$SilverDataset.presupuesto_mef",
             "--summary-output-path",
             "gs://$BucketName/audit/processing_summary/presupuesto_mef_`${BRONZE_EXTRACTION_DATE}.json"
+        )
+    )
+
+Upsert-CloudRunJob `
+    -JobName $DataflowMefPresupuestoTemporalJobName `
+    -Description "Lanzador Dataflow MEF presupuesto temporal Bronze a Silver" `
+    -TaskTimeoutSeconds 7200 `
+    -Args @(
+        $DataflowCommonArgs +
+        @(
+            "--source-system",
+            "mef",
+            "--source-dataset",
+            "presupuesto_temporal",
+            "--input-path",
+            "gs://$BucketName/bronze/mef/presupuesto_temporal/extraction_date=`${BRONZE_EXTRACTION_DATE}/year=*/data.csv",
+            "--input-format",
+            "csv",
+            "--output-table",
+            "$ProjectId`:$SilverDataset.presupuesto_mef_temporal",
+            "--summary-output-path",
+            "gs://$BucketName/audit/processing_summary/presupuesto_mef_temporal_`${BRONZE_EXTRACTION_DATE}.json"
+        )
+    )
+
+Upsert-CloudRunJob `
+    -JobName $DataflowMefProductoJobName `
+    -Description "Lanzador Dataflow MEF producto Bronze a Silver" `
+    -TaskTimeoutSeconds 7200 `
+    -Args @(
+        $DataflowCommonArgs +
+        @(
+            "--source-system",
+            "mef",
+            "--source-dataset",
+            "presupuesto_producto",
+            "--input-path",
+            "gs://$BucketName/bronze/mef/presupuesto_producto/extraction_date=`${BRONZE_EXTRACTION_DATE}/year=*/data.csv",
+            "--input-format",
+            "csv",
+            "--output-table",
+            "$ProjectId`:$SilverDataset.presupuesto_mef_producto",
+            "--summary-output-path",
+            "gs://$BucketName/audit/processing_summary/presupuesto_mef_producto_`${BRONZE_EXTRACTION_DATE}.json"
+        )
+    )
+
+Upsert-CloudRunJob `
+    -JobName $DataflowMefProductoTemporalJobName `
+    -Description "Lanzador Dataflow MEF producto temporal Bronze a Silver" `
+    -TaskTimeoutSeconds 7200 `
+    -Args @(
+        $DataflowCommonArgs +
+        @(
+            "--source-system",
+            "mef",
+            "--source-dataset",
+            "presupuesto_producto_temporal",
+            "--input-path",
+            "gs://$BucketName/bronze/mef/presupuesto_producto_temporal/extraction_date=`${BRONZE_EXTRACTION_DATE}/year=*/data.csv",
+            "--input-format",
+            "csv",
+            "--output-table",
+            "$ProjectId`:$SilverDataset.presupuesto_mef_producto_temporal",
+            "--summary-output-path",
+            "gs://$BucketName/audit/processing_summary/presupuesto_mef_producto_temporal_`${BRONZE_EXTRACTION_DATE}.json"
+        )
+    )
+
+Upsert-CloudRunJob `
+    -JobName $DataflowMefActividadJobName `
+    -Description "Lanzador Dataflow MEF actividad Bronze a Silver" `
+    -TaskTimeoutSeconds 7200 `
+    -Args @(
+        $DataflowCommonArgs +
+        @(
+            "--source-system",
+            "mef",
+            "--source-dataset",
+            "presupuesto_actividad",
+            "--input-path",
+            "gs://$BucketName/bronze/mef/presupuesto_actividad/extraction_date=`${BRONZE_EXTRACTION_DATE}/year=*/data.csv",
+            "--input-format",
+            "csv",
+            "--output-table",
+            "$ProjectId`:$SilverDataset.presupuesto_mef_actividad",
+            "--summary-output-path",
+            "gs://$BucketName/audit/processing_summary/presupuesto_mef_actividad_`${BRONZE_EXTRACTION_DATE}.json"
+        )
+    )
+
+Upsert-CloudRunJob `
+    -JobName $DataflowMefActividadTemporalJobName `
+    -Description "Lanzador Dataflow MEF actividad temporal Bronze a Silver" `
+    -TaskTimeoutSeconds 7200 `
+    -Args @(
+        $DataflowCommonArgs +
+        @(
+            "--source-system",
+            "mef",
+            "--source-dataset",
+            "presupuesto_actividad_temporal",
+            "--input-path",
+            "gs://$BucketName/bronze/mef/presupuesto_actividad_temporal/extraction_date=`${BRONZE_EXTRACTION_DATE}/year=*/data.csv",
+            "--input-format",
+            "csv",
+            "--output-table",
+            "$ProjectId`:$SilverDataset.presupuesto_mef_actividad_temporal",
+            "--summary-output-path",
+            "gs://$BucketName/audit/processing_summary/presupuesto_mef_actividad_temporal_`${BRONZE_EXTRACTION_DATE}.json"
+        )
+    )
+
+Upsert-CloudRunJob `
+    -JobName $DataflowMefGenericaJobName `
+    -Description "Lanzador Dataflow MEF genérica Bronze a Silver" `
+    -TaskTimeoutSeconds 7200 `
+    -Args @(
+        $DataflowCommonArgs +
+        @(
+            "--source-system",
+            "mef",
+            "--source-dataset",
+            "presupuesto_generica",
+            "--input-path",
+            "gs://$BucketName/bronze/mef/presupuesto_generica/extraction_date=`${BRONZE_EXTRACTION_DATE}/year=*/data.csv",
+            "--input-format",
+            "csv",
+            "--output-table",
+            "$ProjectId`:$SilverDataset.presupuesto_mef_generica",
+            "--summary-output-path",
+            "gs://$BucketName/audit/processing_summary/presupuesto_mef_generica_`${BRONZE_EXTRACTION_DATE}.json"
+        )
+    )
+
+Upsert-CloudRunJob `
+    -JobName $DataflowMefGenericaTemporalJobName `
+    -Description "Lanzador Dataflow MEF genérica temporal Bronze a Silver" `
+    -TaskTimeoutSeconds 7200 `
+    -Args @(
+        $DataflowCommonArgs +
+        @(
+            "--source-system",
+            "mef",
+            "--source-dataset",
+            "presupuesto_generica_temporal",
+            "--input-path",
+            "gs://$BucketName/bronze/mef/presupuesto_generica_temporal/extraction_date=`${BRONZE_EXTRACTION_DATE}/year=*/data.csv",
+            "--input-format",
+            "csv",
+            "--output-table",
+            "$ProjectId`:$SilverDataset.presupuesto_mef_generica_temporal",
+            "--summary-output-path",
+            "gs://$BucketName/audit/processing_summary/presupuesto_mef_generica_temporal_`${BRONZE_EXTRACTION_DATE}.json"
+        )
+    )
+
+Upsert-CloudRunJob `
+    -JobName $DataflowMefHierarchyJobName `
+    -Description "Lanzador Dataflow MEF jerarquía Bronze a Silver" `
+    -TaskTimeoutSeconds 7200 `
+    -Args @(
+        $DataflowCommonArgs +
+        @(
+            "--source-system",
+            "mef",
+            "--source-dataset",
+            "presupuesto_hierarchy",
+            "--input-path",
+            "gs://$BucketName/bronze/mef/presupuesto_hierarchy/extraction_date=`${BRONZE_EXTRACTION_DATE}/year=*/data.csv",
+            "--input-format",
+            "csv",
+            "--output-table",
+            "$ProjectId`:$SilverDataset.presupuesto_mef_hierarchy",
+            "--summary-output-path",
+            "gs://$BucketName/audit/processing_summary/presupuesto_mef_hierarchy_`${BRONZE_EXTRACTION_DATE}.json"
         )
     )
 
