@@ -146,6 +146,54 @@ def get_pipeline_settings(config_path: str | Path = "config/pipeline.yaml") -> d
         default="LOG_LEVEL",
     )
     log_level = get_env_var(log_level_env_var, default="INFO", required=False)
+    pronabec_reports_config = get_nested_value(config, "pronabec_reports", default={})
+
+    reports_local_manual_dir = get_env_var(
+        pronabec_reports_config.get(
+            "local_manual_dir_env_var",
+            "PRONABEC_REPORTS_LOCAL_MANUAL_DIR",
+        ),
+        default=pronabec_reports_config.get(
+            "local_manual_dir",
+            "data/manual/pronabec_reports",
+        ),
+        required=False,
+    )
+    reports_landing_prefix = get_env_var(
+        pronabec_reports_config.get(
+            "landing_prefix_env_var",
+            "PRONABEC_REPORTS_LANDING_PREFIX",
+        ),
+        default=pronabec_reports_config.get(
+            "landing_prefix",
+            "landing/pronabec_reports",
+        ),
+        required=False,
+    )
+    reports_bronze_prefix = get_env_var(
+        pronabec_reports_config.get(
+            "bronze_prefix_env_var",
+            "PRONABEC_REPORTS_BRONZE_PREFIX",
+        ),
+        default=pronabec_reports_config.get(
+            "bronze_prefix",
+            "bronze/pronabec_reports",
+        ),
+        required=False,
+    )
+    reports_subsets_raw = get_env_var(
+        pronabec_reports_config.get(
+            "subsets_env_var",
+            "PRONABEC_REPORTS_SUBSETS",
+        ),
+        default=",".join(pronabec_reports_config.get("subsets", [])),
+        required=False,
+    )
+    reports_subsets = [
+        subset.strip()
+        for subset in (reports_subsets_raw or "").split(",")
+        if subset.strip()
+    ]
 
     return {
         "config": config,
@@ -157,6 +205,12 @@ def get_pipeline_settings(config_path: str | Path = "config/pipeline.yaml") -> d
         "log_level": log_level,
         "bigquery_datasets": get_nested_value(config, "bigquery.datasets", default={}),
         "gcs_paths": get_nested_value(config, "gcs_paths", default={}),
+        "pronabec_reports": {
+            "local_manual_dir": reports_local_manual_dir,
+            "landing_prefix": reports_landing_prefix,
+            "bronze_prefix": reports_bronze_prefix,
+            "subsets": reports_subsets,
+        },
     }
 
 
