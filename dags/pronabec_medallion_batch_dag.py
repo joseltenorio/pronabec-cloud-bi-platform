@@ -15,6 +15,7 @@ REGION = "{{ var.value.gcp_region }}"
 
 PRONABEC_EXTRACT_JOB = "{{ var.value.pronabec_extract_job_name }}"
 MEF_EXTRACT_JOB = "{{ var.value.mef_extract_job_name }}"
+PRONABEC_REPORTS_STAGE_JOB = "{{ var.value.pronabec_reports_stage_job_name }}"
 QUALITY_CHECKS_JOB = "{{ var.value.quality_checks_job_name }}"
 
 DATAFLOW_PRONABEC_CONVOCATORIAS_JOB = "{{ var.value.dataflow_pronabec_convocatorias_job_name }}"
@@ -24,6 +25,7 @@ DATAFLOW_REPORT_UNIVERSITARIOS_JOB = "{{ var.value.dataflow_report_universitario
 EXTRACTION_DATE = "{{ dag_run.conf.get('extraction_date', ds) }}"
 RUN_PRONABEC = "{{ dag_run.conf.get('run_pronabec', true) }}"
 RUN_MEF = "{{ dag_run.conf.get('run_mef', true) }}"
+RUN_PRONABEC_REPORTS_STAGING = "{{ dag_run.conf.get('run_pronabec_reports_staging', true) }}"
 RUN_DATAFLOW_PRONABEC = "{{ dag_run.conf.get('run_dataflow_pronabec', true) }}"
 RUN_DATAFLOW_MEF = "{{ dag_run.conf.get('run_dataflow_mef', true) }}"
 RUN_DATAFLOW_REPORTS = "{{ dag_run.conf.get('run_dataflow_reports', true) }}"
@@ -39,13 +41,28 @@ default_args = {
 }
 
 
-def cloud_run_execute_command(job_name: str, enabled_expression: str) -> str:
+def cloud_run_execute_command(
+    job_name: str,
+    enabled_expression: str,
+    extra_env_vars: dict[str, str] | None = None,
+) -> str:
+    env_vars = [
+        f"BRONZE_EXTRACTION_DATE={EXTRACTION_DATE}",
+        "PIPELINE_RUN_ID={{ run_id }}",
+    ]
+    if extra_env_vars:
+        env_vars.extend(
+            f"{key}={value}"
+            for key, value in extra_env_vars.items()
+        )
+    joined_env_vars = ",".join(env_vars)
+
     return f"""
 if [ "{enabled_expression}" = "True" ] || [ "{enabled_expression}" = "true" ]; then
   gcloud run jobs execute {job_name} \
     --project {PROJECT_ID} \
     --region {REGION} \
-    --update-env-vars BRONZE_EXTRACTION_DATE={EXTRACTION_DATE},PIPELINE_RUN_ID={{{{ run_id }}}} \
+    --update-env-vars {joined_env_vars} \
     --wait
 else
   echo "Task disabled by DAG configuration."
@@ -77,6 +94,11 @@ with DAG(
             default=True,
             type="boolean",
             description="Controla la ejecución del job de extracción MEF.",
+        ),
+        "run_pronabec_reports_staging": Param(
+            default=True,
+            type="boolean",
+            description="Controla el staging de reportes PRONABEC desde Landing hacia Bronze.",
         ),
         "run_dataflow_pronabec": Param(
             default=True,
@@ -118,6 +140,28 @@ with DAG(
         ),
     )
 
+    stage_pronabec_reports_pes_2025 = BashOperator(
+        task_id="stage_pronabec_reports_pes_2025",
+        bash_command=cloud_run_execute_command(
+            job_name=PRONABEC_REPORTS_STAGE_JOB,
+            enabled_expression=RUN_PRONABEC_REPORTS_STAGING,
+            extra_env_vars={
+                "SOURCE_SUBSET": "pes_2025",
+            },
+        ),
+    )
+
+    stage_pronabec_reports_universitarios = BashOperator(
+        task_id="stage_pronabec_reports_universitarios",
+        bash_command=cloud_run_execute_command(
+            job_name=PRONABEC_REPORTS_STAGE_JOB,
+            enabled_expression=RUN_PRONABEC_REPORTS_STAGING,
+            extra_env_vars={
+                "SOURCE_SUBSET": "beca18_universitarios_2012_2026",
+            },
+        ),
+    )
+
     run_dataflow_pronabec_convocatorias = BashOperator(
         task_id="run_dataflow_pronabec_convocatorias",
         bash_command=cloud_run_execute_command(
@@ -153,8 +197,11 @@ with DAG(
 
     end = EmptyOperator(task_id="end")
 
-    start >> [run_pronabec_extract, run_mef_extract]
-    [run_pronabec_extract, run_mef_extract] >> run_dataflow_pronabec_convocatorias
+    start >> run_pronabec_extract
+    run_pronabec_extract >> run_mef_extract
+    run_mef_extract >> stage_pronabec_reports_pes_2025
+    stage_pronabec_reports_pes_2025 >> stage_pronabec_reports_universitarios
+    stage_pronabec_reports_universitarios >> run_dataflow_pronabec_convocatorias
     run_dataflow_pronabec_convocatorias >> run_dataflow_mef_presupuesto
     run_dataflow_mef_presupuesto >> run_dataflow_report_universitarios
     run_dataflow_report_universitarios >> run_quality_checks >> end
