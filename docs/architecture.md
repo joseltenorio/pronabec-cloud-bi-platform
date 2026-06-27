@@ -131,9 +131,9 @@ Cloud Logging almacena logs estructurados producidos por los jobs de extracción
 
 Cloud Monitoring permite observar fallos de jobs, duración de ejecuciones, registros procesados, métricas operativas y condiciones de alerta.
 
-### Power BI
+### Power BI (Fase posterior)
 
-Power BI se conecta a los datasets Gold de BigQuery para construir dashboards ejecutivos. La capa de reporting no consume archivos CSV locales; consume vistas analíticas curadas desde BigQuery.
+Power BI se conectará a los datasets Gold de BigQuery para construir dashboards ejecutivos. La capa de reporting no consume archivos CSV locales; consumirá vistas analíticas curadas desde BigQuery. Esta conexión y el modelado DAX quedan fuera de la fase cloud actual y se implementarán posteriormente.
 
 ## Decisiones arquitectónicas
 

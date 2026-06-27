@@ -26,19 +26,13 @@ El sistema de validación cubre los tres sistemas principales del proyecto:
    - `pronabec_ubigeo_postulacion`
    - `pronabec_becarios_pais_estudio`
    - `pronabec_colegios_elegibles`
+   - `pronabec_beca18_becarios_provincia_2016` (valida exclusión de subtotales/totales regionales, campos obligatorios no nulos y conteos no negativos).
 2. **`mef`**: Validación del presupuesto público extraído desde el Ministerio de Economía y Finanzas:
-   - `presupuesto_mef`
-   - `presupuesto_mef_temporal`
-   - `presupuesto_mef_producto`
-   - `presupuesto_mef_producto_temporal`
-   - `presupuesto_mef_actividad`
-   - `presupuesto_mef_actividad_temporal`
-   - `presupuesto_mef_generica`
-   - `presupuesto_mef_generica_temporal`
-   - `presupuesto_mef_hierarchy`
+   - `presupuesto_mef`, `presupuesto_mef_producto`, `presupuesto_mef_actividad`, `presupuesto_mef_generica`, `presupuesto_mef_hierarchy` (incluyen reglas de no-negatividad para montos `pia`, `pim`, `devengado` y `avance_porcentaje`).
+   - `presupuesto_mef_temporal`, `presupuesto_mef_producto_temporal`, `presupuesto_mef_actividad_temporal`, `presupuesto_mef_generica_temporal` (exentas de validaciones de no-negatividad por diseño de ajustes temporales).
 3. **`pronabec_reports`**: Cobertura de reportes agregados que incluye:
    - **Beca 18 Universitarios (2012-2026)**: Tablas de carrera anual y universidad anual.
-   - **PES 2025 (Panorama de Estudios Sociales)**: Reportes derivados del PDF oficial (por ejemplo, `pronabec_report_beca18_becas_otorgadas_modalidad_anual`).
+   - **Reportes documentales**: Cobertura de calidad para los 23 reportes documentales de origen, validando que no estén vacíos y cuenten con metadatos técnicos válidos (`extraction_date`, `pipeline_run_id`).
 
 ## 4. Tipos de Checks Implementados
 

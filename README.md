@@ -348,6 +348,19 @@ El repositorio contiene una implementación local avanzada del core de la plataf
 
 La plataforma está diseñada para ejecución batch. No implementa streaming ni procesamiento en tiempo real, ya que las fuentes consideradas no requieren baja latencia.
 
+## Estado de la Fase Cloud y Despliegue
+
+La fase de ingeniería de datos cloud hasta la capa Gold de BigQuery se encuentra **completamente implementada y validada**:
+- **Bronze (Data Lake)**: Extracciones programadas y staging de reportes cargados en Cloud Storage.
+- **Silver (Data Warehouse)**: Transformaciones distribuidas de Apache Beam/Dataflow con control de Dead Letter Queue (DLQ).
+- **Gold (Vistas Analíticas)**: Vistas analíticas optimizadas y agregaciones anuales/territoriales unificadas.
+- **Calidad de Datos**: Sistema de reglas de calidad SQL ejecutado automáticamente.
+- **Orquestación**: DAG de Composer programado de forma semanal (sábados a las 05:00) con `catchup=False`.
+
+**Trabajo Pendiente (Fases Posteriores)**:
+- Construcción y conexión del modelo semántico / reportes en **Power BI** (desacoplado y pendiente).
+- Modelos predictivos mediante BigQuery ML y pipelines de Machine Learning.
+
 ## Stack tecnológico
 
 - Python
