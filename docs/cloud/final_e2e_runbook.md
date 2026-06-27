@@ -12,6 +12,7 @@ Este runbook proporciona una guía práctica y detallada para ejecutar de extrem
 ## 2. Requisitos previos
 
 Para poder ejecutar el pipeline de datos completo, asegúrese de contar con los siguientes elementos configurados en su entorno GCP:
+
 - Proyecto GCP activo y configurado.
 - APIs de Google Cloud habilitadas:
   - BigQuery API
@@ -68,6 +69,7 @@ export COMPOSER_LOCATION="us-central1"
 Para comenzar a operar, inicie su terminal (Cloud Shell o terminal local con el SDK de Google Cloud instalado y autenticado) y configure el proyecto activo:
 
 ### En Cloud Shell (Linux):
+
 ```bash
 source ~/pronabec_env.sh
 gcloud config set project $GCP_PROJECT_ID
@@ -75,6 +77,7 @@ gcloud config set run/region $GCP_REGION
 ```
 
 ### En PowerShell (Windows):
+
 ```powershell
 . .\scripts\load_env.ps1  # O equivalente local
 gcloud config set project $env:GCP_PROJECT_ID
@@ -90,7 +93,8 @@ Construya la imagen Docker de procesamiento batch que contiene todos los pipelin
 ```powershell
 .\scripts\build_and_push_image.ps1
 ```
-*(Este script compila la imagen utilizando las dependencias de `requirements.txt` y la sube al repositorio especificado por las variables de entorno).*
+
+_(Este script compila la imagen utilizando las dependencias de `requirements.txt` y la sube al repositorio especificado por las variables de entorno)._
 
 ---
 
@@ -108,6 +112,7 @@ Genere los DDL dinámicos y despliegue los datasets, tablas y vistas en BigQuery
 # 3. Desplegar los recursos y tablas en BigQuery
 .\scripts\deploy_bigquery_sql.ps1
 ```
+
 > [!NOTE]
 > Las carpetas `build/generated/sql/` contienen los DDL intermedios renderizados que son ignorados por Git para evitar ruido en el repositorio. Se vuelven a generar dinámicamente en cada despliegue.
 
@@ -122,6 +127,7 @@ Registre y actualice la configuración de todos los Cloud Run Jobs necesarios pa
 ```
 
 Este comando registrará los siguientes Cloud Run Jobs en su región de GCP:
+
 - **`pronabec-extract-job`**: extractor de la API pública PRONABEC.
 - **`mef-extract-job`**: extractor presupuestal MEF.
 - **`pronabec-stage-reports-job`**: staging para reportes de Landing a Bronze.
@@ -134,12 +140,12 @@ Este comando registrará los siguientes Cloud Run Jobs en su región de GCP:
   - `dataflow-pronabec-becarios-provincia-job`
   - `dataflow-mef-presupuesto-job`
   - `dataflow-mef-presupuesto-temporal-job`
-  - `dataflow-mef-presupuesto-producto-job`
-  - `dataflow-mef-presupuesto-producto-temporal-job`
-  - `dataflow-mef-presupuesto-actividad-job`
-  - `dataflow-mef-presupuesto-actividad-temporal-job`
-  - `dataflow-mef-presupuesto-generica-job`
-  - `dataflow-mef-presupuesto-generica-temporal-job`
+  - `dataflow-mef-producto-job`
+  - `dataflow-mef-producto-temporal-job`
+  - `dataflow-mef-actividad-job`
+  - `dataflow-mef-actividad-temporal-job`
+  - `dataflow-mef-generica-job`
+  - `dataflow-mef-generica-temporal-job`
   - `dataflow-mef-hierarchy-job`
   - **`dataflow-pronabec-report-job`** (job parametrizable único para los 23 reportes documentales).
 
@@ -166,13 +172,14 @@ gs://<bucket-lake-name>/landing/pronabec_reports/pes_2025/
 gs://<bucket-lake-name>/landing/pronabec_reports/beca18_universitarios_2012_2026/
 ```
 
-*(El proceso de staging `pronabec-stage-reports-job` leerá estos archivos de Landing, adjuntará metadatos técnicos y creará las estructuras correspondientes en la capa Bronze).*
+_(El proceso de staging `pronabec-stage-reports-job` leerá estos archivos de Landing, adjuntará metadatos técnicos y creará las estructuras correspondientes en la capa Bronze)._
 
 ---
 
 ## 10. Ejecutar DAG manualmente
 
 Aunque el DAG `pronabec_medallion_batch` está programado para ejecutarse de forma semanal (sábados a las 05:00), puede lanzar una corrida manual:
+
 1. Abra la interfaz web de Airflow en Google Cloud Composer.
 2. Busque el DAG `pronabec_medallion_batch`.
 3. Presione el botón **Trigger DAG** (o use **Trigger DAG w/ config** para enviar parámetros como una `extraction_date` personalizada).
@@ -217,6 +224,7 @@ Confirme que las tablas de la capa Silver en BigQuery se hayan actualizado corre
 ## 13. Validar Gold en BigQuery
 
 Las vistas analíticas en la capa Gold deben estar disponibles y listas para el consumo:
+
 - `vw_pronabec_resumen_ejecutivo`
 - `vw_beca18_becas_otorgadas_anual`
 - `vw_beca18_cobertura_territorial_2016`
@@ -240,6 +248,7 @@ SELECT * FROM `tu-proyecto-gcp-id.audit.audit_data_quality_results`
 ORDER BY check_timestamp DESC
 LIMIT 50;
 ```
+
 > [!NOTE]
 > Las tablas temporales de MEF no tienen validaciones de no-negatividad en montos de forma estricta (no hay validaciones globales duras para `devengado < 0`), permitiendo ajustes negativos de devengado propios de los registros de Consulta Amigable.
 
@@ -248,6 +257,7 @@ LIMIT 50;
 ## 15. Exclusiones Críticas
 
 Es muy importante tener en cuenta que para esta versión del pipeline:
+
 - **`convocatorias_carrera_sede` es Bronze-only**: Los datos se conservan únicamente en la capa Bronze para trazabilidad técnica. No son procesados por Dataflow, no se exponen en la capa Silver ni se referencian en vistas Gold o calidad.
 - **MEF Bronze-only**: Las tablas `presupuesto_departamento`, `presupuesto_fuente` y `presupuesto_rubro` no se transforman hacia Silver.
 - **Power BI**: Queda fuera de esta fase y no se modifican ni cargan modelos DAX o archivos `.pbix`.
