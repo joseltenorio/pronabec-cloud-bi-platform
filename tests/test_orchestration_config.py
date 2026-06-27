@@ -84,6 +84,10 @@ def test_resolve_pronabec_report_groups_and_datasets() -> None:
     datasets = resolve_pronabec_report_datasets(orchestration_config, endpoints_config)
 
     assert len(groups) == 2
+    assert {group["source_subset"] for group in groups} == {
+        "pes_2025",
+        "beca18_universitarios_2012_2026",
+    }
     assert len(datasets) == 23
     assert {item["source_dataset"] for item in datasets} >= {
         "report_beca18_universitarios_universidad_anual",

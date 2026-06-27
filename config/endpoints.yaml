@@ -221,12 +221,13 @@ pronabec_reports:
   enabled: true
   documents:
     - document_id: "pes_2025_volumen_i"
+      landing_subset: "pes_2025"
       file_name: "7219175-panorama-de-estudios-sociales-pronabec.pdf"
       title: "Panorama de Estudios Sociales del Pronabec - Volumen I"
       year: 2025
       institution: "PRONABEC"
-      storage_prefix: "bronze/pronabec_reports"
-      document_storage_path: "bronze/pronabec_reports/_documents/7219175-panorama-de-estudios-sociales-pronabec.pdf"
+      storage_prefix: "landing/pronabec_reports"
+      document_storage_path: "landing/pronabec_reports/pes_2025/_documents/7219175-panorama-de-estudios-sociales-pronabec.pdf"
       datasets:
         - name: "report_beca18_region_postulacion_anual"
           file_name: "report_beca18_region_postulacion_anual.csv"
@@ -335,18 +336,19 @@ pronabec_reports:
           format: "csv"
 
     - document_id: "beca18_universitarios_2012_2026"
+      landing_subset: "beca18_universitarios_2012_2026"
       file_name: "8170922-beca-18-cantidad-de-becarios-segun-universidad-de-estudio-2012-2026.pdf"
       title: "Beca 18: Cantidad de becarios universitarios"
       year: 2026
       institution: "PRONABEC"
-      storage_prefix: "bronze/pronabec_reports"
+      storage_prefix: "landing/pronabec_reports"
       documents:
         - file_name: "8170922-beca-18-cantidad-de-becarios-segun-universidad-de-estudio-2012-2026.pdf"
           title: "Beca 18 - cantidad de becarios según universidad de estudio 2012-2026"
-          document_storage_path: "bronze/pronabec_reports/_documents/8170922-beca-18-cantidad-de-becarios-segun-universidad-de-estudio-2012-2026.pdf"
+          document_storage_path: "landing/pronabec_reports/beca18_universitarios_2012_2026/_documents/8170922-beca-18-cantidad-de-becarios-segun-universidad-de-estudio-2012-2026.pdf"
         - file_name: "8170922-beca-18-cantidad-de-becarios-en-universidades-segun-carrera-de-estudio-2012-2026.pdf"
           title: "Beca 18 - cantidad de becarios en universidades según carrera de estudio 2012-2026"
-          document_storage_path: "bronze/pronabec_reports/_documents/8170922-beca-18-cantidad-de-becarios-en-universidades-segun-carrera-de-estudio-2012-2026.pdf"
+          document_storage_path: "landing/pronabec_reports/beca18_universitarios_2012_2026/_documents/8170922-beca-18-cantidad-de-becarios-en-universidades-segun-carrera-de-estudio-2012-2026.pdf"
       datasets:
         - name: "report_beca18_universitarios_universidad_anual"
           file_name: "pronabec_report_beca18_universitarios_universidad_anual.csv"

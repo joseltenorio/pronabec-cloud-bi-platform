@@ -41,6 +41,8 @@ Esta ruta local se mantiene solo para desarrollo. En cloud productivo, la entrad
 * PDFs oficiales asociados:
   `gs://<GCS_BUCKET_NAME>/landing/pronabec_reports/pes_2025/_documents/*.pdf`
 
+Los PDFs permanecen solo en Landing. Bronze no contiene `_documents/` ni archivos `.pdf`.
+
 ### Bronze Local de Pruebas
 * Carpeta temporal con estructura de partición por fecha de extracción:
   `tmp/bronze/pronabec_reports/<dataset>/extraction_date=YYYY-MM-DD/data.csv`

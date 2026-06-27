@@ -53,6 +53,8 @@ Contenido esperado:
 * **PDFs de documentación:**
   * `gs://<GCS_BUCKET_NAME>/landing/pronabec_reports/beca18_universitarios_2012_2026/_documents/*.pdf`
 
+Los PDFs permanecen solo en Landing. Bronze no contiene `_documents/` ni archivos `.pdf`.
+
 ### Ubicación en Cloud Storage Bronze
 * **CSVs de Datos:**
   * `gs://<GCS_BUCKET_NAME>/bronze/pronabec_reports/report_beca18_universitarios_universidad_anual/extraction_date=YYYY-MM-DD/data.csv`
