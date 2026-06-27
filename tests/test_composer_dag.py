@@ -81,7 +81,7 @@ def test_reports_path_templates_are_correct() -> None:
     assert dag_mod.build_report_landing_uri("pes_2025") == "gs://{{ var.value.gcs_bucket_name }}/landing/pronabec_reports/pes_2025"
     assert (
         dag_mod.build_report_bronze_uri("report_beca18_becas_otorgadas_modalidad_anual")
-        == "gs://{{ var.value.gcs_bucket_name }}/bronze/pronabec_reports/report_beca18_becas_otorgadas_modalidad_anual/extraction_date={{ dag_run.conf.get('extraction_date', ds) }}/data.csv"
+        == "gs://{{ var.value.gcs_bucket_name }}/bronze/pronabec_reports/report_beca18_becas_otorgadas_modalidad_anual/extraction_date={{ dag_run.conf.get('extraction_date') or ds }}/data.csv"
     )
 
 
@@ -100,6 +100,13 @@ def test_dag_does_not_route_reports_through_source_subset_in_bronze() -> None:
     )
     assert "{source_subset}" not in dag_mod.build_report_bronze_uri("report_beca18_becas_otorgadas_modalidad_anual")
     assert "extraction_date" not in dag_mod.build_report_landing_uri("pes_2025")
+
+
+def test_dag_uses_non_empty_extraction_date_fallback() -> None:
+    content = _read_dag_source()
+
+    assert "dag_run.conf.get('extraction_date') or ds" in content
+    assert "dag_run.conf.get('extraction_date', ds)" not in content
 
 
 def test_dag_schedule_is_weekly_without_catchup() -> None:

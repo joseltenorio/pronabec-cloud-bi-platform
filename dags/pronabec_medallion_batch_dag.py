@@ -106,7 +106,7 @@ QUALITY_CHECKS_JOB = airflow_var_template(
     "quality-checks-job",
 )
 
-EXTRACTION_DATE = "{{ dag_run.conf.get('extraction_date', ds) }}"
+EXTRACTION_DATE = "{{ dag_run.conf.get('extraction_date') or ds }}"
 RUN_PRONABEC = "{{ dag_run.conf.get('run_pronabec', true) }}"
 RUN_MEF = "{{ dag_run.conf.get('run_mef', true) }}"
 RUN_PRONABEC_REPORTS_STAGING = "{{ dag_run.conf.get('run_pronabec_reports_staging', true) }}"
