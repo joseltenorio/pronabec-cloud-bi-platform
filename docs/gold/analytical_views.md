@@ -7,6 +7,8 @@ Este documento describe la arquitectura de datos, el diseño y el catálogo anal
 ## 1. Objetivo de Gold
 La capa Gold convierte los datos integrados y estructurados de la capa Silver en vistas y marts analíticos listos para reportería. Su propósito es responder a preguntas de negocio a nivel ejecutivo y táctico, aplicando agrupaciones y cálculos de indicadores clave (KPIs).
 
+La publicación de estas vistas se ejecuta de forma idempotente desde Cloud Run mediante `pipelines.publish_gold_views`, y su contrato operativo se valida con `pipelines.validate_gold` antes de que Composer permita continuar con calidad y consumo downstream.
+
 **Reglas de oro de la capa Gold:**
 - **Consumo exclusivo de Silver:** Las vistas Gold leen únicamente desde la capa Silver (`{project_id}.{silver_dataset}`). Nunca consumen datos crudos de Bronze, ni archivos locales manuales (`data/manual`) o temporales (`tmp`).
 - **No duplicación de limpieza:** Gold no realiza tareas de limpieza, tipado fuerte, conversión de formatos (guiones, nulos, coma decimal), normalización de columnas anchas o canonización. Ese trabajo pertenece estrictamente a la capa Silver / Dataflow.

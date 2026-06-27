@@ -132,6 +132,8 @@ Este comando registrará los siguientes Cloud Run Jobs en su región de GCP:
 - **`pronabec-extract-job`**: extractor de la API pública PRONABEC.
 - **`mef-extract-job`**: extractor presupuestal MEF.
 - **`pronabec-stage-reports-job`**: staging para reportes de Landing a Bronze.
+- **`gold-publish-job`**: publicación idempotente de vistas Gold analíticas.
+- **`gold-validate-job`**: validación de contratos Gold antes de calidad.
 - **`quality-checks-job`**: ejecutor de validaciones y calidad de datos sobre BigQuery.
 - **Jobs lanzadores de Dataflow**:
   - `dataflow-pronabec-convocatorias-job`
@@ -149,6 +151,21 @@ Este comando registrará los siguientes Cloud Run Jobs en su región de GCP:
   - `dataflow-mef-generica-temporal-job`
   - `dataflow-mef-hierarchy-job`
   - **`dataflow-pronabec-report-job`**: job parametrizable único para los 23 reportes documentales.
+
+El orden operativo completo orquestado por Composer es:
+
+```text
+extract_pronabec_api
+extract_mef
+stage_pronabec_reports_pes_2025
+stage_pronabec_reports_beca18_universitarios_2012_2026
+dataflow_pronabec
+dataflow_mef
+dataflow_reports
+publish_gold_views
+validate_gold_contracts
+run_quality_checks
+```
 
 ---
 

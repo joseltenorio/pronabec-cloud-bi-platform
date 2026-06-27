@@ -15,6 +15,7 @@ pronabec_medallion_batch
 ```
 
 Este DAG coordina procesos batch asociados a la plataforma Medallion. Orquesta Cloud Run Jobs responsables de extracción PRONABEC, extracción MEF, staging de reportes documentales PRONABEC desde Landing hacia Bronze, transformaciones Dataflow y ejecución de controles de calidad.
+También publica y valida las vistas Gold como parte del mismo ciclo operativo.
 
 ## Responsabilidades del DAG
 
@@ -24,6 +25,8 @@ El DAG mantiene las siguientes responsabilidades:
 - ejecutar el job de extracción PRONABEC;
 - ejecutar el job de extracción MEF;
 - ejecutar staging de reportes documentales PRONABEC desde `landing/pronabec_reports/` hacia Bronze;
+- publicar vistas Gold analíticas;
+- validar contratos Gold antes de calidad;
 - ejecutar controles de calidad;
 - propagar parámetros operativos como fecha de extracción e identificador de ejecución;
 - controlar reintentos y concurrencia;
@@ -47,6 +50,14 @@ Ejecutan el Cloud Run Job parametrizable de staging de reportes PRONABEC. Cada t
 
 Ejecuta el Cloud Run Job de calidad. Este job evalúa reglas SQL sobre BigQuery y registra resultados estructurados en la capa Audit.
 
+### `publish_gold_views`
+
+Ejecuta el Cloud Run Job que publica las vistas Gold mediante `CREATE OR REPLACE VIEW` sobre BigQuery. El DAG no embebe SQL ni llama `bq` directamente.
+
+### `validate_gold_contracts`
+
+Ejecuta el Cloud Run Job que verifica las vistas Gold publicadas antes de permitir que el flujo avance a calidad.
+
 ## Parámetros operativos
 
 El DAG acepta parámetros de ejecución para controlar su comportamiento sin modificar código fuente.
@@ -57,6 +68,8 @@ run_pronabec
 run_mef
 run_pronabec_reports_staging
 run_dataflow_reports
+run_gold_publish
+run_gold_validation
 run_quality
 ```
 
@@ -72,6 +85,8 @@ gcp_region
 pronabec_extract_job_name
 mef_extract_job_name
 pronabec_reports_stage_job_name
+gold_publish_job_name
+gold_validate_job_name
 quality_checks_job_name
 ```
 
@@ -94,6 +109,8 @@ start
   -> dataflow_pronabec
   -> dataflow_mef
   -> dataflow_reports
+  -> publish_gold_views
+  -> validate_gold_contracts
   -> quality_checks
   -> end
 ```

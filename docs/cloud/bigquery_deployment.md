@@ -113,6 +113,8 @@ Wrapper PowerShell para ejecutar el renderizado de SQL manual desde un entorno l
 
 Script de despliegue SQL sobre BigQuery. Coordina la ejecución de datasets, DDL generado Bronze/Silver, SQL renderizado para Audit y Gold, y objetos requeridos por calidad de datos.
 
+Este script pertenece al provisioning inicial o a cambios estructurales. La publicación semanal de vistas Gold ya no depende de este wrapper: Composer dispara `pipelines.publish_gold_views` y `pipelines.validate_gold` como jobs de runtime idempotentes.
+
 ## Separación de responsabilidades
 
 Cloud Run Jobs no genera DDL BigQuery. Cloud Run Jobs ejecuta procesos batch de extracción o validación. La generación y despliegue de objetos BigQuery pertenece a herramientas de despliegue y automatización.

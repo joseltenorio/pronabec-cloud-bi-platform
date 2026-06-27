@@ -143,6 +143,26 @@ El job utiliza la lógica de validación versionada en:
 pipelines/quality_checks.py
 ```
 
+### `gold-publish-job`
+
+Ejecuta la publicación idempotente de las vistas Gold analíticas. El job carga `sql/ddl/create_gold_views.sql`, renderiza placeholders con la configuración activa del entorno y ejecuta `CREATE OR REPLACE VIEW` en BigQuery.
+
+El job utiliza la lógica versionada en:
+
+```text
+pipelines/publish_gold_views.py
+```
+
+### `gold-validate-job`
+
+Ejecuta las consultas de validación de contratos Gold definidas en `config/orchestration.yaml`. El job comprueba que las vistas publicadas responden correctamente en BigQuery y conserva el control operacional fuera del DAG.
+
+El job utiliza la lógica versionada en:
+
+```text
+pipelines/validate_gold.py
+```
+
 ### Jobs Lanzadores de Dataflow
 
 Para ejecutar transformaciones distribuidas de Apache Beam en la nube, la plataforma define Cloud Run Jobs específicos que ejecutan el pipeline `pipelines/dataflow_bronze_to_silver.py` configurado con `DataflowRunner`:
@@ -196,6 +216,8 @@ Los jobs utilizan una imagen común y comandos diferenciados mediante argumentos
 python -m pipelines.extract_pronabec
 python -m pipelines.scrape_mef_budget
 python tools/stage_pronabec_manual_reports.py --input-uri gs://<bucket>/landing/pronabec_reports/<subset> --output-uri gs://<bucket>/bronze/pronabec_reports --extraction-date <YYYY-MM-DD> --source-subset <subset> --strict
+python -m pipelines.publish_gold_views
+python -m pipelines.validate_gold
 python -m pipelines.quality_checks
 ```
 
@@ -214,12 +236,15 @@ BQ_BRONZE_DATASET
 BQ_SILVER_DATASET
 BQ_GOLD_DATASET
 BQ_AUDIT_DATASET
+BQ_LOCATION
 STRUCTURED_LOGGING
 LOG_LEVEL
 BRONZE_EXTRACTION_DATE
 SOURCE_SUBSET
 PRONABEC_REPORTS_LANDING_PREFIX
 PRONABEC_REPORTS_BRONZE_PREFIX
+GOLD_PUBLISH_JOB_NAME
+GOLD_VALIDATE_JOB_NAME
 ```
 
 Estas variables permiten ejecutar los mismos módulos Python bajo un entorno cloud sin modificar el código fuente.

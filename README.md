@@ -192,7 +192,7 @@ Documentación técnica relacionada:
 
 ## Cloud Run Jobs
 
-El repositorio incluye scripts para publicar la imagen batch en Artifact Registry y registrar Cloud Run Jobs asociados a extracción PRONABEC, extracción MEF y ejecución de controles de calidad.
+El repositorio incluye scripts para publicar la imagen batch en Artifact Registry y registrar Cloud Run Jobs asociados a extracción PRONABEC, extracción MEF, staging de reportes documentales, publicación Gold, validación Gold y ejecución de controles de calidad.
 
 Los jobs utilizan una imagen común y comandos diferenciados por módulo Python, manteniendo separación entre runtime, configuración y lógica de procesamiento.
 
@@ -244,7 +244,7 @@ Documentación técnica relacionada:
 
 ## Orquestación batch
 
-El proyecto define un DAG de Cloud Composer para coordinar procesos batch de la plataforma Medallion. Composer actúa como capa de orquestación y ejecuta Cloud Run Jobs registrados para extracción PRONABEC, extracción MEF y controles de calidad.
+El proyecto define un DAG de Cloud Composer para coordinar procesos batch de la plataforma Medallion. Composer actúa como capa de orquestación y ejecuta Cloud Run Jobs registrados para extracción PRONABEC, extracción MEF, staging de reportes documentales, publicación Gold, validación Gold y controles de calidad.
 
 La lógica de procesamiento permanece separada en los módulos Python, Cloud Run Jobs, Dataflow y BigQuery. El DAG mantiene dependencias, parámetros operativos, reintentos y control de concurrencia.
 
