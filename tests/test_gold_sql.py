@@ -15,6 +15,7 @@ SILVER_SCHEMAS_DIR = REPO_ROOT / "config" / "schemas" / "silver"
 REQUIRED_VIEWS = [
     "vw_pronabec_resumen_ejecutivo",
     "vw_beca18_becas_otorgadas_anual",
+    "vw_beca18_cobertura_territorial_2016",
     "vw_beca18_universitarios_carrera_anual",
     "vw_beca18_universitarios_universidad_anual",
     "vw_beca18_perfil_social_indicadores",
@@ -31,6 +32,7 @@ REQUIRED_SILVER_TABLES = [
     "pronabec_report_beca18_region_postulacion_anual",
     "pronabec_report_beca18_universitarios_carrera_anual",
     "pronabec_report_beca18_universitarios_universidad_anual",
+    "pronabec_beca18_becarios_provincia_2016",
     "presupuesto_mef",
     "presupuesto_mef_temporal",
     "presupuesto_mef_producto",
@@ -156,3 +158,14 @@ def test_gold_sql_contains_required_silver_tables(gold_sql_content: str) -> None
     # Valida que las tablas de PES 2025, Universitarios y MEF estén en el SQL.
     for table in REQUIRED_SILVER_TABLES:
         assert table in gold_sql_content, f"La tabla Silver requerida no está referenciada en Gold: {table}"
+
+
+def test_gold_sql_beca18_cobertura_territorial_2016_spec(gold_sql_content: str) -> None:
+    # Valida que la vista vw_beca18_cobertura_territorial_2016 siga las especificaciones
+    assert "vw_beca18_cobertura_territorial_2016" in gold_sql_content
+    assert "pronabec_beca18_becarios_provincia_2016" in gold_sql_content
+    assert "convocatorias_carrera_sede" not in gold_sql_content
+    assert "aggregation_scope" not in gold_sql_content
+    
+    # Comprobar filtro defensivo contra TOTAL
+    assert "UPPER(TRIM(provincia)) NOT LIKE 'TOTAL%'" in gold_sql_content
