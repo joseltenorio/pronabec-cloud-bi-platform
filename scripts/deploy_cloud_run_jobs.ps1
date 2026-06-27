@@ -39,7 +39,8 @@ param(
     [string]$DataflowMefGenericaJobName = "dataflow-mef-generica-job",
     [string]$DataflowMefGenericaTemporalJobName = "dataflow-mef-generica-temporal-job",
     [string]$DataflowMefHierarchyJobName = "dataflow-mef-hierarchy-job",
-    [string]$DataflowReportUniversitariosJobName = "dataflow-report-universitarios-job"
+    [string]$DataflowReportUniversitariosJobName = "dataflow-report-universitarios-job",
+    [string]$DataflowPronabecReportJobName = "dataflow-pronabec-report-job"
 )
 
 $ErrorActionPreference = "Stop"
@@ -524,6 +525,33 @@ Upsert-CloudRunJob `
             "$ProjectId`:$SilverDataset.pronabec_report_beca18_universitarios_universidad_anual",
             "--summary-output-path",
             "gs://$BucketName/audit/processing_summary/pronabec_report_beca18_universitarios_universidad_anual_`${BRONZE_EXTRACTION_DATE}.json"
+        )
+    )
+
+Upsert-CloudRunJob `
+    -JobName $DataflowPronabecReportJobName `
+    -Description "Lanzador Dataflow parametrizable para PRONABEC reports Bronze a Silver" `
+    -TaskTimeoutSeconds 7200 `
+    -SetEnvVars @(
+        "SOURCE_DATASET=placeholder_dataset",
+        "INPUT_PATH=gs://$BucketName/placeholder_path",
+        "OUTPUT_TABLE=$ProjectId`:$SilverDataset.placeholder_table"
+    ) `
+    -Args @(
+        $DataflowCommonArgs +
+        @(
+            "--source-system",
+            "pronabec_reports",
+            "--source-dataset",
+            "`${SOURCE_DATASET}",
+            "--input-path",
+            "`${INPUT_PATH}",
+            "--input-format",
+            "csv",
+            "--output-table",
+            "`${OUTPUT_TABLE}",
+            "--summary-output-path",
+            "gs://$BucketName/audit/processing_summary/`${SOURCE_DATASET}_`${BRONZE_EXTRACTION_DATE}.json"
         )
     )
 
