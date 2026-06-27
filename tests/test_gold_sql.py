@@ -23,6 +23,7 @@ REQUIRED_VIEWS = [
     "vw_mef_presupuesto_ejecucion_anual",
     "vw_mef_presupuesto_ejecucion_temporal",
     "vw_pronabec_becas_vs_presupuesto_anual",
+    "vw_pronabec_beca18_resumen_analitico",
 ]
 
 # Lista de tablas Silver reales que deben ser referenciadas
@@ -169,3 +170,12 @@ def test_gold_sql_beca18_cobertura_territorial_2016_spec(gold_sql_content: str) 
     
     # Comprobar filtro defensivo contra TOTAL
     assert "UPPER(TRIM(provincia)) NOT LIKE 'TOTAL%'" in gold_sql_content
+
+
+def test_gold_sql_beca18_resumen_analitico_spec(gold_sql_content: str) -> None:
+    # Valida que la vista vw_pronabec_beca18_resumen_analitico siga las especificaciones
+    assert "vw_pronabec_beca18_resumen_analitico" in gold_sql_content
+    assert "pronabec_report_beca18_becas_otorgadas_modalidad_anual" in gold_sql_content
+    assert "presupuesto_mef" in gold_sql_content
+    assert "convocatorias_carrera_sede" not in gold_sql_content
+    assert "aggregation_scope" not in gold_sql_content

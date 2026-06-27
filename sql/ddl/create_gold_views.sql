@@ -500,3 +500,36 @@ SELECT
   SAFE_DIVIDE(mef_anual.pim_total, NULLIF(becas_anuales.becas_otorgadas_total, 0)) AS pim_por_beca
 FROM becas_anuales
 FULL OUTER JOIN mef_anual ON becas_anuales.ano = mef_anual.ano;
+
+
+-- =============================================================================
+-- Gold - Resumen analítico Beca 18
+-- =============================================================================
+
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_pronabec_beca18_resumen_analitico` AS
+WITH becas_otorgadas AS (
+  SELECT
+    ano_convocatoria AS ano,
+    SUM(becas_otorgadas) AS total_becas_otorgadas
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_becas_otorgadas_modalidad_anual`
+  GROUP BY ano_convocatoria
+),
+presupuesto_ejecutado AS (
+  SELECT
+    ano,
+    SUM(pia) AS total_pia,
+    SUM(pim) AS total_pim,
+    SUM(devengado) AS total_devengado
+  FROM `{project_id}.{silver_dataset}.presupuesto_mef`
+  GROUP BY ano
+)
+SELECT
+  COALESCE(b.ano, p.ano) AS ano,
+  b.total_becas_otorgadas,
+  p.total_pia,
+  p.total_pim,
+  p.total_devengado,
+  SAFE_MULTIPLY(SAFE_DIVIDE(p.total_devengado, NULLIF(p.total_pim, 0)), 100) AS avance_presupuestal_pct,
+  SAFE_DIVIDE(p.total_devengado, NULLIF(b.total_becas_otorgadas, 0)) AS costo_promedio_por_beca
+FROM becas_otorgadas b
+FULL OUTER JOIN presupuesto_ejecutado p ON b.ano = p.ano;
