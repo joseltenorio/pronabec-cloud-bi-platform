@@ -56,10 +56,10 @@ El layout físico del bucket cuenta con los archivos organizados bajo las siguie
 - `gs://pronabec-cloud-bi-platform-lake-1030103187284/bronze/pronabec/` (Datos estructurados de APIs)
 - `gs://pronabec-cloud-bi-platform-lake-1030103187284/bronze/mef/` (Datos del presupuesto público MEF por año fiscal)
 - `gs://pronabec-cloud-bi-platform-lake-1030103187284/bronze/pronabec_reports/` (Reportes manuales en CSV)
-- `gs://pronabec-cloud-bi-platform-lake-1030103187284/bronze/pronabec_reports/_documents/` (Archivos fuente en PDF)
+- `gs://pronabec-cloud-bi-platform-lake-1030103187284/landing/pronabec_reports/` (CSV fuente y PDFs oficiales)
 
-### Documentos Oficiales PDF Almacenados en `_documents/`
-Se conservan los archivos PDF originales para asegurar la auditabilidad del pipeline:
+### Documentos Oficiales PDF Almacenados en Landing
+Se conservan los archivos PDF originales en `landing/pronabec_reports/<source_subset>/_documents/` para asegurar la auditabilidad del pipeline:
 - `7219175-panorama-de-estudios-sociales-pronabec.pdf`
 - `8170922-beca-18-cantidad-de-becarios-segun-universidad-de-estudio-2012-2026.pdf`
 - `8170922-beca-18-cantidad-de-becarios-en-universidades-segun-carrera-de-estudio-2012-2026.pdf`

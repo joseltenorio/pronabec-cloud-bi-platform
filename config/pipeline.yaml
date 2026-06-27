@@ -28,7 +28,7 @@ gcs_paths:
   mef_bronze: "bronze/mef/presupuesto/extraction_date={extraction_date}/data.csv"
   rejected_records: "dlq/{dataset}/extraction_date={extraction_date}/rejected_records.jsonl"
   pronabec_reports_bronze_csv: "bronze/pronabec_reports/{dataset}/extraction_date={extraction_date}/data.csv"
-  pronabec_reports_source_document: "bronze/pronabec_reports/_documents/{document_file}"
+  pronabec_reports_source_document: "landing/pronabec_reports/{source_subset}/_documents/{document_file}"
 
 pronabec_reports:
   local_manual_dir_env_var: PRONABEC_REPORTS_LOCAL_MANUAL_DIR
