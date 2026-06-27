@@ -131,6 +131,12 @@ gold:
       query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_mef_presupuesto_ejecucion_anual`"
     - name: vw_mef_presupuesto_ejecucion_temporal
       query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_mef_presupuesto_ejecucion_temporal`"
+    - name: vw_mef_presupuesto_producto
+      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_mef_presupuesto_producto`"
+    - name: vw_mef_presupuesto_actividad
+      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_mef_presupuesto_actividad`"
+    - name: vw_mef_presupuesto_generica
+      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_mef_presupuesto_generica`"
     - name: vw_pronabec_becas_vs_presupuesto_anual
       query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_pronabec_becas_vs_presupuesto_anual`"
     - name: vw_pronabec_beca18_resumen_analitico

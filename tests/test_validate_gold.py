@@ -6,6 +6,9 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
+import yaml
+import re
+from pathlib import Path
 
 from pipelines.validate_gold import (
     GoldValidationSettings,
@@ -72,3 +75,24 @@ def test_validate_gold_views_executes_configured_queries(monkeypatch: pytest.Mon
     first_call_args, first_call_kwargs = fake_client.query.call_args_list[0]
     assert "SELECT" in first_call_args[0]
     assert first_call_kwargs["location"] == "US"
+
+
+def test_all_gold_views_have_validation_queries() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    gold_sql = (repo_root / "sql" / "ddl" / "create_gold_views.sql").read_text(encoding="utf-8")
+    config = yaml.safe_load((repo_root / "config" / "orchestration.yaml").read_text(encoding="utf-8"))
+
+    created_views = set(
+        re.findall(
+            r"CREATE\s+OR\s+REPLACE\s+VIEW\s+`?\{project_id\}\.\{gold_dataset\}\.(\w+)`?",
+            gold_sql,
+            flags=re.IGNORECASE,
+        )
+    )
+    validation_views = {item["name"] for item in config["gold"]["validation_queries"]}
+
+    missing = created_views - validation_views
+    assert not missing, f"Gold views missing validation queries: {sorted(missing)}"
+
+    extra = validation_views - created_views
+    assert not extra, f"Validation queries without matching Gold view: {sorted(extra)}"
