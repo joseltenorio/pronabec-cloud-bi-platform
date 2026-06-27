@@ -71,7 +71,7 @@ Esta fuente es relevante porque permite analizar el comportamiento de los progra
 | `periodos_academicos` | `ListarPeriodosAcademicosDeBecarios` | Periodos académicos de becarios | Dimensión temporal académica |
 | `colegios_habiles` | `ListarColegiosHabiles` | Colegios habilitados para la postulación | Análisis de procedencia y oferta educativa |
 | `becarios_pais_estudio` | `ListarBecariosPorPaisDeEstudio` | Distribución de becarios por país de estudio | Análisis de internacionalización y convenios |
-| `convocatorias_carrera_sede` | `ListarConvocatoriaPorCarreraSede` | Convocatorias desagregadas por carrera e institución/sede | Oferta académica de carreras y especialidades |
+| `convocatorias_carrera_sede` (Bronze-only) | `ListarConvocatoriaPorCarreraSede` | Convocatorias desagregadas por carrera e institución/sede | Oferta académica de carreras y especialidades (Bronze-only) |
 | `nota_postulante_region` | `ListarNotaPromedioDelPostulantePorRegion` | Nota promedio de postulantes por región y modalidad | Rendimiento y admisión por origen territorial |
 
 ### Volumen identificado en exploración

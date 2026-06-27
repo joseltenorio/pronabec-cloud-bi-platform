@@ -90,14 +90,14 @@ Los entregables esperados son:
 - Evidencia de ejecución en Google Cloud.
 - Modelo BigQuery ML y salidas de predicción.
 
-## Criterios de éxito
+## Estado de Avance y Entregables
 
-El proyecto se considerará exitoso cuando:
+A la fecha actual, la **Fase Cloud de Ingeniería de Datos está 100% completada y validada**:
+- Extracciones y Staging local/cloud finalizados y operativos.
+- Pipelines Dataflow/Apache Beam finalizados.
+- Capa de modelado BigQuery Silver y vistas Gold desplegadas.
+- Orquestación en Composer (Airflow) programada semanalmente.
 
-- Los datos fuente puedan extraerse y almacenarse en Cloud Storage Bronze.
-- Dataflow pueda transformar datos Bronze en tablas Silver de BigQuery.
-- Las vistas Gold de BigQuery soporten reportes en Power BI.
-- El pipeline pueda orquestarse desde Cloud Composer.
-- Existan logs y evidencias de ejecución.
-- Los dashboards en Power BI muestren insights analíticos relevantes.
-- Las predicciones de BigQuery ML estén disponibles para reporting.
+Los siguientes entregables quedan como **Trabajo Pendiente para Fases Posteriores**:
+- Conexión e implementación final de dashboards ejecutivos en **Power BI**.
+- Implementación de algoritmos predictivos y entrenamiento en BigQuery ML.
