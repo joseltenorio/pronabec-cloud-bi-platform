@@ -275,7 +275,6 @@ with DAG(
     report_tasks = []
     for item in REPORT_DATASETS:
         source_dataset = item["source_dataset"]
-        source_subset = item["source_subset"]
         report_tasks.append(
             BashOperator(
                 task_id=f"bronze_to_silver_pronabec_reports_{source_dataset}",
