@@ -153,18 +153,18 @@ Para ejecutar transformaciones distribuidas de Apache Beam en la nube, la plataf
   - `dataflow-pronabec-becarios-pais-estudio-job`: transforma becarios por país de estudio a Silver.
   - `dataflow-pronabec-colegios-elegibles-job`: transforma colegios elegibles a Silver.
   - `dataflow-pronabec-becarios-provincia-job`: transforma beneficiarios provinciales a Silver (excluyendo totales).
-  *(Nota crítica: convocatorias_carrera_sede es Bronze-only y no cuenta con job de transformación a Silver).*
+    _(Nota crítica: convocatorias_carrera_sede es Bronze-only y no cuenta con job de transformación a Silver)._
 - **MEF Presupuesto**:
   - `dataflow-mef-presupuesto-job`: transforma presupuesto general a Silver.
   - `dataflow-mef-presupuesto-temporal-job`
-  - `dataflow-mef-presupuesto-producto-job`
-  - `dataflow-mef-presupuesto-producto-temporal-job`
-  - `dataflow-mef-presupuesto-actividad-job`
-  - `dataflow-mef-presupuesto-actividad-temporal-job`
-  - `dataflow-mef-presupuesto-generica-job`
-  - `dataflow-mef-presupuesto-generica-temporal-job`
+  - `dataflow-mef-producto-job`
+  - `dataflow-mef-producto-temporal-job`
+  - `dataflow-mef-actividad-job`
+  - `dataflow-mef-actividad-temporal-job`
+  - `dataflow-mef-generica-job`
+  - `dataflow-mef-generica-temporal-job`
   - `dataflow-mef-hierarchy-job`: transforma jerarquía de entidades presupuestales a Silver.
-  *(Nota crítica: presupuesto_departamento, presupuesto_fuente y presupuesto_rubro son Bronze-only y no cuentan con jobs Silver).*
+    _(Nota crítica: presupuesto_departamento, presupuesto_fuente y presupuesto_rubro son Bronze-only y no cuentan con jobs Silver)._
 - **PRONABEC Reports**:
   - `dataflow-pronabec-report-job`: un único Cloud Run Job parametrizable utilizado para procesar los 23 reportes documentales mediante overrides de variables de entorno (`SOURCE_DATASET`, `INPUT_PATH`, `OUTPUT_TABLE`).
 
