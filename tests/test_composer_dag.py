@@ -2,34 +2,42 @@
 """Pruebas unitarias para validar la configuración del DAG de Composer."""
 
 import sys
-import pytest
+from pathlib import Path
 from unittest.mock import MagicMock
 
-# Mock Airflow modules to allow importing the DAG without airflow installed
-sys.modules['airflow'] = MagicMock()
-sys.modules['airflow.models'] = MagicMock()
-sys.modules['airflow.models.param'] = MagicMock()
-sys.modules['airflow.operators'] = MagicMock()
-sys.modules['airflow.operators.bash'] = MagicMock()
-sys.modules['airflow.operators.empty'] = MagicMock()
+# Mock de Airflow para importar el DAG sin instalar Airflow localmente.
+sys.modules["airflow"] = MagicMock()
+sys.modules["airflow.models"] = MagicMock()
+sys.modules["airflow.models.param"] = MagicMock()
+sys.modules["airflow.operators"] = MagicMock()
+sys.modules["airflow.operators.bash"] = MagicMock()
+sys.modules["airflow.operators.empty"] = MagicMock()
 
-import dags.pronabec_medallion_batch_dag as dag_mod
+import dags.pronabec_medallion_batch_dag as dag_mod  # noqa: E402
+
+
+def _read_dag_source() -> str:
+    return Path(dag_mod.__file__).read_text(encoding="utf-8")
 
 
 def test_pronabec_selected_silver_datasets():
-    # Valida que los datasets PRONABEC Silver seleccionados estén en el DAG
-    datasets = [d["source_dataset"] for d in dag_mod.PRONABEC_SILVER_DATASETS]
-    expected = {"convocatorias", "ubigeo_postulacion", "becarios_pais_estudio", "colegios_habiles", "becarios_provincia"}
-    
-    for item in expected:
-        assert item in datasets, f"Falta el dataset PRONABEC seleccionado: {item}"
-        
-    assert "convocatorias_carrera_sede" not in datasets, "convocatorias_carrera_sede no debe estar en Silver"
+    datasets = [dataset["source_dataset"] for dataset in dag_mod.PRONABEC_SILVER_DATASETS]
+
+    expected = {
+        "convocatorias",
+        "ubigeo_postulacion",
+        "becarios_pais_estudio",
+        "colegios_habiles",
+        "becarios_provincia",
+    }
+
+    assert set(datasets) == expected
+    assert "convocatorias_carrera_sede" not in datasets
 
 
 def test_mef_selected_silver_datasets():
-    # Valida que los datasets MEF Silver seleccionados estén en el DAG
-    datasets = [d["source_dataset"] for d in dag_mod.MEF_SILVER_DATASETS]
+    datasets = [dataset["source_dataset"] for dataset in dag_mod.MEF_SILVER_DATASETS]
+
     expected = {
         "presupuesto",
         "presupuesto_temporal",
@@ -39,24 +47,49 @@ def test_mef_selected_silver_datasets():
         "presupuesto_actividad_temporal",
         "presupuesto_generica",
         "presupuesto_generica_temporal",
-        "presupuesto_hierarchy"
+        "presupuesto_hierarchy",
     }
-    
-    for item in expected:
-        assert item in datasets, f"Falta el dataset MEF seleccionado: {item}"
-        
-    forbidden = {"presupuesto_departamento", "presupuesto_fuente", "presupuesto_rubro"}
-    for item in forbidden:
-        assert item not in datasets, f"El dataset Bronze-only MEF '{item}' no debe estar en Silver"
+
+    assert set(datasets) == expected
+
+    forbidden = {
+        "presupuesto_departamento",
+        "presupuesto_fuente",
+        "presupuesto_rubro",
+    }
+
+    for dataset in forbidden:
+        assert dataset not in datasets
 
 
-def test_reports_count_and_job():
-    # Valida que la lista de reportes documentales contenga exactamente 23 elementos
-    assert len(dag_mod.PRONABEC_REPORT_SILVER_DATASETS) == 23, "Debería haber exactamente 23 reportes"
-    
-    # Valida que se use el job de reportes parametrizable único
-    # Buscamos en el código del archivo DAG o en variables si existe
-    # El archivo del DAG declara el job name para reportes en su plantilla
-    with open(dag_mod.__file__, "r", encoding="utf-8") as f:
-        content = f.read()
-    assert "dataflow-pronabec-report-job" in content, "Falta el job parametrizable único de reportes"
+def test_reports_count_and_parameterized_job():
+    assert len(dag_mod.PRONABEC_REPORT_SILVER_DATASETS) == 23
+
+    content = _read_dag_source()
+
+    assert "dataflow-pronabec-report-job" in content
+    assert "dataflow-report-universitarios-job" not in content
+    assert "SOURCE_DATASET" in content
+    assert "INPUT_PATH" in content
+    assert "OUTPUT_TABLE" in content
+
+
+def test_dag_does_not_reference_bronze_only_datasets():
+    content = _read_dag_source()
+
+    forbidden_references = [
+        "convocatorias_carrera_sede",
+        "presupuesto_departamento",
+        "presupuesto_fuente",
+        "presupuesto_rubro",
+    ]
+
+    for reference in forbidden_references:
+        assert reference not in content, f"Referencia Bronze-only no permitida en DAG: {reference}"
+
+
+def test_dag_schedule_is_weekly_without_catchup():
+    content = _read_dag_source()
+
+    assert 'schedule_interval="0 5 * * 6"' in content or 'schedule="0 5 * * 6"' in content
+    assert "catchup=False" in content

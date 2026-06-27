@@ -38,72 +38,105 @@ Este pipeline soporta ejecución local controlada y ejecución en DataflowRunner
 
 ## Jobs lanzadores
 
-La plataforma registra Cloud Run Jobs específicos para lanzar transformaciones Dataflow representativas de las familias principales del modelo de datos.
+La plataforma registra Cloud Run Jobs para lanzar transformaciones Dataflow de las familias principales del modelo de datos.
 
-### `dataflow-pronabec-convocatorias-job`
+### Familia PRONABEC API
 
-Transforma el dataset `convocatorias` desde Bronze PRONABEC hacia la tabla Silver `pronabec_convocatorias`.
-
-Familia de fuente:
+Los jobs PRONABEC API procesan datasets seleccionados desde Bronze PRONABEC hacia sus tablas Silver correspondientes.
 
 ```text
-pronabec
+dataflow-pronabec-convocatorias-job
+dataflow-pronabec-ubigeo-postulacion-job
+dataflow-pronabec-becarios-pais-estudio-job
+dataflow-pronabec-colegios-habiles-job
+dataflow-pronabec-becarios-provincia-job
 ```
 
-Entrada Bronze:
+Mapeo operativo:
 
 ```text
-bronze/pronabec/convocatorias/extraction_date=<fecha>/data.jsonl
+convocatorias -> silver.pronabec_convocatorias
+ubigeo_postulacion -> silver.pronabec_ubigeo_postulacion
+becarios_pais_estudio -> silver.pronabec_becarios_pais_estudio
+colegios_habiles -> silver.pronabec_colegios_elegibles
+becarios_provincia -> silver.pronabec_beca18_becarios_provincia_2016
 ```
 
-Salida Silver:
+Entrada Bronze esperada:
 
 ```text
-silver.pronabec_convocatorias
+bronze/pronabec/<dataset>/extraction_date=<fecha>/data.jsonl
 ```
 
-### `dataflow-mef-presupuesto-job`
+### Familia MEF Presupuesto
 
-Transforma el slice presupuestal base del MEF desde Bronze hacia la tabla Silver `presupuesto_mef`.
-
-Familia de fuente:
+Los jobs MEF procesan las 9 rebanadas seleccionadas hacia Silver.
 
 ```text
-mef
+dataflow-mef-presupuesto-job
+dataflow-mef-presupuesto-temporal-job
+dataflow-mef-producto-job
+dataflow-mef-producto-temporal-job
+dataflow-mef-actividad-job
+dataflow-mef-actividad-temporal-job
+dataflow-mef-generica-job
+dataflow-mef-generica-temporal-job
+dataflow-mef-hierarchy-job
 ```
 
-Entrada Bronze:
+Mapeo operativo:
 
 ```text
-bronze/mef/presupuesto/extraction_date=<fecha>/year=*/data.csv
+presupuesto -> silver.presupuesto_mef
+presupuesto_temporal -> silver.presupuesto_mef_temporal
+presupuesto_producto -> silver.presupuesto_mef_producto
+presupuesto_producto_temporal -> silver.presupuesto_mef_producto_temporal
+presupuesto_actividad -> silver.presupuesto_mef_actividad
+presupuesto_actividad_temporal -> silver.presupuesto_mef_actividad_temporal
+presupuesto_generica -> silver.presupuesto_mef_generica
+presupuesto_generica_temporal -> silver.presupuesto_mef_generica_temporal
+presupuesto_hierarchy -> silver.presupuesto_mef_hierarchy
 ```
 
-Salida Silver:
+Entrada Bronze esperada:
 
 ```text
-silver.presupuesto_mef
+bronze/mef/<slice>/extraction_date=<fecha>/year=*/data.csv
 ```
 
-### `dataflow-report-universitarios-job`
+### Familia PRONABEC Reports
 
-Transforma el reporte oficial Beca 18 universitarios por universidad desde Bronze PRONABEC reports hacia la tabla Silver correspondiente.
-
-Familia de fuente:
+Los reportes documentales PRONABEC se transforman mediante un único Cloud Run Job parametrizable:
 
 ```text
-pronabec_reports
+dataflow-pronabec-report-job
 ```
 
-Entrada Bronze:
+Este job no representa un único dataset fijo. Composer lo ejecuta una vez por cada reporte seleccionado y sobreescribe las variables operativas de la ejecución:
 
 ```text
-bronze/pronabec_reports/report_beca18_universitarios_universidad_anual/extraction_date=<fecha>/data.csv
+SOURCE_DATASET
+INPUT_PATH
+OUTPUT_TABLE
 ```
 
-Salida Silver:
+Entrada Bronze esperada:
 
 ```text
-silver.pronabec_report_beca18_universitarios_universidad_anual
+bronze/pronabec_reports/<dataset>/extraction_date=<fecha>/data.csv
+```
+
+Salida Silver esperada:
+
+```text
+silver.pronabec_<dataset>
+```
+
+Ejemplo:
+
+```text
+SOURCE_DATASET=report_beca18_universitarios_universidad_anual
+OUTPUT_TABLE=<project>:silver.pronabec_report_beca18_universitarios_universidad_anual
 ```
 
 ## Parámetros cloud
@@ -120,6 +153,9 @@ DATAFLOW_TEMP_LOCATION
 DATAFLOW_STAGING_LOCATION
 BRONZE_EXTRACTION_DATE
 PIPELINE_RUN_ID
+SOURCE_DATASET
+INPUT_PATH
+OUTPUT_TABLE
 ```
 
 Argumentos principales:
@@ -159,44 +195,63 @@ Esta separación permite rastrear el resultado de cada transformación sin deten
 
 ## Relación con Composer
 
-Composer ejecuta los Cloud Run Jobs lanzadores mediante comandos `gcloud run jobs execute`. Cada ejecución puede recibir overrides operativos de fecha e identificador de corrida.
+Composer ejecuta los Cloud Run Jobs lanzadores mediante comandos `gcloud run jobs execute`. Cada ejecución puede recibir overrides operativos de fecha, identificador de corrida y parámetros de dataset.
 
 El DAG mantiene el orden entre extracción, transformación y calidad, pero no ejecuta directamente transformaciones Beam dentro del entorno Airflow.
 
-## Alcance Operativo y Selección de Datasets
+## Alcance operativo y selección de datasets
 
-El modelo de lanzamiento actual soporta la orquestación de transformaciones distribuidas de Apache Beam/Dataflow de las tres familias de datos principales del proyecto, aplicando filtros explícitos sobre los conjuntos seleccionados:
+El modelo actual soporta la orquestación de transformaciones distribuidas de Apache Beam/Dataflow para tres familias principales de datos:
 
-### 1. Familia PRONABEC API (Selected Silver)
-Se despliegan transformaciones para las siguientes tablas:
-- `pronabec_convocatorias`
-- `pronabec_ubigeo_postulacion`
-- `pronabec_becarios_pais_estudio`
-- `pronabec_colegios_elegibles`
-- `pronabec_beca18_becarios_provincia_2016` (esta tabla transforma los beneficiarios filtrando registros totales a nivel regional y provincial).
+1. PRONABEC API seleccionada.
+2. MEF Presupuesto seleccionado.
+3. PRONABEC Reports seleccionados.
 
-**Exclusión Crítica**:
-- **convocatorias_carrera_sede**: Se conserva en Bronze para trazabilidad, pero no se promueve a Silver ni Gold en esta versión del pipeline. Está fuera del alcance del procesamiento Dataflow y no cuenta con lanzador Dataflow.
+### PRONABEC API Selected Silver
 
-### 2. Familia MEF Presupuesto (Selected Silver)
-Se procesan mediante Apache Beam las 9 rebanadas (slices) seleccionadas para la capa Silver:
-- `presupuesto_mef`
-- `presupuesto_mef_temporal`
-- `presupuesto_mef_producto`
-- `presupuesto_mef_producto_temporal`
-- `presupuesto_mef_actividad`
-- `presupuesto_mef_actividad_temporal`
-- `presupuesto_mef_generica`
-- `presupuesto_mef_generica_temporal`
-- `presupuesto_mef_hierarchy`
+Se despliegan transformaciones para:
 
-**Exclusiones**:
-- Los datasets `presupuesto_departamento`, `presupuesto_fuente` y `presupuesto_rubro` son clasificados como **Bronze-only** y no se envían a Dataflow para procesamiento a Silver.
+```text
+pronabec_convocatorias
+pronabec_ubigeo_postulacion
+pronabec_becarios_pais_estudio
+pronabec_colegios_elegibles
+pronabec_beca18_becarios_provincia_2016
+```
 
-### 3. Familia PRONABEC Reports (Selected Silver)
-Se procesan en total los 23 reportes documentales mapeados (`pronabec_report_*`). Para optimizar recursos y simplificar el despliegue cloud, **no se despliegan 23 jobs de Cloud Run independientes**. En su lugar, se utiliza un único job común parametrizable:
-- **Job Lanzador**: `dataflow-pronabec-report-job`
-- **Parámetros Dinámicos (Overrides)**: En cada ejecución, se redefinen los argumentos a través de variables de entorno:
-  - `SOURCE_DATASET`: Nombre interno de la subfuente.
-  - `INPUT_PATH`: Ruta origen en GCS Bronze (`gs://<bucket>/bronze/pronabec_reports/...`).
-  - `OUTPUT_TABLE`: Tabla analítica destino en BigQuery Silver (`{project_id}.{silver_dataset}.pronabec_report_...`).
+### MEF Selected Silver
+
+Se despliegan transformaciones para:
+
+```text
+presupuesto_mef
+presupuesto_mef_temporal
+presupuesto_mef_producto
+presupuesto_mef_producto_temporal
+presupuesto_mef_actividad
+presupuesto_mef_actividad_temporal
+presupuesto_mef_generica
+presupuesto_mef_generica_temporal
+presupuesto_mef_hierarchy
+```
+
+### PRONABEC Reports Selected Silver
+
+Se procesan 23 reportes documentales mapeados como `pronabec_report_*`. Para optimizar recursos y simplificar el despliegue cloud, no se despliegan 23 jobs de Cloud Run independientes. En su lugar, se utiliza un único job común parametrizable:
+
+```text
+dataflow-pronabec-report-job
+```
+
+## Exclusiones
+
+Los siguientes datasets se conservan para trazabilidad en Bronze, pero no se promueven a Silver ni Gold en esta versión del pipeline:
+
+```text
+convocatorias_carrera_sede
+presupuesto_departamento
+presupuesto_fuente
+presupuesto_rubro
+```
+
+`convocatorias_carrera_sede` no cuenta con lanzador Dataflow, no se transforma a Silver y no se referencia desde vistas Gold.

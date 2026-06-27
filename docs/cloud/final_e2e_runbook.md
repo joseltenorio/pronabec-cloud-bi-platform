@@ -21,6 +21,7 @@ Para poder ejecutar el pipeline de datos completo, asegúrese de contar con los 
   - Dataflow API
   - Cloud Artifact Registry API
   - Cloud Composer API
+
 - Bucket de Cloud Storage (`GCS_BUCKET_NAME`) para data lake (Bronze, DLQ, logs, temporales).
 - Datasets BigQuery creados para las capas: Bronze (como tablas externas), Silver, Gold y Audit.
 - Repositorio en Artifact Registry para almacenar la imagen Docker del proyecto.
@@ -66,9 +67,9 @@ export COMPOSER_LOCATION="us-central1"
 
 ## 4. Preparar entorno
 
-Para comenzar a operar, inicie su terminal (Cloud Shell o terminal local con el SDK de Google Cloud instalado y autenticado) y configure el proyecto activo:
+Para comenzar a operar, inicie su terminal (Cloud Shell o terminal local con el SDK de Google Cloud instalado y autenticado) y configure el proyecto activo.
 
-### En Cloud Shell (Linux):
+### En Cloud Shell
 
 ```bash
 source ~/pronabec_env.sh
@@ -76,10 +77,10 @@ gcloud config set project $GCP_PROJECT_ID
 gcloud config set run/region $GCP_REGION
 ```
 
-### En PowerShell (Windows):
+### En PowerShell
 
 ```powershell
-. .\scripts\load_env.ps1  # O equivalente local
+. .\scripts\load_env.ps1
 gcloud config set project $env:GCP_PROJECT_ID
 gcloud config set run/region $env:GCP_REGION
 ```
@@ -88,13 +89,13 @@ gcloud config set run/region $env:GCP_REGION
 
 ## 5. Construir y publicar imagen Docker
 
-Construya la imagen Docker de procesamiento batch que contiene todos los pipelines de extracción, staging y calidad de datos y publíquela en Artifact Registry:
+Construya la imagen Docker de procesamiento batch que contiene todos los pipelines de extracción, staging, transformación y calidad de datos, y publíquela en Artifact Registry:
 
 ```powershell
 .\scripts\build_and_push_image.ps1
 ```
 
-_(Este script compila la imagen utilizando las dependencias de `requirements.txt` y la sube al repositorio especificado por las variables de entorno)._
+Este script compila la imagen utilizando las dependencias de `requirements.txt` y la sube al repositorio especificado por las variables de entorno.
 
 ---
 
@@ -132,11 +133,11 @@ Este comando registrará los siguientes Cloud Run Jobs en su región de GCP:
 - **`mef-extract-job`**: extractor presupuestal MEF.
 - **`pronabec-stage-reports-job`**: staging para reportes de Landing a Bronze.
 - **`quality-checks-job`**: ejecutor de validaciones y calidad de datos sobre BigQuery.
-- **Jobs Lanzadores de Dataflow**:
+- **Jobs lanzadores de Dataflow**:
   - `dataflow-pronabec-convocatorias-job`
   - `dataflow-pronabec-ubigeo-postulacion-job`
   - `dataflow-pronabec-becarios-pais-estudio-job`
-  - `dataflow-pronabec-colegios-elegibles-job`
+  - `dataflow-pronabec-colegios-habiles-job`
   - `dataflow-pronabec-becarios-provincia-job`
   - `dataflow-mef-presupuesto-job`
   - `dataflow-mef-presupuesto-temporal-job`
@@ -147,7 +148,7 @@ Este comando registrará los siguientes Cloud Run Jobs en su región de GCP:
   - `dataflow-mef-generica-job`
   - `dataflow-mef-generica-temporal-job`
   - `dataflow-mef-hierarchy-job`
-  - **`dataflow-pronabec-report-job`** (job parametrizable único para los 23 reportes documentales).
+  - **`dataflow-pronabec-report-job`**: job parametrizable único para los 23 reportes documentales.
 
 ---
 
@@ -165,14 +166,14 @@ El archivo del DAG se cargará en el bucket de Cloud Composer y estará disponib
 
 ## 9. Preparar Landing de reportes
 
-Antes de ejecutar el pipeline, los reportes documentales deben subirse en formato CSV (con sus nombres y carpetas correctas) a las rutas correspondientes del bucket de Cloud Storage:
+Antes de ejecutar el pipeline, los reportes documentales deben subirse en formato CSV, con sus nombres y carpetas correctas, a las rutas correspondientes del bucket de Cloud Storage:
 
 ```text
 gs://<bucket-lake-name>/landing/pronabec_reports/pes_2025/
 gs://<bucket-lake-name>/landing/pronabec_reports/beca18_universitarios_2012_2026/
 ```
 
-_(El proceso de staging `pronabec-stage-reports-job` leerá estos archivos de Landing, adjuntará metadatos técnicos y creará las estructuras correspondientes en la capa Bronze)._
+El proceso de staging `pronabec-stage-reports-job` leerá estos archivos de Landing, adjuntará metadatos técnicos y creará las estructuras correspondientes en la capa Bronze.
 
 ---
 
@@ -182,11 +183,11 @@ Aunque el DAG `pronabec_medallion_batch` está programado para ejecutarse de for
 
 1. Abra la interfaz web de Airflow en Google Cloud Composer.
 2. Busque el DAG `pronabec_medallion_batch`.
-3. Presione el botón **Trigger DAG** (o use **Trigger DAG w/ config** para enviar parámetros como una `extraction_date` personalizada).
+3. Presione el botón **Trigger DAG** o use **Trigger DAG w/ config** para enviar parámetros como una `extraction_date` personalizada.
 
 ---
 
-## 11. Validar Bronze en Cloud Storage (GCS)
+## 11. Validar Bronze en Cloud Storage
 
 Una vez completadas las extracciones y tareas de staging, valide que los archivos crudos se encuentren correctamente escritos en las siguientes rutas estructuradas:
 
@@ -206,6 +207,7 @@ Confirme que las tablas de la capa Silver en BigQuery se hayan actualizado corre
   - `pronabec_becarios_pais_estudio`
   - `pronabec_colegios_elegibles`
   - `pronabec_beca18_becarios_provincia_2016`
+
 - **MEF Silver**:
   - `presupuesto_mef`
   - `presupuesto_mef_temporal`
@@ -216,6 +218,7 @@ Confirme que las tablas de la capa Silver en BigQuery se hayan actualizado corre
   - `presupuesto_mef_generica`
   - `presupuesto_mef_generica_temporal`
   - `presupuesto_mef_hierarchy`
+
 - **PRONABEC Reports Silver**:
   - Tablas con el prefijo `pronabec_report_*` (en total 23 tablas de reportes).
 
@@ -239,34 +242,35 @@ Las vistas analíticas en la capa Gold deben estar disponibles y listas para el 
 
 ---
 
-## 14. Validar Calidad (Quality/Audit)
+## 14. Validar Calidad y Audit
 
 Al finalizar la corrida del DAG, verifique los resultados de auditoría y controles de calidad en la tabla de BigQuery:
 
 ```sql
-SELECT * FROM `tu-proyecto-gcp-id.audit.audit_data_quality_results`
+SELECT *
+FROM `tu-proyecto-gcp-id.audit.audit_data_quality_results`
 ORDER BY check_timestamp DESC
 LIMIT 50;
 ```
 
 > [!NOTE]
-> Las tablas temporales de MEF no tienen validaciones de no-negatividad en montos de forma estricta (no hay validaciones globales duras para `devengado < 0`), permitiendo ajustes negativos de devengado propios de los registros de Consulta Amigable.
+> Las tablas temporales de MEF no tienen validaciones de no-negatividad en montos de forma estricta. No hay validaciones globales duras para `devengado < 0`, permitiendo ajustes negativos propios de los registros de Consulta Amigable.
 
 ---
 
-## 15. Exclusiones Críticas
+## 15. Exclusiones críticas
 
-Es muy importante tener en cuenta que para esta versión del pipeline:
+Es importante tener en cuenta que para esta versión del pipeline:
 
-- **`convocatorias_carrera_sede` es Bronze-only**: Los datos se conservan únicamente en la capa Bronze para trazabilidad técnica. No son procesados por Dataflow, no se exponen en la capa Silver ni se referencian en vistas Gold o calidad.
-- **MEF Bronze-only**: Las tablas `presupuesto_departamento`, `presupuesto_fuente` y `presupuesto_rubro` no se transforman hacia Silver.
-- **Power BI**: Queda fuera de esta fase y no se modifican ni cargan modelos DAX o archivos `.pbix`.
+- **`convocatorias_carrera_sede` es Bronze-only**: los datos se conservan únicamente en la capa Bronze para trazabilidad técnica. No son procesados por Dataflow, no se exponen en Silver ni se referencian en vistas Gold o calidad.
+- **MEF Bronze-only**: las tablas `presupuesto_departamento`, `presupuesto_fuente` y `presupuesto_rubro` no se transforman hacia Silver.
+- **Power BI**: queda fuera de esta fase y no se modifican ni cargan modelos DAX o archivos `.pbix`.
 
 ---
 
 ## 16. Resolución de problemas comunes
 
-- **Falta de archivos DDL en `build/generated/sql/`**: Los archivos DDL no se versionan. Asegúrese de ejecutar `.\scripts\generate_bigquery_ddl.ps1` y `.\scripts\render_sql_templates.ps1` antes de desplegar.
-- **Fallas del DirectRunner en Windows**: Al probar Dataflow localmente en Windows, pueden ocurrir errores por bloqueos de archivos o límites de multiprocesamiento (`WinError 5` o `WinError 32`). Para corridas productivas o de validación final, despliegue y valide el comportamiento usando `DataflowRunner` directamente en la nube de GCP.
-- **El job de staging falla**: Si los archivos originales en `landing/pronabec_reports/` no están presentes o sus nombres no coinciden con las convenciones de `endpoints.yaml`, la tarea fallará.
-- **Composer no ejecuta correctamente los reportes**: Valide que las variables de entorno (`SOURCE_DATASET`, `INPUT_PATH` y `OUTPUT_TABLE`) se estén sobreescribiendo adecuadamente en la configuración de la tarea del DAG.
+- **Falta de archivos DDL en `build/generated/sql/`**: los archivos DDL no se versionan. Ejecute `.\scripts\generate_bigquery_ddl.ps1` y `.\scripts\render_sql_templates.ps1` antes de desplegar.
+- **Fallas del DirectRunner en Windows**: al probar Dataflow localmente en Windows, pueden ocurrir errores por bloqueos de archivos o límites de multiprocesamiento (`WinError 5` o `WinError 32`). Para corridas productivas o de validación final, despliegue y valide usando `DataflowRunner` directamente en GCP.
+- **El job de staging falla**: si los archivos originales en `landing/pronabec_reports/` no están presentes o sus nombres no coinciden con las convenciones de `endpoints.yaml`, la tarea fallará.
+- **Composer no ejecuta correctamente los reportes**: valide que las variables `SOURCE_DATASET`, `INPUT_PATH` y `OUTPUT_TABLE` se estén sobreescribiendo adecuadamente en la configuración de la tarea del DAG.
