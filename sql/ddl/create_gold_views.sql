@@ -71,6 +71,32 @@ FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_becas_otorgadas_modal
 
 
 -- =============================================================================
+-- Gold - Beca 18 cobertura territorial
+-- =============================================================================
+
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_beca18_cobertura_territorial_2016` AS
+SELECT
+  region,
+  provincia,
+  becarios_b18_count,
+  source_snapshot_date,
+  extraction_date,
+  pipeline_run_id,
+  RANK() OVER (ORDER BY becarios_b18_count DESC) AS ranking_nacional_provincia,
+  SUM(becarios_b18_count) OVER (PARTITION BY region) AS total_region_b18,
+  SAFE_DIVIDE(
+    becarios_b18_count,
+    SUM(becarios_b18_count) OVER (PARTITION BY region)
+  ) AS participacion_provincia_region
+FROM `{project_id}.{silver_dataset}.pronabec_beca18_becarios_provincia_2016`
+WHERE region IS NOT NULL
+  AND TRIM(region) != ''
+  AND provincia IS NOT NULL
+  AND TRIM(provincia) != ''
+  AND UPPER(TRIM(provincia)) NOT LIKE 'TOTAL%';
+
+
+-- =============================================================================
 -- Gold - Beca 18 universitarios
 -- =============================================================================
 
