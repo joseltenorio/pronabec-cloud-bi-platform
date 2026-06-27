@@ -46,6 +46,32 @@ function Invoke-NativeCommand {
     }
 }
 
+function Sync-ComposerSupportFiles {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DagBucket
+    )
+
+    $trackedFiles = git ls-files config pipelines
+
+    foreach ($relativePath in $trackedFiles) {
+        $sourcePath = Join-Path $SourceRoot $relativePath
+
+        if (-not (Test-Path $sourcePath)) {
+            continue
+        }
+
+        $targetUri = "$DagBucket/$relativePath"
+        $targetParent = Split-Path $targetUri -Parent
+        if (-not [string]::IsNullOrWhiteSpace($targetParent)) {
+            gcloud storage cp $sourcePath $targetUri --quiet
+        }
+    }
+}
+
 $ProjectRoot = Resolve-ProjectRoot
 Set-Location $ProjectRoot
 
@@ -72,6 +98,12 @@ Invoke-NativeCommand `
     -StepName "Subiendo DAG a Composer..." `
     -Command {
         gcloud storage cp $ResolvedDagPath "$DagBucket/"
+    }
+
+Invoke-NativeCommand `
+    -StepName "Sincronizando soporte de Composer..." `
+    -Command {
+        Sync-ComposerSupportFiles -SourceRoot $ProjectRoot -DagBucket $DagBucket
     }
 
 Write-Host "DAG subido correctamente:"

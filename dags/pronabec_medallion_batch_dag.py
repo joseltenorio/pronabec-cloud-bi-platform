@@ -18,7 +18,21 @@ from pipelines.common.orchestration_config import (
 )
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+def resolve_repo_root() -> Path:
+    """Resolve the repository root both locally and when synced to Composer."""
+    dag_dir = Path(__file__).resolve().parent
+    repo_root = Path(__file__).resolve().parents[1]
+
+    for candidate in (dag_dir, repo_root):
+        if (candidate / "config" / "orchestration.yaml").exists() and (
+            candidate / "config" / "endpoints.yaml"
+        ).exists():
+            return candidate
+
+    return repo_root
+
+
+REPO_ROOT = resolve_repo_root()
 ORCHESTRATION_CONFIG = load_orchestration_config(REPO_ROOT / "config" / "orchestration.yaml")
 ENDPOINTS_CONFIG = load_endpoints_config(REPO_ROOT / "config" / "endpoints.yaml")
 

@@ -138,6 +138,8 @@ La separación por servicio reduce acoplamiento operativo y mantiene la arquitec
 
 El repositorio incluye un script de publicación que resuelve el bucket de DAGs del entorno Composer y copia el archivo versionado del DAG. El script no modifica la definición del DAG ni genera código derivado.
 
+Para que el DAG pueda importar sus helpers y resolver configuración declarativa en Composer, el mismo script sincroniza también `config/` y `pipelines/` dentro del prefijo de DAGs del entorno.
+
 El DAG versionado se mantiene en:
 
 ```text

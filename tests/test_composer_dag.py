@@ -28,6 +28,9 @@ def test_dag_uses_declarative_configuration() -> None:
     assert dag_mod.ORCHESTRATION_CONFIG["dag"]["id"] == "pronabec_medallion_batch"
     assert dag_mod.ORCHESTRATION_CONFIG["datasets"]["pronabec_reports"]["landing_path_template"] == "landing/pronabec_reports/{source_subset}"
     assert dag_mod.ORCHESTRATION_CONFIG["datasets"]["pronabec_reports"]["bronze_path_template"] == "bronze/pronabec_reports/{dataset}/extraction_date={extraction_date}/data.csv"
+    assert "resolve_repo_root" in content
+    assert 'candidate / "config" / "orchestration.yaml"' in content
+    assert 'candidate / "config" / "endpoints.yaml"' in content
     assert "REPORT_SUBSETS" not in content
     assert "PRONABEC_SILVER_DATASETS" not in content
     assert "MEF_SILVER_DATASETS" not in content
@@ -104,3 +107,11 @@ def test_dag_schedule_is_weekly_without_catchup() -> None:
 
     assert 'schedule_interval=ORCHESTRATION_CONFIG["dag"]["schedule"]' in content
     assert "catchup=False" in content
+
+
+def test_composer_upload_script_syncs_support_files() -> None:
+    upload_script = Path(dag_mod.__file__).resolve().parents[1] / "scripts" / "upload_composer_dag.ps1"
+    content = upload_script.read_text(encoding="utf-8")
+
+    assert "Sync-ComposerSupportFiles" in content
+    assert "git ls-files config pipelines" in content
