@@ -187,7 +187,7 @@ with DAG(
     description="Orquestación batch Medallion para extracción, transformación Bronze a Silver y calidad de PRONABEC Cloud BI Platform.",
     default_args=default_args,
     start_date=datetime(2026, 1, 1),
-    schedule_interval=None,
+    schedule_interval="0 5 * * 6",  # Ejecución semanal los sábados a las 05:00.
     catchup=False,
     max_active_runs=1,
     tags=["pronabec", "medallion", "batch", "cloud-run", "dataflow", "composer"],
