@@ -1,0 +1,123 @@
+dag:
+  id: pronabec_medallion_batch
+  schedule: "0 5 * * 6"
+  timezone: America/Lima
+  max_active_runs: 1
+  retries: 2
+  retry_delay_minutes: 5
+
+runtime:
+  project_id_var: gcp_project_id
+  region_var: gcp_region
+  bucket_name_var: gcs_bucket_name
+  bronze_dataset_var: bq_bronze_dataset
+  silver_dataset_var: bq_silver_dataset
+  gold_dataset_var: bq_gold_dataset
+  audit_dataset_var: bq_audit_dataset
+
+jobs:
+  pronabec_extract_job_name_var: pronabec_extract_job_name
+  mef_extract_job_name_var: mef_extract_job_name
+  pronabec_reports_stage_job_name_var: pronabec_reports_stage_job_name
+  pronabec_reports_dataflow_job_name_var: dataflow_pronabec_report_job_name
+  gold_publish_job_name_var: gold_publish_job_name
+  gold_validate_job_name_var: gold_validate_job_name
+  quality_checks_job_name_var: quality_checks_job_name
+
+datasets:
+  pronabec_api:
+    enabled: true
+    source_system: pronabec
+    bronze_path_template: "bronze/pronabec/{dataset}/extraction_date={extraction_date}/data.jsonl"
+    silver_table_template: "{project_id}:{silver_dataset}.pronabec_{dataset}"
+    items:
+      - source_dataset: convocatorias
+        job_name_var: dataflow_pronabec_convocatorias_job_name
+      - source_dataset: ubigeo_postulacion
+        job_name_var: dataflow_pronabec_ubigeo_postulacion_job_name
+      - source_dataset: becarios_pais_estudio
+        job_name_var: dataflow_pronabec_becarios_pais_estudio_job_name
+      - source_dataset: colegios_habiles
+        job_name_var: dataflow_pronabec_colegios_habiles_job_name
+      - source_dataset: becarios_provincia
+        job_name_var: dataflow_pronabec_becarios_provincia_job_name
+
+  mef:
+    enabled: true
+    source_system: mef
+    bronze_path_template: "bronze/mef/{dataset}/extraction_date={extraction_date}/year=*/data.csv"
+    silver_table_template: "{project_id}:{silver_dataset}.{silver_table}"
+    items:
+      - source_dataset: presupuesto
+        silver_table: presupuesto_mef
+        job_name_var: dataflow_mef_presupuesto_job_name
+      - source_dataset: presupuesto_temporal
+        silver_table: presupuesto_mef_temporal
+        job_name_var: dataflow_mef_presupuesto_temporal_job_name
+      - source_dataset: presupuesto_producto
+        silver_table: presupuesto_mef_producto
+        job_name_var: dataflow_mef_producto_job_name
+      - source_dataset: presupuesto_producto_temporal
+        silver_table: presupuesto_mef_producto_temporal
+        job_name_var: dataflow_mef_producto_temporal_job_name
+      - source_dataset: presupuesto_actividad
+        silver_table: presupuesto_mef_actividad
+        job_name_var: dataflow_mef_actividad_job_name
+      - source_dataset: presupuesto_actividad_temporal
+        silver_table: presupuesto_mef_actividad_temporal
+        job_name_var: dataflow_mef_actividad_temporal_job_name
+      - source_dataset: presupuesto_generica
+        silver_table: presupuesto_mef_generica
+        job_name_var: dataflow_mef_generica_job_name
+      - source_dataset: presupuesto_generica_temporal
+        silver_table: presupuesto_mef_generica_temporal
+        job_name_var: dataflow_mef_generica_temporal_job_name
+      - source_dataset: presupuesto_hierarchy
+        silver_table: presupuesto_mef_hierarchy
+        job_name_var: dataflow_mef_hierarchy_job_name
+
+  pronabec_reports:
+    enabled: true
+    source_system: pronabec_reports
+    landing_path_template: "landing/pronabec_reports/{source_subset}"
+    landing_documents_path_template: "landing/pronabec_reports/{source_subset}/_documents"
+    bronze_base_path: "bronze/pronabec_reports"
+    bronze_path_template: "bronze/pronabec_reports/{dataset}/extraction_date={extraction_date}/data.csv"
+    silver_table_template: "{project_id}:{silver_dataset}.pronabec_{dataset}"
+    staging_job_name_var: pronabec_reports_stage_job_name
+    dataflow_job_name_var: dataflow_pronabec_report_job_name
+    items_from: "config/endpoints.yaml::pronabec_reports.documents[*]"
+
+gold:
+  enabled: true
+  mode: views
+  sql_template: "sql/ddl/create_gold_views.sql"
+  execution_job_name_var: gold_publish_job_name
+  validation_job_name_var: gold_validate_job_name
+  validation_queries:
+    - name: vw_pronabec_resumen_ejecutivo
+      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_pronabec_resumen_ejecutivo`"
+    - name: vw_beca18_becas_otorgadas_anual
+      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_beca18_becas_otorgadas_anual`"
+    - name: vw_beca18_cobertura_territorial_2016
+      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_beca18_cobertura_territorial_2016`"
+    - name: vw_beca18_universitarios_carrera_anual
+      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_beca18_universitarios_carrera_anual`"
+    - name: vw_beca18_universitarios_universidad_anual
+      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_beca18_universitarios_universidad_anual`"
+    - name: vw_beca18_perfil_social_indicadores
+      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_beca18_perfil_social_indicadores`"
+    - name: vw_beca18_region_postulacion
+      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_beca18_region_postulacion`"
+    - name: vw_beca18_migracion_region
+      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_beca18_migracion_region`"
+    - name: vw_beca18_trayectoria_eleccion
+      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_beca18_trayectoria_eleccion`"
+    - name: vw_mef_presupuesto_ejecucion_anual
+      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_mef_presupuesto_ejecucion_anual`"
+    - name: vw_mef_presupuesto_ejecucion_temporal
+      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_mef_presupuesto_ejecucion_temporal`"
+    - name: vw_pronabec_becas_vs_presupuesto_anual
+      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_pronabec_becas_vs_presupuesto_anual`"
+    - name: vw_pronabec_beca18_resumen_analitico
+      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_pronabec_beca18_resumen_analitico`"
