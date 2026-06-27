@@ -39,7 +39,6 @@ param(
     [string]$DataflowMefGenericaJobName = "dataflow-mef-generica-job",
     [string]$DataflowMefGenericaTemporalJobName = "dataflow-mef-generica-temporal-job",
     [string]$DataflowMefHierarchyJobName = "dataflow-mef-hierarchy-job",
-    [string]$DataflowReportUniversitariosJobName = "dataflow-report-universitarios-job",
     [string]$DataflowPronabecReportJobName = "dataflow-pronabec-report-job"
 )
 
@@ -503,28 +502,6 @@ Upsert-CloudRunJob `
             "$ProjectId`:$SilverDataset.presupuesto_mef_hierarchy",
             "--summary-output-path",
             "gs://$BucketName/audit/processing_summary/presupuesto_mef_hierarchy_`${BRONZE_EXTRACTION_DATE}.json"
-        )
-    )
-
-Upsert-CloudRunJob `
-    -JobName $DataflowReportUniversitariosJobName `
-    -Description "Lanzador Dataflow PRONABEC reports universitarios Bronze a Silver" `
-    -TaskTimeoutSeconds 7200 `
-    -Args @(
-        $DataflowCommonArgs +
-        @(
-            "--source-system",
-            "pronabec_reports",
-            "--source-dataset",
-            "report_beca18_universitarios_universidad_anual",
-            "--input-path",
-            "gs://$BucketName/bronze/pronabec_reports/report_beca18_universitarios_universidad_anual/extraction_date=`${BRONZE_EXTRACTION_DATE}/data.csv",
-            "--input-format",
-            "csv",
-            "--output-table",
-            "$ProjectId`:$SilverDataset.pronabec_report_beca18_universitarios_universidad_anual",
-            "--summary-output-path",
-            "gs://$BucketName/audit/processing_summary/pronabec_report_beca18_universitarios_universidad_anual_`${BRONZE_EXTRACTION_DATE}.json"
         )
     )
 

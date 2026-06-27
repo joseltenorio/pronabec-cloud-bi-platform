@@ -151,7 +151,7 @@ Para ejecutar transformaciones distribuidas de Apache Beam en la nube, la plataf
   - `dataflow-pronabec-convocatorias-job`: transforma convocatorias a Silver.
   - `dataflow-pronabec-ubigeo-postulacion-job`: transforma ubigeo de postulación a Silver.
   - `dataflow-pronabec-becarios-pais-estudio-job`: transforma becarios por país de estudio a Silver.
-  - `dataflow-pronabec-colegios-elegibles-job`: transforma colegios elegibles a Silver.
+  - `dataflow-pronabec-colegios-habiles-job`: transforma colegios habiles a Silver.
   - `dataflow-pronabec-becarios-provincia-job`: transforma beneficiarios provinciales a Silver (excluyendo totales).
     _(Nota crítica: convocatorias_carrera_sede es Bronze-only y no cuenta con job de transformación a Silver)._
 - **MEF Presupuesto**:

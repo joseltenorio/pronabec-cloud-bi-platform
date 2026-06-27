@@ -100,11 +100,26 @@ Los jobs relevantes para observabilidad son:
 ```text
 pronabec-extract-job
 mef-extract-job
+pronabec-stage-reports-job
 dataflow-pronabec-convocatorias-job
+dataflow-pronabec-ubigeo-postulacion-job
+dataflow-pronabec-becarios-pais-estudio-job
+dataflow-pronabec-colegios-habiles-job
+dataflow-pronabec-becarios-provincia-job
 dataflow-mef-presupuesto-job
-dataflow-report-universitarios-job
+dataflow-mef-presupuesto-temporal-job
+dataflow-mef-producto-job
+dataflow-mef-producto-temporal-job
+dataflow-mef-actividad-job
+dataflow-mef-actividad-temporal-job
+dataflow-mef-generica-job
+dataflow-mef-generica-temporal-job
+dataflow-mef-hierarchy-job
+dataflow-pronabec-report-job
 quality-checks-job
 ```
+
+Para PRONABEC reports, la observabilidad se concentra en `dataflow-pronabec-report-job`. Composer ejecuta este job parametrizable una vez por cada reporte seleccionado, propagando `SOURCE_DATASET`, `INPUT_PATH`, `OUTPUT_TABLE`, `BRONZE_EXTRACTION_DATE` y `PIPELINE_RUN_ID` para diferenciar cada corrida.
 
 ## Dataflow
 
