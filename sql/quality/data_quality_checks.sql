@@ -487,3 +487,548 @@ FROM (
   FROM `{project_id}.{silver_dataset}.presupuesto_mef_hierarchy`
   WHERE nivel_jerarquia IS NULL OR nombre_entidad IS NULL
 );
+
+-- Check: silver_pronabec_beca18_becarios_provincia_2016_not_empty
+-- Tipo: Tabla no vacía
+SELECT
+  'silver_pronabec_beca18_becarios_provincia_2016_not_empty' AS check_id,
+  'silver' AS layer,
+  'pronabec_beca18_becarios_provincia_2016' AS table_name,
+  'ERROR' AS severity,
+  IF(cnt = 0, 1, 0) AS failed_rows,
+  (cnt > 0) AS passed,
+  IF(cnt = 0, 'La tabla de becarios por provincia está vacía', 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS cnt FROM `{project_id}.{silver_dataset}.pronabec_beca18_becarios_provincia_2016`
+);
+
+-- Check: silver_pronabec_beca18_becarios_provincia_2016_invalid_rows
+-- Tipo: Filtrado de totales, nulos obligatorios y metadatos
+SELECT
+  'silver_pronabec_beca18_becarios_provincia_2016_invalid_rows' AS check_id,
+  'silver' AS layer,
+  'pronabec_beca18_becarios_provincia_2016' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con totales, nulos o metadatos inválidos'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_beca18_becarios_provincia_2016`
+  WHERE UPPER(TRIM(provincia)) = 'TOTAL'
+     OR UPPER(TRIM(provincia)) LIKE 'TOTAL%'
+     OR region IS NULL
+     OR TRIM(region) = ''
+     OR provincia IS NULL
+     OR TRIM(provincia) = ''
+     OR extraction_date IS NULL
+     OR pipeline_run_id IS NULL
+     OR TRIM(pipeline_run_id) = ''
+);
+
+-- Check: silver_pronabec_beca18_becarios_provincia_2016_negative_counts
+-- Tipo: Conteos negativos no permitidos
+SELECT
+  'silver_pronabec_beca18_becarios_provincia_2016_negative_counts' AS check_id,
+  'silver' AS layer,
+  'pronabec_beca18_becarios_provincia_2016' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con conteos negativos de becarios'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_beca18_becarios_provincia_2016`
+  WHERE becarios_b18_count < 0
+);
+
+-- Check: silver_presupuesto_mef_negative_values
+-- Tipo: Rango de montos no negativos en presupuesto general
+SELECT
+  'silver_presupuesto_mef_negative_values' AS check_id,
+  'silver' AS layer,
+  'presupuesto_mef' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con montos o avances negativos en presupuesto_mef'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.presupuesto_mef`
+  WHERE pia < 0 OR pim < 0 OR devengado < 0 OR avance_porcentaje < 0
+);
+
+-- Check: silver_presupuesto_mef_producto_negative_values
+-- Tipo: Rango de montos no negativos en producto
+SELECT
+  'silver_presupuesto_mef_producto_negative_values' AS check_id,
+  'silver' AS layer,
+  'presupuesto_mef_producto' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con montos o avances negativos en presupuesto_mef_producto'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.presupuesto_mef_producto`
+  WHERE pia < 0 OR pim < 0 OR devengado < 0 OR avance_porcentaje < 0
+);
+
+-- Check: silver_presupuesto_mef_actividad_negative_values
+-- Tipo: Rango de montos no negativos en actividad
+SELECT
+  'silver_presupuesto_mef_actividad_negative_values' AS check_id,
+  'silver' AS layer,
+  'presupuesto_mef_actividad' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con montos o avances negativos en presupuesto_mef_actividad'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.presupuesto_mef_actividad`
+  WHERE pia < 0 OR pim < 0 OR devengado < 0 OR avance_porcentaje < 0
+);
+
+-- Check: silver_presupuesto_mef_generica_negative_values
+-- Tipo: Rango de montos no negativos en genérica
+SELECT
+  'silver_presupuesto_mef_generica_negative_values' AS check_id,
+  'silver' AS layer,
+  'presupuesto_mef_generica' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con montos o avances negativos en presupuesto_mef_generica'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.presupuesto_mef_generica`
+  WHERE pia < 0 OR pim < 0 OR devengado < 0 OR avance_porcentaje < 0
+);
+
+-- Check: silver_presupuesto_mef_hierarchy_negative_values
+-- Tipo: Rango de montos no negativos en jerarquía
+SELECT
+  'silver_presupuesto_mef_hierarchy_negative_values' AS check_id,
+  'silver' AS layer,
+  'presupuesto_mef_hierarchy' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con montos o avances negativos en presupuesto_mef_hierarchy'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.presupuesto_mef_hierarchy`
+  WHERE pia < 0 OR pim < 0 OR devengado < 0 OR avance_porcentaje < 0
+);
+
+-- Check: silver_pronabec_report_beca18_autoidentificacion_etnica_modalidad_2025_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_autoidentificacion_etnica_modalidad_2025_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_autoidentificacion_etnica_modalidad_2025' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_autoidentificacion_etnica_modalidad_2025 está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_autoidentificacion_etnica_modalidad_2025`
+);
+
+-- Check: silver_pronabec_report_beca18_colegio_gestion_2025_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_colegio_gestion_2025_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_colegio_gestion_2025' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_colegio_gestion_2025 está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_colegio_gestion_2025`
+);
+
+-- Check: silver_pronabec_report_beca18_enp_promedio_caracteristica_2025_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_enp_promedio_caracteristica_2025_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_enp_promedio_caracteristica_2025' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_enp_promedio_caracteristica_2025 está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_enp_promedio_caracteristica_2025`
+);
+
+-- Check: silver_pronabec_report_beca18_enp_promedio_region_2025_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_enp_promedio_region_2025_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_enp_promedio_region_2025' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_enp_promedio_region_2025 está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_enp_promedio_region_2025`
+);
+
+-- Check: silver_pronabec_report_beca18_lengua_materna_modalidad_2025_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_lengua_materna_modalidad_2025_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_lengua_materna_modalidad_2025' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_lengua_materna_modalidad_2025 está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_lengua_materna_modalidad_2025`
+);
+
+-- Check: silver_pronabec_report_beca18_migracion_region_acumulada_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_migracion_region_acumulada_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_migracion_region_acumulada' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_migracion_region_acumulada está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_migracion_region_acumulada`
+);
+
+-- Check: silver_pronabec_report_beca18_migracion_region_anual_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_migracion_region_anual_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_migracion_region_anual' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_migracion_region_anual está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_migracion_region_anual`
+);
+
+-- Check: silver_pronabec_report_beca18_no_continuaria_sin_beca_caracteristica_2025_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_no_continuaria_sin_beca_caracteristica_2025_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_no_continuaria_sin_beca_caracteristica_2025' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_no_continuaria_sin_beca_caracteristica_2025 está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_no_continuaria_sin_beca_caracteristica_2025`
+);
+
+-- Check: silver_pronabec_report_beca18_padres_nivel_educativo_2025_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_padres_nivel_educativo_2025_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_padres_nivel_educativo_2025' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_padres_nivel_educativo_2025 está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_padres_nivel_educativo_2025`
+);
+
+-- Check: silver_pronabec_report_beca18_periodo_ingreso_ies_genero_2025_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_periodo_ingreso_ies_genero_2025_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_periodo_ingreso_ies_genero_2025' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_periodo_ingreso_ies_genero_2025 está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_periodo_ingreso_ies_genero_2025`
+);
+
+-- Check: silver_pronabec_report_beca18_preparacion_ies_meses_caracteristica_2025_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_preparacion_ies_meses_caracteristica_2025_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_preparacion_ies_meses_caracteristica_2025' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_preparacion_ies_meses_caracteristica_2025 está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_preparacion_ies_meses_caracteristica_2025`
+);
+
+-- Check: silver_pronabec_report_beca18_preparacion_ies_tipo_2025_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_preparacion_ies_tipo_2025_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_preparacion_ies_tipo_2025' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_preparacion_ies_tipo_2025 está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_preparacion_ies_tipo_2025`
+);
+
+-- Check: silver_pronabec_report_beca18_primera_generacion_region_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_primera_generacion_region_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_primera_generacion_region' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_primera_generacion_region está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_primera_generacion_region`
+);
+
+-- Check: silver_pronabec_report_beca18_razones_eleccion_carrera_gestion_ies_2025_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_razones_eleccion_carrera_gestion_ies_2025_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_razones_eleccion_carrera_gestion_ies_2025' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_razones_eleccion_carrera_gestion_ies_2025 está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_razones_eleccion_carrera_gestion_ies_2025`
+);
+
+-- Check: silver_pronabec_report_beca18_razones_eleccion_carrera_sexo_2025_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_razones_eleccion_carrera_sexo_2025_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_razones_eleccion_carrera_sexo_2025' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_razones_eleccion_carrera_sexo_2025 está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_razones_eleccion_carrera_sexo_2025`
+);
+
+-- Check: silver_pronabec_report_beca18_razones_eleccion_ies_gestion_2025_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_razones_eleccion_ies_gestion_2025_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_razones_eleccion_ies_gestion_2025' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_razones_eleccion_ies_gestion_2025 está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_razones_eleccion_ies_gestion_2025`
+);
+
+-- Check: silver_pronabec_report_beca18_region_postulacion_2025_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_region_postulacion_2025_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_region_postulacion_2025' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_region_postulacion_2025 está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_region_postulacion_2025`
+);
+
+-- Check: silver_pronabec_report_beca18_region_postulacion_acumulada_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_region_postulacion_acumulada_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_region_postulacion_acumulada' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_region_postulacion_acumulada está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_region_postulacion_acumulada`
+);
+
+-- Check: silver_pronabec_report_beca18_region_postulacion_anual_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_region_postulacion_anual_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_region_postulacion_anual' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_region_postulacion_anual está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_region_postulacion_anual`
+);
+
+-- Check: silver_pronabec_report_beca18_sexo_anual_valid
+-- Tipo: Validación de contenido y metadatos
+SELECT
+  'silver_pronabec_report_beca18_sexo_anual_valid' AS check_id,
+  'silver' AS layer,
+  'pronabec_report_beca18_sexo_anual' AS table_name,
+  'ERROR' AS severity,
+  IF(total_cnt = 0, 1, failed_cnt) AS failed_rows,
+  (total_cnt > 0 AND failed_cnt = 0) AS passed,
+  IF(total_cnt = 0, 'La tabla pronabec_report_beca18_sexo_anual está vacía',
+     IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadatos inválidos'), 'Validación exitosa')) AS details
+FROM (
+  SELECT 
+    COUNT(*) AS total_cnt,
+    COUNTIF(extraction_date IS NULL OR pipeline_run_id IS NULL OR TRIM(pipeline_run_id) = '') AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_sexo_anual`
+);
+
+-- Check: silver_pronabec_colegios_elegibles_fields_format
+-- Tipo: Campos obligatorios no vacíos
+SELECT
+  'silver_pronabec_colegios_elegibles_fields_format' AS check_id,
+  'silver' AS layer,
+  'pronabec_colegios_elegibles' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' colegios con institución educativa o tipo de gestión inválidos'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_colegios_elegibles`
+  WHERE institucion_educativa IS NULL OR TRIM(institucion_educativa) = ''
+     OR tipo_gestion_colegio IS NULL OR TRIM(tipo_gestion_colegio) = ''
+);
+
+-- Check: silver_pronabec_ubigeo_postulacion_fields_nulls
+-- Tipo: Campos de ubicación obligatorios no vacíos
+SELECT
+  'silver_pronabec_ubigeo_postulacion_fields_nulls' AS check_id,
+  'silver' AS layer,
+  'pronabec_ubigeo_postulacion' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros de ubigeo con región, provincia o distrito nulos o vacíos'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_ubigeo_postulacion`
+  WHERE region IS NULL OR TRIM(region) = ''
+     OR provincia IS NULL OR TRIM(provincia) = ''
+     OR distrito IS NULL OR TRIM(distrito) = ''
+);
+
+-- Check: silver_pronabec_becarios_pais_estudio_fields_nulls
+-- Tipo: Campos obligatorios de estudios no vacíos
+SELECT
+  'silver_pronabec_becarios_pais_estudio_fields_nulls' AS check_id,
+  'silver' AS layer,
+  'pronabec_becarios_pais_estudio' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros de becarios con institución nula o vacía'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.pronabec_becarios_pais_estudio`
+  WHERE institucion IS NULL OR TRIM(institucion) = ''
+);
