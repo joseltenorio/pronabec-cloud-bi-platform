@@ -82,6 +82,10 @@ def test_gold_jobs_and_env_vars_are_defined():
     assert "GOLD_PUBLISH_JOB_NAME" in content
     assert "GOLD_VALIDATE_JOB_NAME" in content
     assert "BQ_LOCATION=$Location" in content
+    assert "CLOUD_RUN_JOBS_SERVICE_ACCOUNT" in content
+    assert "CLOUD_RUN_SERVICE_ACCOUNT" in content
+    assert "CLOUD_RUN_JOBS_REGION" in content
+    assert "CLOUD_RUN_REGION" in content
     assert "pipelines.publish_gold_views" in content
     assert "pipelines.validate_gold" in content
 

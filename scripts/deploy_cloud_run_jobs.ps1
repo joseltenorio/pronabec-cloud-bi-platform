@@ -3,9 +3,9 @@
 [CmdletBinding()]
 param(
     [string]$ProjectId = $env:GCP_PROJECT_ID,
-    [string]$Region = $(if ($env:CLOUD_RUN_JOBS_REGION) { $env:CLOUD_RUN_JOBS_REGION } else { $env:GCP_REGION }),
+    [string]$Region = $(if ($env:CLOUD_RUN_JOBS_REGION) { $env:CLOUD_RUN_JOBS_REGION } elseif ($env:CLOUD_RUN_REGION) { $env:CLOUD_RUN_REGION } else { $env:GCP_REGION }),
     [string]$Image = $env:CLOUD_RUN_IMAGE,
-    [string]$ServiceAccount = $env:CLOUD_RUN_JOBS_SERVICE_ACCOUNT,
+    [string]$ServiceAccount = $(if ($env:CLOUD_RUN_JOBS_SERVICE_ACCOUNT) { $env:CLOUD_RUN_JOBS_SERVICE_ACCOUNT } else { $env:CLOUD_RUN_SERVICE_ACCOUNT }),
 
     [string]$BucketName = $(if ($env:GCS_BUCKET_NAME) { $env:GCS_BUCKET_NAME } else { $env:GCS_BUCKET }),
     [string]$Location = $(if ($env:BQ_LOCATION) { $env:BQ_LOCATION } else { "US" }),
