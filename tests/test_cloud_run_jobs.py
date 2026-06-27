@@ -22,6 +22,8 @@ def test_selected_pronabec_api_jobs_are_defined():
     required_jobs = [
         "pronabec-extract-job",
         "pronabec-stage-reports-job",
+        "gold-publish-job",
+        "gold-validate-job",
         "dataflow-pronabec-convocatorias-job",
         "dataflow-pronabec-ubigeo-postulacion-job",
         "dataflow-pronabec-becarios-pais-estudio-job",
@@ -72,6 +74,16 @@ def test_parameterized_pronabec_report_job_is_the_only_report_job():
             "No debe existir un job dedicado para reportes universitarios. "
             "Los 23 reportes deben usar dataflow-pronabec-report-job."
         )
+
+
+def test_gold_jobs_and_env_vars_are_defined():
+    content = _read_deploy_script()
+
+    assert "GOLD_PUBLISH_JOB_NAME" in content
+    assert "GOLD_VALIDATE_JOB_NAME" in content
+    assert "BQ_LOCATION=$Location" in content
+    assert "pipelines.publish_gold_views" in content
+    assert "pipelines.validate_gold" in content
 
 
 def test_bronze_only_jobs_are_not_defined():

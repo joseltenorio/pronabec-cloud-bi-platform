@@ -32,14 +32,19 @@ datasets:
     silver_table_template: "{project_id}:{silver_dataset}.pronabec_{dataset}"
     items:
       - source_dataset: convocatorias
+        job_name: dataflow-pronabec-convocatorias-job
         job_name_var: dataflow_pronabec_convocatorias_job_name
       - source_dataset: ubigeo_postulacion
+        job_name: dataflow-pronabec-ubigeo-postulacion-job
         job_name_var: dataflow_pronabec_ubigeo_postulacion_job_name
       - source_dataset: becarios_pais_estudio
+        job_name: dataflow-pronabec-becarios-pais-estudio-job
         job_name_var: dataflow_pronabec_becarios_pais_estudio_job_name
       - source_dataset: colegios_habiles
+        job_name: dataflow-pronabec-colegios-habiles-job
         job_name_var: dataflow_pronabec_colegios_habiles_job_name
       - source_dataset: becarios_provincia
+        job_name: dataflow-pronabec-becarios-provincia-job
         job_name_var: dataflow_pronabec_becarios_provincia_job_name
 
   mef:
@@ -49,30 +54,39 @@ datasets:
     silver_table_template: "{project_id}:{silver_dataset}.{silver_table}"
     items:
       - source_dataset: presupuesto
+        job_name: dataflow-mef-presupuesto-job
         silver_table: presupuesto_mef
         job_name_var: dataflow_mef_presupuesto_job_name
       - source_dataset: presupuesto_temporal
+        job_name: dataflow-mef-presupuesto-temporal-job
         silver_table: presupuesto_mef_temporal
         job_name_var: dataflow_mef_presupuesto_temporal_job_name
       - source_dataset: presupuesto_producto
+        job_name: dataflow-mef-producto-job
         silver_table: presupuesto_mef_producto
         job_name_var: dataflow_mef_producto_job_name
       - source_dataset: presupuesto_producto_temporal
+        job_name: dataflow-mef-producto-temporal-job
         silver_table: presupuesto_mef_producto_temporal
         job_name_var: dataflow_mef_producto_temporal_job_name
       - source_dataset: presupuesto_actividad
+        job_name: dataflow-mef-actividad-job
         silver_table: presupuesto_mef_actividad
         job_name_var: dataflow_mef_actividad_job_name
       - source_dataset: presupuesto_actividad_temporal
+        job_name: dataflow-mef-actividad-temporal-job
         silver_table: presupuesto_mef_actividad_temporal
         job_name_var: dataflow_mef_actividad_temporal_job_name
       - source_dataset: presupuesto_generica
+        job_name: dataflow-mef-generica-job
         silver_table: presupuesto_mef_generica
         job_name_var: dataflow_mef_generica_job_name
       - source_dataset: presupuesto_generica_temporal
+        job_name: dataflow-mef-generica-temporal-job
         silver_table: presupuesto_mef_generica_temporal
         job_name_var: dataflow_mef_generica_temporal_job_name
       - source_dataset: presupuesto_hierarchy
+        job_name: dataflow-mef-hierarchy-job
         silver_table: presupuesto_mef_hierarchy
         job_name_var: dataflow_mef_hierarchy_job_name
 

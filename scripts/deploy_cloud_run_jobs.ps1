@@ -8,6 +8,7 @@ param(
     [string]$ServiceAccount = $env:CLOUD_RUN_JOBS_SERVICE_ACCOUNT,
 
     [string]$BucketName = $(if ($env:GCS_BUCKET_NAME) { $env:GCS_BUCKET_NAME } else { $env:GCS_BUCKET }),
+    [string]$Location = $(if ($env:BQ_LOCATION) { $env:BQ_LOCATION } else { "US" }),
 
     [string]$BronzeDataset = $(if ($env:BQ_BRONZE_DATASET) { $env:BQ_BRONZE_DATASET } else { "bronze" }),
     [string]$SilverDataset = $(if ($env:BQ_SILVER_DATASET) { $env:BQ_SILVER_DATASET } else { "silver" }),
@@ -20,6 +21,8 @@ param(
     [string]$PronabecJobName = "pronabec-extract-job",
     [string]$MefJobName = "mef-extract-job",
     [string]$PronabecReportsStageJobName = $(if ($env:PRONABEC_REPORTS_STAGE_JOB_NAME) { $env:PRONABEC_REPORTS_STAGE_JOB_NAME } else { "pronabec-stage-reports-job" }),
+    [string]$GoldPublishJobName = $(if ($env:GOLD_PUBLISH_JOB_NAME) { $env:GOLD_PUBLISH_JOB_NAME } else { "gold-publish-job" }),
+    [string]$GoldValidateJobName = $(if ($env:GOLD_VALIDATE_JOB_NAME) { $env:GOLD_VALIDATE_JOB_NAME } else { "gold-validate-job" }),
     [string]$QualityJobName = "quality-checks-job",
 
     [string]$PronabecReportsLandingPrefix = $(if ($env:PRONABEC_REPORTS_LANDING_PREFIX) { $env:PRONABEC_REPORTS_LANDING_PREFIX } else { "landing/pronabec_reports" }),
@@ -106,6 +109,7 @@ function Upsert-CloudRunJob {
         "BQ_SILVER_DATASET=$SilverDataset",
         "BQ_GOLD_DATASET=$GoldDataset",
         "BQ_AUDIT_DATASET=$AuditDataset",
+        "BQ_LOCATION=$Location",
         "DATAFLOW_TEMP_LOCATION=$DataflowTempLocation",
         "DATAFLOW_STAGING_LOCATION=$DataflowStagingLocation",
         "PRONABEC_REPORTS_LANDING_PREFIX=$PronabecReportsLandingPrefix",
@@ -195,6 +199,22 @@ Upsert-CloudRunJob `
         "tools/stage_pronabec_manual_reports.py",
         "--strict",
         "--overwrite"
+    )
+
+Upsert-CloudRunJob `
+    -JobName $GoldPublishJobName `
+    -Description "Publicacion idempotente de vistas Gold analiticas" `
+    -Args @(
+        "-m",
+        "pipelines.publish_gold_views"
+    )
+
+Upsert-CloudRunJob `
+    -JobName $GoldValidateJobName `
+    -Description "Validacion de contratos Gold analiticos" `
+    -Args @(
+        "-m",
+        "pipelines.validate_gold"
     )
 
 Upsert-CloudRunJob `

@@ -38,6 +38,16 @@ cloud_run_jobs:
       command:
         - -m
         - pipelines.scrape_mef_budget
+    gold_publish:
+      name: gold-publish-job
+      command:
+        - -m
+        - pipelines.publish_gold_views
+    gold_validate:
+      name: gold-validate-job
+      command:
+        - -m
+        - pipelines.validate_gold
     quality_checks:
       name: quality-checks-job
       command:
