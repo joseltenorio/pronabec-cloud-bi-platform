@@ -38,6 +38,14 @@ La capa Gold convierte los datos integrados y estructurados de la capa Silver en
 * **KPIs calculados:** `becas_otorgadas`.
 * **Uso en Power BI:** Gráficos de líneas e históricos de barras sobre cobertura de becas.
 
+### 2b. `vw_beca18_cobertura_territorial_2016`
+* **Objetivo:** Analizar la distribución de becarios otorgados a nivel de región y provincia desde la convocatoria 2016.
+* **Fuentes Silver:** `pronabec_beca18_becarios_provincia_2016`.
+* **Grano:** Región + Provincia + Fecha de snapshot.
+* **KPIs calculados:** `becarios_b18_count`, `ranking_nacional_provincia`, `total_region_b18`, `participacion_provincia_region`.
+* **Uso en Power BI:** Mapas de calor, tablas de distribución geográfica e indicadores de participación provincial.
+* **Filtros:** Incluye filtros defensivos para omitir registros con agregados de totales provinciales.
+
 ### 3. `vw_beca18_universitarios_carrera_anual`
 * **Objetivo:** Distribución y ranking de becarios según carrera de estudio universitaria.
 * **Fuentes Silver:** `pronabec_report_beca18_universitarios_carrera_anual`.
@@ -128,6 +136,12 @@ La capa Gold convierte los datos integrados y estructurados de la capa Silver en
 * **Grano:** Año.
 * **KPIs calculados:** `becas_otorgadas_total`, `pia_total`, `pim_total`, `devengado_total`, `avance_presupuestal_pct`, `devengado_por_beca` (referencial), `pim_por_beca` (referencial).
 * **Advertencias Metodológicas:** Los ratios `devengado_por_beca` y `pim_por_beca` son indicadores financieros consolidados e indirectos que dividen el presupuesto total ejecutado del pliego entre las becas otorgadas en el año. No representan de forma estricta el costo directo o la subvención individual asignada por becario (el cual requiere análisis transaccional de planillas fuera del alcance de este modelo agregado).
+
+### 15. `vw_pronabec_beca18_resumen_analitico`
+* **Objetivo:** Vista resumen ejecutiva que consolida y compara los indicadores principales de reportes Beca 18 y presupuestos ejecutados MEF a nivel anual.
+* **Fuentes Silver:** `pronabec_report_beca18_becas_otorgadas_modalidad_anual` (por año) y `presupuesto_mef` (por año).
+* **Grano:** Año.
+* **KPIs calculados:** `total_becas_otorgadas`, `total_pia`, `total_pim`, `total_devengado`, `avance_presupuestal_pct`, `costo_promedio_por_beca`.
 
 ---
 

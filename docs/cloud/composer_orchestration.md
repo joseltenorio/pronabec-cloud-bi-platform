@@ -127,6 +127,20 @@ El DAG versionado se mantiene en:
 dags/pronabec_medallion_batch_dag.py
 ```
 
-## Alcance actual
+## Programación y Planificación
 
-El modelo de orquestación actual coordina Cloud Run Jobs de extracción y calidad. La transformación distribuida Bronze a Silver se mantiene como responsabilidad de Dataflow y se integra como componente separado dentro de la arquitectura Medallion.
+El DAG principal `pronabec_medallion_batch` está programado para ejecutarse semanalmente:
+- **Expresión Cron**: `0 5 * * 6` (todos los sábados a las 05:00 UTC o la zona horaria por defecto del entorno Composer).
+- ** catchup=False**: Evita ejecuciones históricas acumuladas automáticas (backfills) al activar o desplegar el DAG.
+
+## Exclusiones del Flujo Orchestrado
+
+- **convocatorias_carrera_sede**: Se conserva en Bronze para trazabilidad, pero no se promueve a Silver ni Gold en esta versión del pipeline. Está excluido de las tareas de Dataflow y calidad ejecutadas por Composer.
+- **presupuesto_departamento, presupuesto_fuente, presupuesto_rubro**: Son datasets de MEF clasificados como Bronze-only y están excluidos del flujo de transformación a Silver.
+
+## Orquestación de Reportes
+
+Los reportes documentales de PRONABEC se transforman utilizando un único job parametrizado en Cloud Run/Dataflow llamado `dataflow-pronabec-report-job`. Composer sobreescribe las siguientes variables de entorno para cada una de las tareas del reporte:
+- `SOURCE_DATASET`: Especifica el subconjunto o tabla de reporte.
+- `INPUT_PATH`: Ruta origen en GCS Bronze.
+- `OUTPUT_TABLE`: Tabla de salida en BigQuery Silver.
