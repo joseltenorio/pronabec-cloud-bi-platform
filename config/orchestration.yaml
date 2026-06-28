@@ -20,6 +20,7 @@ jobs:
   mef_extract_job_name_var: mef_extract_job_name
   pronabec_reports_stage_job_name_var: pronabec_reports_stage_job_name
   pronabec_reports_dataflow_job_name_var: dataflow_pronabec_report_job_name
+  bronze_manifest_validation_job_name_var: bronze_manifest_validation_job_name
   gold_publish_job_name_var: gold_publish_job_name
   gold_validate_job_name_var: gold_validate_job_name
   quality_checks_job_name_var: quality_checks_job_name

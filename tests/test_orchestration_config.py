@@ -42,6 +42,10 @@ def test_resolve_airflow_var_name_reads_runtime_and_jobs() -> None:
 
     assert resolve_airflow_var_name(config, "project_id_var") == "gcp_project_id"
     assert resolve_airflow_var_name(config, "gold_publish_job_name_var") == "gold_publish_job_name"
+    assert (
+        resolve_airflow_var_name(config, "bronze_manifest_validation_job_name_var")
+        == "bronze_manifest_validation_job_name"
+    )
 
 
 def test_build_gcs_uri_returns_valid_uri() -> None:
@@ -101,3 +105,15 @@ def test_invalid_manifest_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(ConfigError):
         load_orchestration_config(invalid_config)
+
+def test_bronze_manifest_validation_job_is_configured() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+
+    assert (
+        config["jobs"]["bronze_manifest_validation_job_name_var"]
+        == "bronze_manifest_validation_job_name"
+    )
+    assert (
+        resolve_airflow_var_name(config, "bronze_manifest_validation_job_name_var")
+        == "bronze_manifest_validation_job_name"
+    )
