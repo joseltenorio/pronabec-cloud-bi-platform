@@ -18,12 +18,12 @@ param(
     [string]$DataflowTempLocation = $(if ($env:DATAFLOW_TEMP_LOCATION) { $env:DATAFLOW_TEMP_LOCATION } else { "" }),
     [string]$DataflowStagingLocation = $(if ($env:DATAFLOW_STAGING_LOCATION) { $env:DATAFLOW_STAGING_LOCATION } else { "" }),
 
-    [string]$PronabecJobName = "pronabec-extract-job",
-    [string]$MefJobName = "mef-extract-job",
+    [string]$PronabecJobName = $(if ($env:PRONABEC_EXTRACT_JOB_NAME) { $env:PRONABEC_EXTRACT_JOB_NAME } else { "pronabec-extract-job" }),
+    [string]$MefJobName = $(if ($env:MEF_EXTRACT_JOB_NAME) { $env:MEF_EXTRACT_JOB_NAME } else { "mef-extract-job" }),
     [string]$PronabecReportsStageJobName = $(if ($env:PRONABEC_REPORTS_STAGE_JOB_NAME) { $env:PRONABEC_REPORTS_STAGE_JOB_NAME } else { "pronabec-stage-reports-job" }),
     [string]$GoldPublishJobName = $(if ($env:GOLD_PUBLISH_JOB_NAME) { $env:GOLD_PUBLISH_JOB_NAME } else { "gold-publish-job" }),
     [string]$GoldValidateJobName = $(if ($env:GOLD_VALIDATE_JOB_NAME) { $env:GOLD_VALIDATE_JOB_NAME } else { "gold-validate-job" }),
-    [string]$QualityJobName = "quality-checks-job",
+    [string]$QualityJobName = $(if ($env:QUALITY_CHECKS_JOB_NAME) { $env:QUALITY_CHECKS_JOB_NAME } else { "quality-checks-job" }),
 
     [string]$PronabecReportsLandingPrefix = $(if ($env:PRONABEC_REPORTS_LANDING_PREFIX) { $env:PRONABEC_REPORTS_LANDING_PREFIX } else { "landing/pronabec_reports" }),
     [string]$PronabecReportsBronzePrefix = $(if ($env:PRONABEC_REPORTS_BRONZE_PREFIX) { $env:PRONABEC_REPORTS_BRONZE_PREFIX } else { "bronze/pronabec_reports" }),
@@ -61,6 +61,22 @@ function Assert-RequiredValue {
     }
 }
 
+function Invoke-GCloud {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$StepName,
+
+        [Parameter(Mandatory = $true)]
+        [scriptblock]$Command
+    )
+
+    & $Command
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Falló el paso '$StepName' con código de salida $LASTEXITCODE."
+    }
+}
+
 function Test-CloudRunJobExists {
     param(
         [Parameter(Mandatory = $true)]
@@ -79,10 +95,10 @@ function Test-CloudRunJobExists {
 function Join-CloudRunArgs {
     param(
         [Parameter(Mandatory = $true)]
-        [string[]]$Args
+        [string[]]$ContainerArgs
     )
 
-    return ($Args -join ",")
+    return ($ContainerArgs -join ",")
 }
 
 function Upsert-CloudRunJob {
@@ -91,7 +107,7 @@ function Upsert-CloudRunJob {
         [string]$JobName,
 
         [Parameter(Mandatory = $true)]
-        [string[]]$Args,
+        [string[]]$ContainerArgs,
 
         [Parameter(Mandatory = $true)]
         [string]$Description,
@@ -117,6 +133,7 @@ function Upsert-CloudRunJob {
         "STRUCTURED_LOGGING=true",
         "LOG_LEVEL=INFO"
     )
+
     $EnvVars = ($BaseEnvVars + $SetEnvVars) -join ","
 
     $CommonArgs = @(
@@ -129,23 +146,28 @@ function Upsert-CloudRunJob {
         "--task-timeout", "$($TaskTimeoutSeconds)s"
     )
 
-    $JoinedArgs = Join-CloudRunArgs -Args $Args
+    $JoinedArgs = Join-CloudRunArgs -ContainerArgs $ContainerArgs
+    $ArgsFlag = "--args=$JoinedArgs"
 
     if (Test-CloudRunJobExists -JobName $JobName) {
         Write-Host "Actualizando Cloud Run Job: $JobName"
 
-        gcloud run jobs update $JobName `
-            @CommonArgs `
-            --args $JoinedArgs `
-            --quiet
+        Invoke-GCloud -StepName "Actualizando Cloud Run Job $JobName" -Command {
+            gcloud run jobs update $JobName `
+                @CommonArgs `
+                $ArgsFlag `
+                --quiet
+        }
     }
     else {
         Write-Host "Creando Cloud Run Job: $JobName"
 
-        gcloud run jobs create $JobName `
-            @CommonArgs `
-            --args $JoinedArgs `
-            --quiet
+        Invoke-GCloud -StepName "Creando Cloud Run Job $JobName" -Command {
+            gcloud run jobs create $JobName `
+                @CommonArgs `
+                $ArgsFlag `
+                --quiet
+        }
     }
 
     Write-Host "Job configurado: $JobName - $Description"
@@ -179,7 +201,7 @@ $DataflowCommonArgs = @(
 Upsert-CloudRunJob `
     -JobName $PronabecJobName `
     -Description "Extracción batch PRONABEC hacia Bronze" `
-    -Args @(
+    -ContainerArgs @(
         "-m",
         "pipelines.extract_pronabec"
     )
@@ -187,7 +209,7 @@ Upsert-CloudRunJob `
 Upsert-CloudRunJob `
     -JobName $MefJobName `
     -Description "Extracción batch MEF hacia Bronze" `
-    -Args @(
+    -ContainerArgs @(
         "-m",
         "pipelines.scrape_mef_budget"
     )
@@ -195,7 +217,7 @@ Upsert-CloudRunJob `
 Upsert-CloudRunJob `
     -JobName $PronabecReportsStageJobName `
     -Description "Staging PRONABEC reports desde GCS Landing hacia Bronze" `
-    -Args @(
+    -ContainerArgs @(
         "tools/stage_pronabec_manual_reports.py",
         "--strict",
         "--overwrite"
@@ -204,7 +226,7 @@ Upsert-CloudRunJob `
 Upsert-CloudRunJob `
     -JobName $GoldPublishJobName `
     -Description "Publicacion idempotente de vistas Gold analiticas" `
-    -Args @(
+    -ContainerArgs @(
         "-m",
         "pipelines.publish_gold_views"
     )
@@ -212,7 +234,7 @@ Upsert-CloudRunJob `
 Upsert-CloudRunJob `
     -JobName $GoldValidateJobName `
     -Description "Validacion de contratos Gold analiticos" `
-    -Args @(
+    -ContainerArgs @(
         "-m",
         "pipelines.validate_gold"
     )
@@ -221,7 +243,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowPronabecConvocatoriasJobName `
     -Description "Lanzador Dataflow PRONABEC convocatorias Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
-    -Args @(
+    -ContainerArgs @(
         $DataflowCommonArgs +
         @(
             "--source-system",
@@ -243,7 +265,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowPronabecUbigeoPostulacionJobName `
     -Description "Lanzador Dataflow PRONABEC ubigeo postulación Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
-    -Args @(
+    -ContainerArgs @(
         $DataflowCommonArgs +
         @(
             "--source-system",
@@ -265,7 +287,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowPronabecBecariosPaisEstudioJobName `
     -Description "Lanzador Dataflow PRONABEC becarios país estudio Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
-    -Args @(
+    -ContainerArgs @(
         $DataflowCommonArgs +
         @(
             "--source-system",
@@ -287,7 +309,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowPronabecColegiosHabilesJobName `
     -Description "Lanzador Dataflow PRONABEC colegios hábiles Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
-    -Args @(
+    -ContainerArgs @(
         $DataflowCommonArgs +
         @(
             "--source-system",
@@ -309,7 +331,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowPronabecBecariosProvinciaJobName `
     -Description "Lanzador Dataflow PRONABEC becarios provincia Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
-    -Args @(
+    -ContainerArgs @(
         $DataflowCommonArgs +
         @(
             "--source-system",
@@ -331,7 +353,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowMefPresupuestoJobName `
     -Description "Lanzador Dataflow MEF presupuesto Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
-    -Args @(
+    -ContainerArgs @(
         $DataflowCommonArgs +
         @(
             "--source-system",
@@ -353,7 +375,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowMefPresupuestoTemporalJobName `
     -Description "Lanzador Dataflow MEF presupuesto temporal Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
-    -Args @(
+    -ContainerArgs @(
         $DataflowCommonArgs +
         @(
             "--source-system",
@@ -375,7 +397,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowMefProductoJobName `
     -Description "Lanzador Dataflow MEF producto Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
-    -Args @(
+    -ContainerArgs @(
         $DataflowCommonArgs +
         @(
             "--source-system",
@@ -397,7 +419,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowMefProductoTemporalJobName `
     -Description "Lanzador Dataflow MEF producto temporal Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
-    -Args @(
+    -ContainerArgs @(
         $DataflowCommonArgs +
         @(
             "--source-system",
@@ -419,7 +441,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowMefActividadJobName `
     -Description "Lanzador Dataflow MEF actividad Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
-    -Args @(
+    -ContainerArgs @(
         $DataflowCommonArgs +
         @(
             "--source-system",
@@ -441,7 +463,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowMefActividadTemporalJobName `
     -Description "Lanzador Dataflow MEF actividad temporal Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
-    -Args @(
+    -ContainerArgs @(
         $DataflowCommonArgs +
         @(
             "--source-system",
@@ -463,7 +485,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowMefGenericaJobName `
     -Description "Lanzador Dataflow MEF genérica Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
-    -Args @(
+    -ContainerArgs @(
         $DataflowCommonArgs +
         @(
             "--source-system",
@@ -485,7 +507,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowMefGenericaTemporalJobName `
     -Description "Lanzador Dataflow MEF genérica temporal Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
-    -Args @(
+    -ContainerArgs @(
         $DataflowCommonArgs +
         @(
             "--source-system",
@@ -507,7 +529,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowMefHierarchyJobName `
     -Description "Lanzador Dataflow MEF jerarquía Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
-    -Args @(
+    -ContainerArgs @(
         $DataflowCommonArgs +
         @(
             "--source-system",
@@ -534,7 +556,7 @@ Upsert-CloudRunJob `
         "INPUT_PATH=gs://$BucketName/placeholder_path",
         "OUTPUT_TABLE=$ProjectId`:$SilverDataset.placeholder_table"
     ) `
-    -Args @(
+    -ContainerArgs @(
         $DataflowCommonArgs +
         @(
             "--source-system",
@@ -555,7 +577,7 @@ Upsert-CloudRunJob `
 Upsert-CloudRunJob `
     -JobName $QualityJobName `
     -Description "Ejecución batch de controles de calidad BigQuery" `
-    -Args @(
+    -ContainerArgs @(
         "-m",
         "pipelines.quality_checks"
     )
