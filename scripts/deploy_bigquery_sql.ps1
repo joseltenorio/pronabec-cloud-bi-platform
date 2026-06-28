@@ -52,20 +52,57 @@ function Invoke-BqSqlFile {
         throw "No existe el archivo SQL requerido para '$StepName': $SqlPath"
     }
 
-    Write-Host "Ejecutando BigQuery SQL: $StepName"
+    $ResolvedSqlPath = (Resolve-Path $SqlPath).Path
 
-    $SqlContent = Get-Content -Raw -Encoding UTF8 -Path $SqlPath
+    Write-Host "Ejecutando BigQuery SQL: $StepName"
+    Write-Host "Archivo SQL: $ResolvedSqlPath"
+
+    $SqlContent = Get-Content -Path $ResolvedSqlPath -Raw -Encoding UTF8
 
     if ([string]::IsNullOrWhiteSpace($SqlContent)) {
-        throw "El archivo SQL está vacío para '$StepName': $SqlPath"
+        throw "El archivo SQL está vacío para '$StepName': $ResolvedSqlPath"
     }
 
-    bq query `
-        --project_id="$ProjectId" `
-        --location="$Location" `
-        --use_legacy_sql=false `
-        --quiet `
-        $SqlContent
+    $BqArgs = @(
+        "query",
+        "--project_id=$ProjectId",
+        "--location=$Location",
+        "--use_legacy_sql=false",
+        "--quiet"
+    )
+
+    $SqlContent | & bq @BqArgs
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Falló BigQuery SQL '$StepName' con código de salida $LASTEXITCODE."
+    }
+
+    Write-Host "BigQuery SQL completado correctamente: $StepName"
+}
+
+function Invoke-ProjectScript {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ScriptPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$StepName,
+
+        [string[]]$Arguments = @()
+    )
+
+    if (-not (Test-Path $ScriptPath)) {
+        throw "No existe el script requerido para '$StepName': $ScriptPath"
+    }
+
+    Write-Host "Ejecutando script: $StepName"
+    & $ScriptPath @Arguments
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Falló el script '$StepName' con código de salida $LASTEXITCODE."
+    }
+
+    Write-Host "Script completado correctamente: $StepName"
 }
 
 $ProjectRoot = Resolve-ProjectRoot
@@ -87,18 +124,27 @@ if (-not $SkipGeneratedDdl) {
         $GenerateArgs += @("-BronzeExtractionDate", $BronzeExtractionDate)
     }
 
-    & "$ProjectRoot/scripts/generate_bigquery_ddl.ps1" @GenerateArgs
+    Invoke-ProjectScript `
+        -ScriptPath "$ProjectRoot/scripts/generate_bigquery_ddl.ps1" `
+        -StepName "Generación de DDL BigQuery" `
+        -Arguments $GenerateArgs
 }
 
 if (-not $SkipRender) {
-    & "$ProjectRoot/scripts/render_sql_templates.ps1" `
-        -ProjectId $ProjectId `
-        -BronzeDataset $BronzeDataset `
-        -SilverDataset $SilverDataset `
-        -GoldDataset $GoldDataset `
-        -AuditDataset $AuditDataset `
-        -MlDataset $MlDataset `
-        -OutputDir "build/generated/sql"
+    $RenderArgs = @(
+        "-ProjectId", $ProjectId,
+        "-BronzeDataset", $BronzeDataset,
+        "-SilverDataset", $SilverDataset,
+        "-GoldDataset", $GoldDataset,
+        "-AuditDataset", $AuditDataset,
+        "-MlDataset", $MlDataset,
+        "-OutputDir", "build/generated/sql"
+    )
+
+    Invoke-ProjectScript `
+        -ScriptPath "$ProjectRoot/scripts/render_sql_templates.ps1" `
+        -StepName "Renderizado de plantillas SQL" `
+        -Arguments $RenderArgs
 }
 
 $GeneratedSqlDir = Join-Path $ProjectRoot "build/generated/sql"
