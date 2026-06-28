@@ -25,6 +25,7 @@ El DAG mantiene las siguientes responsabilidades:
 - ejecutar el job de extracción PRONABEC;
 - ejecutar el job de extracción MEF;
 - ejecutar staging de reportes documentales PRONABEC desde `landing/pronabec_reports/` hacia Bronze;
+- validar que Bronze esté completo mediante manifests antes de promover datos a Silver;
 - publicar vistas Gold analíticas;
 - validar contratos Gold antes de calidad;
 - ejecutar controles de calidad;
@@ -45,6 +46,10 @@ Ejecuta el Cloud Run Job asociado a la extracción MEF. Este job procesa informa
 ### `stage_pronabec_reports_pes_2025` y `stage_pronabec_reports_universitarios`
 
 Ejecutan el Cloud Run Job parametrizable de staging de reportes PRONABEC. Cada tarea cambia `SOURCE_SUBSET` y usa la misma `EXTRACTION_DATE` del DAG para leer desde Landing y escribir Bronze.
+
+### `validate_bronze_manifests`
+
+Ejecuta el Cloud Run Job de validación de manifests Bronze. Esta tarea actúa como compuerta operativa antes de las transformaciones Bronze a Silver. Si falta un `manifest.json`, falta un marcador `_SUCCESS` o la fecha lógica no coincide, el flujo se detiene y no se lanzan jobs de Dataflow.
 
 ### `run_quality_checks`
 
@@ -67,6 +72,9 @@ extraction_date
 run_pronabec
 run_mef
 run_pronabec_reports_staging
+run_bronze_manifest_validation
+run_dataflow_pronabec
+run_dataflow_mef
 run_dataflow_reports
 run_gold_publish
 run_gold_validation
@@ -85,6 +93,7 @@ gcp_region
 pronabec_extract_job_name
 mef_extract_job_name
 pronabec_reports_stage_job_name
+bronze_manifest_validation_job_name
 gold_publish_job_name
 gold_validate_job_name
 quality_checks_job_name
@@ -105,7 +114,8 @@ start
   -> extract_pronabec
   -> extract_mef
   -> stage_pronabec_reports_pes_2025
-  -> stage_pronabec_reports_universitarios
+  -> stage_pronabec_reports_beca18_universitarios_2012_2026
+  -> validate_bronze_manifests
   -> dataflow_pronabec
   -> dataflow_mef
   -> dataflow_reports
@@ -122,7 +132,9 @@ stage_pronabec_reports_pes_2025 -> SOURCE_SUBSET=pes_2025
 stage_pronabec_reports_universitarios -> SOURCE_SUBSET=beca18_universitarios_2012_2026
 ```
 
-Ambas tareas usan `BRONZE_EXTRACTION_DATE={{ dag_run.conf.get('extraction_date', ds) }}`, el mismo valor lógico usado por las extracciones PRONABEC y MEF.
+Ambas tareas usan `BRONZE_EXTRACTION_DATE={{ dag_run.conf.get('extraction_date') or ds }}`, el mismo valor lógico usado por las extracciones PRONABEC y MEF.
+
+La tarea `validate_bronze_manifests` se ubica después de las extracciones y del staging de reportes, y antes de cualquier transformación Dataflow. Esta compuerta evita que Silver, Gold o Power BI consuman particiones Bronze incompletas.
 
 ## Reintentos y concurrencia
 
@@ -133,6 +145,20 @@ El DAG define reintentos controlados, pausa entre reintentos y límite de concur
 Cloud Composer coordina el flujo. Cloud Run Jobs ejecuta procesos batch discretos. Dataflow mantiene la responsabilidad de transformación distribuida Bronze a Silver. BigQuery conserva las capas Silver, Gold y Audit.
 
 La separación por servicio reduce acoplamiento operativo y mantiene la arquitectura alineada con responsabilidades cloud claras.
+
+## Operación con control de costos
+
+Cloud Composer es un orquestador persistente y puede representar el mayor costo recurrente del entorno. Para desarrollo, depuración y pruebas por componente, la plataforma puede operar sin Composer activo, ejecutando Cloud Run Jobs y lanzadores Dataflow manualmente.
+
+El criterio operativo recomendado es:
+
+```text
+desarrollo y validación por componentes -> sin Composer activo
+prueba E2E orquestada y evidencia final -> Composer activo temporalmente
+cierre de pruebas -> eliminación del entorno Composer
+```
+
+Eliminar Composer no elimina Cloud Run Jobs, imágenes de Artifact Registry, datasets de BigQuery, buckets de Cloud Storage ni scripts versionados del repositorio. Solo elimina el entorno Airflow, sus variables, historial interno y DAGs cargados en ese environment.
 
 ## Carga del DAG
 
@@ -149,8 +175,9 @@ dags/pronabec_medallion_batch_dag.py
 ## Programación y Planificación
 
 El DAG principal `pronabec_medallion_batch` está programado para ejecutarse semanalmente:
+
 - **Expresión Cron**: `0 5 * * 6` (todos los sábados a las 05:00 UTC o la zona horaria por defecto del entorno Composer).
-- ** catchup=False**: Evita ejecuciones históricas acumuladas automáticas (backfills) al activar o desplegar el DAG.
+- **catchup=False**: Evita ejecuciones históricas acumuladas automáticas (backfills) al activar o desplegar el DAG.
 
 ## Exclusiones del Flujo Orchestrado
 
@@ -160,6 +187,7 @@ El DAG principal `pronabec_medallion_batch` está programado para ejecutarse sem
 ## Orquestación de Reportes
 
 Los reportes documentales de PRONABEC se transforman utilizando un único job parametrizado en Cloud Run/Dataflow llamado `dataflow-pronabec-report-job`. Composer sobreescribe las siguientes variables de entorno para cada una de las tareas del reporte:
+
 - `SOURCE_DATASET`: Especifica el subconjunto o tabla de reporte.
 - `INPUT_PATH`: Ruta origen en GCS Bronze.
 - `OUTPUT_TABLE`: Tabla de salida en BigQuery Silver.

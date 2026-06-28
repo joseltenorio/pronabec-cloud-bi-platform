@@ -25,7 +25,7 @@ Para poder ejecutar el pipeline de datos completo, asegúrese de contar con los 
 - Bucket de Cloud Storage (`GCS_BUCKET_NAME`) para data lake (Bronze, DLQ, logs, temporales).
 - Datasets BigQuery creados para las capas: Bronze (como tablas externas), Silver, Gold y Audit.
 - Repositorio en Artifact Registry para almacenar la imagen Docker del proyecto.
-- Entorno de Cloud Composer (Airflow) activo y conectado a la red correspondiente.
+- Entorno de Cloud Composer (Airflow) activo solo para la prueba E2E orquestada. Para desarrollo y validación por componentes, Composer puede permanecer eliminado para controlar costos.
 - Variables de entorno del proyecto cargadas localmente (por ejemplo, mediante un archivo `~/pronabec_env.sh` en Cloud Shell o PowerShell).
 - Los reportes documentales de origen listos y cargados en la ruta de Landing en Cloud Storage.
 
@@ -59,7 +59,7 @@ export ARTIFACT_IMAGE_NAME="pronabec-cloud-bi-platform"
 export ARTIFACT_IMAGE_TAG="latest"
 
 # Composer
-export COMPOSER_ENVIRONMENT="tu-entorno-composer"
+export COMPOSER_ENVIRONMENT_NAME="pronabec-composer"
 export COMPOSER_LOCATION="us-central1"
 ```
 
@@ -132,6 +132,7 @@ Este comando registrará los siguientes Cloud Run Jobs en su región de GCP:
 - **`pronabec-extract-job`**: extractor de la API pública PRONABEC.
 - **`mef-extract-job`**: extractor presupuestal MEF.
 - **`pronabec-stage-reports-job`**: staging para reportes de Landing a Bronze.
+- **`bronze-manifest-validation-job`**: validación de manifests y marcadores `_SUCCESS` antes de ejecutar transformaciones Bronze a Silver.
 - **`gold-publish-job`**: publicación idempotente de vistas Gold analíticas.
 - **`gold-validate-job`**: validación de contratos Gold antes de calidad.
 - **`quality-checks-job`**: ejecutor de validaciones y calidad de datos sobre BigQuery.
@@ -159,6 +160,7 @@ extract_pronabec_api
 extract_mef
 stage_pronabec_reports_pes_2025
 stage_pronabec_reports_beca18_universitarios_2012_2026
+validate_bronze_manifests
 dataflow_pronabec
 dataflow_mef
 dataflow_reports
@@ -169,7 +171,31 @@ run_quality_checks
 
 ---
 
-## 8. Subir DAG a Composer
+## 8. Operación controlada de Composer
+
+Composer no debe mantenerse activo durante depuración prolongada. La validación técnica debe avanzar primero por componentes: imagen Docker, despliegue BigQuery, Cloud Run Jobs, manifests Bronze, Dataflow, Gold y Quality. Composer se recrea únicamente para validar la orquestación E2E.
+
+### Eliminar Composer al terminar una ventana de prueba
+
+```bash
+gcloud composer environments delete "$COMPOSER_ENVIRONMENT_NAME" \
+  --location "$COMPOSER_LOCATION"
+```
+
+La eliminación del entorno Composer no elimina Cloud Run Jobs, Artifact Registry, BigQuery, Cloud Storage ni el repositorio. Sí elimina Airflow UI, historial interno, variables Airflow y DAGs cargados en ese environment.
+
+### Recrear Composer para una prueba E2E
+
+```bash
+gcloud composer environments create "$COMPOSER_ENVIRONMENT_NAME" \
+  --location "$COMPOSER_LOCATION" \
+  --image-version composer-3-airflow-2 \
+  --service-account="$COMPOSER_SERVICE_ACCOUNT"
+```
+
+Después de crear el entorno, se publica el DAG y se configuran las variables Airflow desde los scripts versionados del repositorio.
+
+## 9. Subir DAG a Composer
 
 Copie el DAG de Airflow al bucket de DAGs asociado a su entorno de Composer:
 
@@ -179,9 +205,15 @@ Copie el DAG de Airflow al bucket de DAGs asociado a su entorno de Composer:
 
 El archivo del DAG se cargará en el bucket de Cloud Composer y estará disponible en la consola de Airflow en pocos minutos.
 
+Configure las variables Airflow requeridas por el DAG:
+
+```powershell
+.\scripts\configure_airflow_variables.ps1
+```
+
 ---
 
-## 9. Preparar Landing de reportes
+## 10. Preparar Landing de reportes
 
 Antes de ejecutar el pipeline, los reportes documentales deben subirse en formato CSV, con sus nombres y carpetas correctas, a las rutas correspondientes del bucket de Cloud Storage:
 
@@ -194,7 +226,7 @@ El proceso de staging `pronabec-stage-reports-job` leerá estos archivos de Land
 
 ---
 
-## 10. Ejecutar DAG manualmente
+## 11. Ejecutar DAG manualmente
 
 Aunque el DAG `pronabec_medallion_batch` está programado para ejecutarse de forma semanal (sábados a las 05:00), puede lanzar una corrida manual:
 
@@ -204,7 +236,7 @@ Aunque el DAG `pronabec_medallion_batch` está programado para ejecutarse de for
 
 ---
 
-## 11. Validar Bronze en Cloud Storage
+## 12. Validar Bronze en Cloud Storage
 
 Una vez completadas las extracciones y tareas de staging, valide que los archivos crudos se encuentren correctamente escritos en las siguientes rutas estructuradas:
 
@@ -212,9 +244,18 @@ Una vez completadas las extracciones y tareas de staging, valide que los archivo
 - **MEF**: `gs://<bucket-lake-name>/bronze/mef/<slice>/extraction_date=YYYY-MM-DD/year=YYYY/`
 - **Reports**: `gs://<bucket-lake-name>/bronze/pronabec_reports/<dataset>/extraction_date=YYYY-MM-DD/`
 
+Para que una partición Bronze sea considerada consumible por Silver, debe contar con señales explícitas de completitud:
+
+```text
+manifest.json
+_SUCCESS
+```
+
+La tarea `validate_bronze_manifests` valida estas señales antes de lanzar los jobs Dataflow. Si la validación falla, el flujo se detiene y las capas Silver/Gold no se actualizan con datos incompletos.
+
 ---
 
-## 12. Validar Silver en BigQuery
+## 13. Validar Silver en BigQuery
 
 Confirme que las tablas de la capa Silver en BigQuery se hayan actualizado correctamente con los datos limpios y tipados:
 
@@ -241,7 +282,7 @@ Confirme que las tablas de la capa Silver en BigQuery se hayan actualizado corre
 
 ---
 
-## 13. Validar Gold en BigQuery
+## 14. Validar Gold en BigQuery
 
 Las vistas analíticas en la capa Gold deben estar disponibles y listas para el consumo:
 
@@ -259,7 +300,7 @@ Las vistas analíticas en la capa Gold deben estar disponibles y listas para el 
 
 ---
 
-## 14. Validar Calidad y Audit
+## 15. Validar Calidad y Audit
 
 Al finalizar la corrida del DAG, verifique los resultados de auditoría y controles de calidad en la tabla de BigQuery:
 
@@ -275,7 +316,7 @@ LIMIT 50;
 
 ---
 
-## 15. Exclusiones críticas
+## 16. Exclusiones críticas
 
 Es importante tener en cuenta que para esta versión del pipeline:
 
@@ -285,9 +326,10 @@ Es importante tener en cuenta que para esta versión del pipeline:
 
 ---
 
-## 16. Resolución de problemas comunes
+## 17. Resolución de problemas comunes
 
 - **Falta de archivos DDL en `build/generated/sql/`**: los archivos DDL no se versionan. Ejecute `.\scripts\generate_bigquery_ddl.ps1` y `.\scripts\render_sql_templates.ps1` antes de desplegar.
 - **Fallas del DirectRunner en Windows**: al probar Dataflow localmente en Windows, pueden ocurrir errores por bloqueos de archivos o límites de multiprocesamiento (`WinError 5` o `WinError 32`). Para corridas productivas o de validación final, despliegue y valide usando `DataflowRunner` directamente en GCP.
 - **El job de staging falla**: si los archivos originales en `landing/pronabec_reports/` no están presentes o sus nombres no coinciden con las convenciones de `endpoints.yaml`, la tarea fallará.
 - **Composer no ejecuta correctamente los reportes**: valide que las variables `SOURCE_DATASET`, `INPUT_PATH` y `OUTPUT_TABLE` se estén sobreescribiendo adecuadamente en la configuración de la tarea del DAG.
+- **La validación Bronze falla**: revise la existencia y contenido de `manifest.json` y `_SUCCESS` para la fecha lógica de extracción. No promueva datos a Silver si la compuerta Bronze no pasa.
