@@ -35,6 +35,9 @@ Cloud Run Jobs / Staging local controlado
 Cloud Storage / Bronze
         |
         v
+Validación de manifests Bronze
+        |
+        v
 Dataflow / Apache Beam
         |
         v
@@ -52,6 +55,8 @@ Auditoría, calidad y consumo analítico
 ### Bronze
 
 La capa Bronze conserva los datos crudos extraídos desde las fuentes públicas o preparados desde reportes oficiales tabulados. Los schemas Bronze mantienen los campos en formato conservador, priorizando trazabilidad, reproducibilidad y preservación del dato original.
+
+Las particiones Bronze destinadas a promoverse hacia Silver se controlan mediante manifests y marcadores `_SUCCESS`. Esta barrera evita que una extracción parcial sea consumida por Dataflow, Gold o herramientas analíticas.
 
 Los datos Bronze consideran:
 
@@ -201,6 +206,7 @@ La imagen Docker del proyecto contiene los módulos necesarios para ejecutar pro
 - extracción de fuentes públicas PRONABEC;
 - extracción y scraping controlado de información presupuestal MEF;
 - staging de reportes documentales PRONABEC;
+- validación de manifests Bronze antes de promover datos a Silver;
 - ejecución de controles de calidad;
 - acceso a configuración versionada, contratos, schemas y SQL del proyecto.
 
@@ -244,9 +250,11 @@ Documentación técnica relacionada:
 
 ## Orquestación batch
 
-El proyecto define un DAG de Cloud Composer para coordinar procesos batch de la plataforma Medallion. Composer actúa como capa de orquestación y ejecuta Cloud Run Jobs registrados para extracción PRONABEC, extracción MEF, staging de reportes documentales, publicación Gold, validación Gold y controles de calidad.
+El proyecto define un DAG de Cloud Composer para coordinar procesos batch de la plataforma Medallion. Composer actúa como capa de orquestación y ejecuta Cloud Run Jobs registrados para extracción PRONABEC, extracción MEF, staging de reportes documentales, validación de manifests Bronze, publicación Gold, validación Gold y controles de calidad.
 
 La lógica de procesamiento permanece separada en los módulos Python, Cloud Run Jobs, Dataflow y BigQuery. El DAG mantiene dependencias, parámetros operativos, reintentos y control de concurrencia.
+
+Para controlar costos, Composer puede eliminarse durante desarrollo y recrearse solo para pruebas E2E orquestadas. Los jobs, datasets, buckets, imágenes y scripts permanecen versionados o gestionados fuera del entorno Composer.
 
 Documentación técnica relacionada:
 
@@ -343,7 +351,7 @@ El repositorio contiene una implementación local avanzada del core de la plataf
 - script de despliegue SQL BigQuery;
 - runtime Docker para jobs batch;
 - publicación de imagen en Artifact Registry;
-- registro de Cloud Run Jobs para extracción y calidad;
+- registro de Cloud Run Jobs para extracción, validación Bronze y calidad;
 - pruebas automatizadas para componentes críticos.
 
 La plataforma está diseñada para ejecución batch. No implementa streaming ni procesamiento en tiempo real, ya que las fuentes consideradas no requieren baja latencia.
@@ -351,13 +359,15 @@ La plataforma está diseñada para ejecución batch. No implementa streaming ni 
 ## Estado de la Fase Cloud y Despliegue
 
 La fase de ingeniería de datos cloud hasta la capa Gold de BigQuery se encuentra **completamente implementada y validada**:
+
 - **Bronze (Data Lake)**: Extracciones programadas y staging de reportes cargados en Cloud Storage.
 - **Silver (Data Warehouse)**: Transformaciones distribuidas de Apache Beam/Dataflow con control de Dead Letter Queue (DLQ).
 - **Gold (Vistas Analíticas)**: Vistas analíticas optimizadas y agregaciones anuales/territoriales unificadas.
 - **Calidad de Datos**: Sistema de reglas de calidad SQL ejecutado automáticamente.
-- **Orquestación**: DAG de Composer programado de forma semanal (sábados a las 05:00) con `catchup=False`.
+- **Orquestación**: DAG de Composer programado de forma semanal (sábados a las 05:00) con `catchup=False`, compuerta Bronze previa a Dataflow y operación controlada de Composer para reducir costos.
 
 **Trabajo Pendiente (Fases Posteriores)**:
+
 - Construcción y conexión del modelo semántico / reportes en **Power BI** (desacoplado y pendiente).
 - Modelos predictivos mediante BigQuery ML y pipelines de Machine Learning.
 
