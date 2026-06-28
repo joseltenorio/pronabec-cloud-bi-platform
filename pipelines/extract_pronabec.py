@@ -38,19 +38,25 @@ from pipelines.common.validation import validate_required_columns
 DEFAULT_ENDPOINTS_CONFIG = "config/endpoints.yaml"
 DEFAULT_PIPELINE_CONFIG = "config/pipeline.yaml"
 DEFAULT_ROWS_PER_PAGE = 100
+
 DEFAULT_TIMEOUT_SECONDS = 180
 DEFAULT_MAX_RETRIES = 5
 DEFAULT_BACKOFF_BASE_SECONDS = 10.0
 DEFAULT_BACKOFF_MAX_SECONDS = 120.0
+
 RETRYABLE_HTTP_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 class PronabecExtractionError(Exception):
-    """Error controlado durante extracción PRONABEC."""
+    """Error controlado durante la extracción PRONABEC."""
 
 
 def get_env_int(name: str, default: int) -> int:
-    """Resolve a positive integer from environment variables."""
+    """
+    Resuelve una variable de entorno como entero positivo.
+
+    Si la variable no existe o está vacía, devuelve el valor por defecto.
+    """
     raw_value = os.getenv(name)
 
     if raw_value is None or raw_value.strip() == "":
@@ -72,7 +78,11 @@ def get_env_int(name: str, default: int) -> int:
 
 
 def get_env_float(name: str, default: float) -> float:
-    """Resolve a positive float from environment variables."""
+    """
+    Resuelve una variable de entorno como decimal positivo.
+
+    Si la variable no existe o está vacía, devuelve el valor por defecto.
+    """
     raw_value = os.getenv(name)
 
     if raw_value is None or raw_value.strip() == "":
@@ -99,7 +109,15 @@ def resolve_retry_settings(
     backoff_base_seconds: float | None,
     backoff_max_seconds: float | None,
 ) -> dict[str, int | float]:
-    """Resolve retry settings from CLI arguments and environment variables."""
+    """
+    Resuelve la configuración de timeout y reintentos.
+
+    La prioridad es:
+
+    1. Argumentos CLI.
+    2. Variables de entorno.
+    3. Valores por defecto del extractor.
+    """
     resolved_timeout = timeout or get_env_int(
         "PRONABEC_REQUEST_TIMEOUT_SECONDS",
         DEFAULT_TIMEOUT_SECONDS,
@@ -131,19 +149,60 @@ def resolve_retry_settings(
     }
 
 
+def resolve_extraction_date(
+    cli_value: str | None,
+    dry_run: bool,
+    allow_default_date: bool = False,
+) -> str:
+    """
+    Resuelve la fecha lógica de extracción.
+
+    La ejecución en Cloud Run o Composer debe recibir la fecha mediante
+    --extraction-date o BRONZE_EXTRACTION_DATE.
+
+    En dry-run local se permite usar la fecha actual solo si se habilita
+    explícitamente allow_default_date.
+    """
+    value = cli_value or os.getenv("BRONZE_EXTRACTION_DATE")
+
+    if not value and dry_run and allow_default_date:
+        value = date.today().isoformat()
+
+    if not value:
+        raise PronabecExtractionError(
+            "No se definió extraction_date. Usa --extraction-date o "
+            "BRONZE_EXTRACTION_DATE. En ejecución cloud la fecha es obligatoria."
+        )
+
+    try:
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise PronabecExtractionError(
+            f"extraction_date inválida, se esperaba YYYY-MM-DD: {value}"
+        ) from exc
+
+    return value
+
+
 def calculate_backoff_seconds(
     attempt: int,
     base_seconds: float,
     max_seconds: float,
 ) -> float:
-    """Calculate exponential backoff with small jitter."""
+    """
+    Calcula espera exponencial con jitter pequeño.
+
+    El resultado nunca supera max_seconds.
+    """
     exponential_delay = base_seconds * (2 ** max(attempt - 1, 0))
     jitter = random.uniform(0, min(base_seconds, 3.0))
     return min(exponential_delay + jitter, max_seconds)
 
 
 def is_retryable_http_error(exc: requests.exceptions.HTTPError) -> bool:
-    """Return whether an HTTP error should be retried."""
+    """
+    Indica si un error HTTP debe reintentarse.
+    """
     response = exc.response
     if response is None:
         return False
@@ -170,7 +229,7 @@ def build_jqgrid_params(
     sort_order: str = "asc",
 ) -> dict[str, Any]:
     """
-    Construye parámetros esperados por endpoints jqGrid de PRONABEC.
+    Construye los parámetros esperados por los endpoints jqGrid de PRONABEC.
     """
     return {
         "_search": "false",
@@ -197,7 +256,7 @@ def fetch_pronabec_page(
     logger=None,
 ) -> dict[str, Any]:
     """
-    Descarga una página del endpoint PRONABEC con retries y backoff exponencial.
+    Descarga una página del endpoint PRONABEC con reintentos y backoff exponencial.
     """
     params = build_jqgrid_params(page=page, rows=rows)
     retryable_exceptions = (
@@ -313,7 +372,9 @@ def normalize_jqgrid_row(
     Convierte una fila jqGrid {"id": ..., "cell": [...]} a un diccionario tabular.
     """
     if "cell" not in row or not isinstance(row["cell"], list):
-        raise PronabecExtractionError("Fila jqGrid inválida: no contiene cell como lista.")
+        raise PronabecExtractionError(
+            "Fila jqGrid inválida: no contiene cell como lista."
+        )
 
     normalized = {
         "source_row_id": row.get("id"),
@@ -429,6 +490,8 @@ def extract_dataset(
         "Iniciando extracción PRONABEC",
         dataset=dataset_name,
         url=url,
+        extraction_date=extraction_date,
+        run_id=run_id,
     )
 
     first_page = fetch_pronabec_page(
@@ -463,6 +526,8 @@ def extract_dataset(
         pages_to_read=pages_to_read,
         reported_records=first_page.get("records"),
         first_page_records=len(first_page.get("rows", [])),
+        extraction_date=extraction_date,
+        run_id=run_id,
     )
 
     for page_number in range(2, pages_to_read + 1):
@@ -496,6 +561,8 @@ def extract_dataset(
             dataset=dataset_name,
             page=page_number,
             page_records=len(page_payload.get("rows", [])),
+            extraction_date=extraction_date,
+            run_id=run_id,
         )
 
     raw_payload = consolidate_raw_payload(
@@ -522,6 +589,8 @@ def extract_dataset(
         dataset=dataset_name,
         pages_read=len(pages),
         records_normalized=len(normalized_records),
+        extraction_date=extraction_date,
+        run_id=run_id,
     )
 
     return raw_payload, normalized_records
@@ -571,6 +640,7 @@ def write_dataset_to_gcs(
         raw_uri=raw_uri,
         normalized_uri=normalized_uri,
         records_written=len(normalized_records),
+        extraction_date=extraction_date,
     )
 
     return {
@@ -705,6 +775,8 @@ def write_dataset_to_local(
         normalized_path=str(paths["normalized_path"]),
         metadata_path=str(paths["metadata_path"]),
         records_written=len(normalized_records),
+        extraction_date=extraction_date,
+        run_id=run_id,
     )
 
     return {
@@ -732,6 +804,12 @@ def run_extraction(args: argparse.Namespace) -> None:
         name="extract_pronabec_api",
         level=pipeline_settings["log_level"],
         structured=True,
+    )
+
+    log_event(
+        logger,
+        "INFO",
+        "Configuración resiliente PRONABEC resuelta",
         request_timeout_seconds=retry_settings["timeout"],
         max_retries=retry_settings["max_retries"],
         backoff_base_seconds=retry_settings["backoff_base_seconds"],
@@ -745,7 +823,12 @@ def run_extraction(args: argparse.Namespace) -> None:
             "No se definió bucket. Configura GCS_BUCKET_NAME o usa --bucket."
         )
 
-    extraction_date = args.extraction_date or date.today().isoformat()
+    extraction_date = resolve_extraction_date(
+        cli_value=args.extraction_date,
+        dry_run=args.dry_run,
+        allow_default_date=args.allow_default_date,
+    )
+
     run_id = args.run_id or generate_run_id("pronabec_extraction")
 
     pronabec_config = endpoints_config["pronabec"]
@@ -860,6 +943,8 @@ def run_extraction(args: argparse.Namespace) -> None:
                 dataset=dataset_name,
                 error_message=str(exc),
                 audit_event=audit_event.to_dict(),
+                extraction_date=extraction_date,
+                run_id=run_id,
             )
 
             raise
@@ -894,6 +979,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--extraction-date",
         help="Fecha lógica de extracción en formato YYYY-MM-DD.",
+    )
+    parser.add_argument(
+        "--allow-default-date",
+        action="store_true",
+        help=(
+            "Permite usar la fecha actual solo para dry-run local. "
+            "No debe usarse en Cloud Run ni Composer."
+        ),
     )
     parser.add_argument(
         "--run-id",
@@ -967,6 +1060,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """
+    Punto de entrada CLI del extractor PRONABEC.
+    """
     args = parse_args()
     run_extraction(args)
 
