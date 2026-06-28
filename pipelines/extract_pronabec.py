@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import random
 import time
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -36,11 +38,117 @@ from pipelines.common.validation import validate_required_columns
 DEFAULT_ENDPOINTS_CONFIG = "config/endpoints.yaml"
 DEFAULT_PIPELINE_CONFIG = "config/pipeline.yaml"
 DEFAULT_ROWS_PER_PAGE = 100
-DEFAULT_TIMEOUT_SECONDS = 60
+DEFAULT_TIMEOUT_SECONDS = 180
+DEFAULT_MAX_RETRIES = 5
+DEFAULT_BACKOFF_BASE_SECONDS = 10.0
+DEFAULT_BACKOFF_MAX_SECONDS = 120.0
+RETRYABLE_HTTP_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 class PronabecExtractionError(Exception):
     """Error controlado durante extracción PRONABEC."""
+
+
+def get_env_int(name: str, default: int) -> int:
+    """Resolve a positive integer from environment variables."""
+    raw_value = os.getenv(name)
+
+    if raw_value is None or raw_value.strip() == "":
+        return default
+
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise PronabecExtractionError(
+            f"Variable de entorno inválida para entero: {name}={raw_value}"
+        ) from exc
+
+    if value <= 0:
+        raise PronabecExtractionError(
+            f"Variable de entorno debe ser mayor a cero: {name}={raw_value}"
+        )
+
+    return value
+
+
+def get_env_float(name: str, default: float) -> float:
+    """Resolve a positive float from environment variables."""
+    raw_value = os.getenv(name)
+
+    if raw_value is None or raw_value.strip() == "":
+        return default
+
+    try:
+        value = float(raw_value)
+    except ValueError as exc:
+        raise PronabecExtractionError(
+            f"Variable de entorno inválida para decimal: {name}={raw_value}"
+        ) from exc
+
+    if value <= 0:
+        raise PronabecExtractionError(
+            f"Variable de entorno debe ser mayor a cero: {name}={raw_value}"
+        )
+
+    return value
+
+
+def resolve_retry_settings(
+    timeout: int | None,
+    max_retries: int | None,
+    backoff_base_seconds: float | None,
+    backoff_max_seconds: float | None,
+) -> dict[str, int | float]:
+    """Resolve retry settings from CLI arguments and environment variables."""
+    resolved_timeout = timeout or get_env_int(
+        "PRONABEC_REQUEST_TIMEOUT_SECONDS",
+        DEFAULT_TIMEOUT_SECONDS,
+    )
+    resolved_max_retries = max_retries or get_env_int(
+        "PRONABEC_MAX_RETRIES",
+        DEFAULT_MAX_RETRIES,
+    )
+    resolved_backoff_base = backoff_base_seconds or get_env_float(
+        "PRONABEC_BACKOFF_BASE_SECONDS",
+        DEFAULT_BACKOFF_BASE_SECONDS,
+    )
+    resolved_backoff_max = backoff_max_seconds or get_env_float(
+        "PRONABEC_BACKOFF_MAX_SECONDS",
+        DEFAULT_BACKOFF_MAX_SECONDS,
+    )
+
+    if resolved_backoff_base > resolved_backoff_max:
+        raise PronabecExtractionError(
+            "PRONABEC_BACKOFF_BASE_SECONDS no puede ser mayor que "
+            "PRONABEC_BACKOFF_MAX_SECONDS."
+        )
+
+    return {
+        "timeout": resolved_timeout,
+        "max_retries": resolved_max_retries,
+        "backoff_base_seconds": resolved_backoff_base,
+        "backoff_max_seconds": resolved_backoff_max,
+    }
+
+
+def calculate_backoff_seconds(
+    attempt: int,
+    base_seconds: float,
+    max_seconds: float,
+) -> float:
+    """Calculate exponential backoff with small jitter."""
+    exponential_delay = base_seconds * (2 ** max(attempt - 1, 0))
+    jitter = random.uniform(0, min(base_seconds, 3.0))
+    return min(exponential_delay + jitter, max_seconds)
+
+
+def is_retryable_http_error(exc: requests.exceptions.HTTPError) -> bool:
+    """Return whether an HTTP error should be retried."""
+    response = exc.response
+    if response is None:
+        return False
+
+    return response.status_code in RETRYABLE_HTTP_STATUS_CODES
 
 
 def build_pronabec_data_url(base_url: str, endpoint_path: str) -> str:
@@ -80,29 +188,121 @@ def fetch_pronabec_page(
     page: int,
     rows: int,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
+    max_retries: int = DEFAULT_MAX_RETRIES,
+    backoff_base_seconds: float = DEFAULT_BACKOFF_BASE_SECONDS,
+    backoff_max_seconds: float = DEFAULT_BACKOFF_MAX_SECONDS,
+    dataset_name: str | None = None,
+    extraction_date: str | None = None,
+    run_id: str | None = None,
+    logger=None,
 ) -> dict[str, Any]:
     """
-    Descarga una página del endpoint PRONABEC.
+    Descarga una página del endpoint PRONABEC con retries y backoff exponencial.
     """
-    response = session.get(
-        url,
-        params=build_jqgrid_params(page=page, rows=rows),
-        timeout=timeout,
+    params = build_jqgrid_params(page=page, rows=rows)
+    retryable_exceptions = (
+        requests.exceptions.ReadTimeout,
+        requests.exceptions.ConnectTimeout,
+        requests.exceptions.ConnectionError,
     )
-    response.raise_for_status()
 
-    payload = response.json()
+    last_error: Exception | None = None
 
-    if not isinstance(payload, dict):
-        raise PronabecExtractionError("La respuesta PRONABEC no es un objeto JSON.")
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = session.get(
+                url,
+                params=params,
+                timeout=timeout,
+            )
+            response.raise_for_status()
 
-    if "rows" not in payload:
-        raise PronabecExtractionError("La respuesta PRONABEC no contiene la clave rows.")
+            payload = response.json()
 
-    if not isinstance(payload["rows"], list):
-        raise PronabecExtractionError("La clave rows no contiene una lista.")
+            if not isinstance(payload, dict):
+                raise PronabecExtractionError(
+                    "La respuesta PRONABEC no es un objeto JSON."
+                )
 
-    return payload
+            if "rows" not in payload:
+                raise PronabecExtractionError(
+                    "La respuesta PRONABEC no contiene la clave rows."
+                )
+
+            if not isinstance(payload["rows"], list):
+                raise PronabecExtractionError(
+                    "La clave rows no contiene una lista."
+                )
+
+            if attempt > 1 and logger:
+                log_event(
+                    logger,
+                    "INFO",
+                    "Página PRONABEC recuperada después de retry",
+                    dataset=dataset_name,
+                    page=page,
+                    attempt=attempt,
+                    timeout_seconds=timeout,
+                    extraction_date=extraction_date,
+                    run_id=run_id,
+                )
+
+            return payload
+
+        except requests.exceptions.HTTPError as exc:
+            last_error = exc
+
+            if not is_retryable_http_error(exc) or attempt >= max_retries:
+                break
+
+        except retryable_exceptions as exc:
+            last_error = exc
+
+            if attempt >= max_retries:
+                break
+
+        if logger:
+            log_event(
+                logger,
+                "WARNING",
+                "Retry PRONABEC por error temporal",
+                dataset=dataset_name,
+                page=page,
+                attempt=attempt,
+                max_retries=max_retries,
+                timeout_seconds=timeout,
+                error_type=type(last_error).__name__ if last_error else None,
+                error_message=str(last_error) if last_error else None,
+                extraction_date=extraction_date,
+                run_id=run_id,
+            )
+
+        sleep_for = calculate_backoff_seconds(
+            attempt=attempt,
+            base_seconds=backoff_base_seconds,
+            max_seconds=backoff_max_seconds,
+        )
+        time.sleep(sleep_for)
+
+    if logger:
+        log_event(
+            logger,
+            "ERROR",
+            "Fallo definitivo descargando página PRONABEC",
+            dataset=dataset_name,
+            page=page,
+            max_retries=max_retries,
+            timeout_seconds=timeout,
+            error_type=type(last_error).__name__ if last_error else None,
+            error_message=str(last_error) if last_error else None,
+            extraction_date=extraction_date,
+            run_id=run_id,
+        )
+
+    raise PronabecExtractionError(
+        f"No se pudo descargar PRONABEC dataset={dataset_name}, page={page}, "
+        f"attempts={max_retries}: {last_error}"
+    ) from last_error
 
 
 def normalize_jqgrid_row(
@@ -202,7 +402,12 @@ def extract_dataset(
     rows_per_page: int,
     max_pages: int | None,
     timeout: int,
+    max_retries: int,
+    backoff_base_seconds: float,
+    backoff_max_seconds: float,
     sleep_seconds: float,
+    extraction_date: str,
+    run_id: str,
     logger,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """
@@ -232,6 +437,13 @@ def extract_dataset(
         page=1,
         rows=rows_per_page,
         timeout=timeout,
+        max_retries=max_retries,
+        backoff_base_seconds=backoff_base_seconds,
+        backoff_max_seconds=backoff_max_seconds,
+        dataset_name=dataset_name,
+        extraction_date=extraction_date,
+        run_id=run_id,
+        logger=logger,
     )
 
     total_pages = int(first_page.get("total") or 1)
@@ -263,6 +475,13 @@ def extract_dataset(
             page=page_number,
             rows=rows_per_page,
             timeout=timeout,
+            max_retries=max_retries,
+            backoff_base_seconds=backoff_base_seconds,
+            backoff_max_seconds=backoff_max_seconds,
+            dataset_name=dataset_name,
+            extraction_date=extraction_date,
+            run_id=run_id,
+            logger=logger,
         )
 
         pages.append(page_payload)
@@ -502,10 +721,21 @@ def run_extraction(args: argparse.Namespace) -> None:
     pipeline_settings = get_pipeline_settings(args.pipeline_config)
     endpoints_config = load_yaml_config(args.endpoints_config)
 
+    retry_settings = resolve_retry_settings(
+        timeout=args.timeout,
+        max_retries=args.max_retries,
+        backoff_base_seconds=args.backoff_base_seconds,
+        backoff_max_seconds=args.backoff_max_seconds,
+    )
+
     logger = setup_structured_logger(
         name="extract_pronabec_api",
         level=pipeline_settings["log_level"],
         structured=True,
+        request_timeout_seconds=retry_settings["timeout"],
+        max_retries=retry_settings["max_retries"],
+        backoff_base_seconds=retry_settings["backoff_base_seconds"],
+        backoff_max_seconds=retry_settings["backoff_max_seconds"],
     )
 
     bucket_name = args.bucket or pipeline_settings["bucket_name"]
@@ -546,8 +776,13 @@ def run_extraction(args: argparse.Namespace) -> None:
                 base_url=base_url,
                 rows_per_page=args.rows_per_page,
                 max_pages=args.max_pages,
-                timeout=args.timeout,
+                timeout=int(retry_settings["timeout"]),
+                max_retries=int(retry_settings["max_retries"]),
+                backoff_base_seconds=float(retry_settings["backoff_base_seconds"]),
+                backoff_max_seconds=float(retry_settings["backoff_max_seconds"]),
                 sleep_seconds=args.sleep_seconds,
+                extraction_date=extraction_date,
+                run_id=run_id,
                 logger=logger,
             )
 
@@ -678,8 +913,38 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--timeout",
         type=int,
-        default=DEFAULT_TIMEOUT_SECONDS,
-        help="Timeout HTTP por request en segundos.",
+        default=None,
+        help=(
+            "Timeout HTTP por request en segundos. "
+            "Si se omite, usa PRONABEC_REQUEST_TIMEOUT_SECONDS o 180."
+        ),
+    )
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=None,
+        help=(
+            "Cantidad máxima de intentos por página. "
+            "Si se omite, usa PRONABEC_MAX_RETRIES o 5."
+        ),
+    )
+    parser.add_argument(
+        "--backoff-base-seconds",
+        type=float,
+        default=None,
+        help=(
+            "Espera inicial para backoff exponencial. "
+            "Si se omite, usa PRONABEC_BACKOFF_BASE_SECONDS o 10."
+        ),
+    )
+    parser.add_argument(
+        "--backoff-max-seconds",
+        type=float,
+        default=None,
+        help=(
+            "Espera máxima para backoff exponencial. "
+            "Si se omite, usa PRONABEC_BACKOFF_MAX_SECONDS o 120."
+        ),
     )
     parser.add_argument(
         "--sleep-seconds",
