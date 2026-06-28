@@ -21,6 +21,7 @@ param(
     [string]$PronabecJobName = $(if ($env:PRONABEC_EXTRACT_JOB_NAME) { $env:PRONABEC_EXTRACT_JOB_NAME } else { "pronabec-extract-job" }),
     [string]$MefJobName = $(if ($env:MEF_EXTRACT_JOB_NAME) { $env:MEF_EXTRACT_JOB_NAME } else { "mef-extract-job" }),
     [string]$PronabecReportsStageJobName = $(if ($env:PRONABEC_REPORTS_STAGE_JOB_NAME) { $env:PRONABEC_REPORTS_STAGE_JOB_NAME } else { "pronabec-stage-reports-job" }),
+    [string]$BronzeManifestValidationJobName = $(if ($env:BRONZE_MANIFEST_VALIDATION_JOB_NAME) { $env:BRONZE_MANIFEST_VALIDATION_JOB_NAME } else { "bronze-manifest-validation-job" }),
     [string]$GoldPublishJobName = $(if ($env:GOLD_PUBLISH_JOB_NAME) { $env:GOLD_PUBLISH_JOB_NAME } else { "gold-publish-job" }),
     [string]$GoldValidateJobName = $(if ($env:GOLD_VALIDATE_JOB_NAME) { $env:GOLD_VALIDATE_JOB_NAME } else { "gold-validate-job" }),
     [string]$QualityJobName = $(if ($env:QUALITY_CHECKS_JOB_NAME) { $env:QUALITY_CHECKS_JOB_NAME } else { "quality-checks-job" }),
@@ -130,6 +131,10 @@ function Upsert-CloudRunJob {
         "DATAFLOW_STAGING_LOCATION=$DataflowStagingLocation",
         "PRONABEC_REPORTS_LANDING_PREFIX=$PronabecReportsLandingPrefix",
         "PRONABEC_REPORTS_BRONZE_PREFIX=$PronabecReportsBronzePrefix",
+        "PRONABEC_REQUEST_TIMEOUT_SECONDS=$(if ($env:PRONABEC_REQUEST_TIMEOUT_SECONDS) { $env:PRONABEC_REQUEST_TIMEOUT_SECONDS } else { "180" })",
+        "PRONABEC_MAX_RETRIES=$(if ($env:PRONABEC_MAX_RETRIES) { $env:PRONABEC_MAX_RETRIES } else { "5" })",
+        "PRONABEC_BACKOFF_BASE_SECONDS=$(if ($env:PRONABEC_BACKOFF_BASE_SECONDS) { $env:PRONABEC_BACKOFF_BASE_SECONDS } else { "10" })",
+        "PRONABEC_BACKOFF_MAX_SECONDS=$(if ($env:PRONABEC_BACKOFF_MAX_SECONDS) { $env:PRONABEC_BACKOFF_MAX_SECONDS } else { "120" })",
         "STRUCTURED_LOGGING=true",
         "LOG_LEVEL=INFO"
     )
@@ -221,6 +226,14 @@ Upsert-CloudRunJob `
         "tools/stage_pronabec_manual_reports.py",
         "--strict",
         "--overwrite"
+    )
+
+Upsert-CloudRunJob `
+    -JobName $BronzeManifestValidationJobName `
+    -Description "Validacion de manifests Bronze antes de promover a Silver" `
+    -ContainerArgs @(
+        "-m",
+        "pipelines.validate_bronze_manifests"
     )
 
 Upsert-CloudRunJob `
