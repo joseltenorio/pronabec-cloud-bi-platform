@@ -602,11 +602,12 @@ def write_dataset_to_gcs(
     normalized_records: list[dict[str, Any]],
     bucket_name: str,
     extraction_date: str,
+    run_id: str,
     gcs_paths: dict[str, str],
     logger,
 ) -> dict[str, str]:
     """
-    Escribe data_raw.json y data.jsonl en Cloud Storage Bronze.
+    Escribe data_raw.json, data.jsonl, manifest.json y _SUCCESS en GCS Bronze.
     """
     raw_path = build_pronabec_raw_path(
         gcs_paths["pronabec_bronze_raw"],
@@ -632,6 +633,38 @@ def write_dataset_to_gcs(
         records=normalized_records,
     )
 
+    dataset_base_path = build_bronze_dataset_base_path(normalized_path)
+    manifest_path = f"{dataset_base_path}/manifest.json"
+    success_path = f"{dataset_base_path}/_SUCCESS"
+
+    manifest = build_success_manifest(
+        dataset_name=dataset_name,
+        extraction_date=extraction_date,
+        run_id=run_id,
+        raw_uri=raw_uri,
+        normalized_uri=normalized_uri,
+        records_written=len(normalized_records),
+        raw_payload=raw_payload,
+    )
+
+    success_marker = build_success_marker(
+        dataset_name=dataset_name,
+        extraction_date=extraction_date,
+        run_id=run_id,
+    )
+
+    manifest_uri = upload_json(
+        bucket_name=bucket_name,
+        object_path=manifest_path,
+        payload=manifest,
+    )
+
+    success_uri = upload_json(
+        bucket_name=bucket_name,
+        object_path=success_path,
+        payload=success_marker,
+    )
+
     log_event(
         logger,
         "INFO",
@@ -639,13 +672,18 @@ def write_dataset_to_gcs(
         dataset=dataset_name,
         raw_uri=raw_uri,
         normalized_uri=normalized_uri,
+        manifest_uri=manifest_uri,
+        success_uri=success_uri,
         records_written=len(normalized_records),
         extraction_date=extraction_date,
+        run_id=run_id,
     )
 
     return {
         "raw_uri": raw_uri,
         "normalized_uri": normalized_uri,
+        "manifest_uri": manifest_uri,
+        "success_uri": success_uri,
     }
 
 
@@ -694,6 +732,8 @@ def build_local_pronabec_output_paths(
         "raw_path": base_path / "data_raw.json",
         "normalized_path": base_path / "data.jsonl",
         "metadata_path": base_path / "extraction_metadata.json",
+        "manifest_path": base_path / "manifest.json",
+        "success_path": base_path / "_SUCCESS",
     }
 
 
@@ -725,6 +765,68 @@ def build_extraction_metadata(
     }
 
 
+def build_bronze_dataset_base_path(
+    normalized_path: str,
+) -> str:
+    """
+    Resuelve la ruta base de la partición Bronze de un dataset.
+
+    Recibe la ruta del archivo normalizado data.jsonl y devuelve la carpeta
+    de la partición extraction_date correspondiente.
+    """
+    path = Path(normalized_path.replace("\\", "/"))
+    return str(path.parent).replace("\\", "/")
+
+
+def build_success_manifest(
+    dataset_name: str,
+    extraction_date: str,
+    run_id: str,
+    raw_uri: str,
+    normalized_uri: str,
+    records_written: int,
+    raw_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Construye el manifest técnico que marca una extracción Bronze como completa.
+
+    Este archivo permite que etapas posteriores validen que el dataset terminó
+    correctamente antes de ser consumido por Silver.
+    """
+    return {
+        "source_system": "pronabec",
+        "source_dataset": dataset_name,
+        "extraction_date": extraction_date,
+        "pipeline_run_id": run_id,
+        "status": "SUCCESS",
+        "records_written": records_written,
+        "pages_read": raw_payload.get("pages_read"),
+        "reported_records": raw_payload.get("reported_records"),
+        "total_pages": raw_payload.get("total_pages"),
+        "raw_uri": raw_uri,
+        "normalized_uri": normalized_uri,
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def build_success_marker(
+    dataset_name: str,
+    extraction_date: str,
+    run_id: str,
+) -> dict[str, Any]:
+    """
+    Construye el contenido del archivo _SUCCESS para la partición Bronze.
+    """
+    return {
+        "source_system": "pronabec",
+        "source_dataset": dataset_name,
+        "extraction_date": extraction_date,
+        "pipeline_run_id": run_id,
+        "status": "SUCCESS",
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+
+
 def write_dataset_to_local(
     dataset_name: str,
     raw_payload: dict[str, Any],
@@ -735,7 +837,8 @@ def write_dataset_to_local(
     logger,
 ) -> dict[str, str]:
     """
-    Escribe data_raw.json, data.jsonl y extraction_metadata.json localmente.
+    Escribe data_raw.json, data.jsonl, extraction_metadata.json,
+    manifest.json y _SUCCESS localmente.
     """
     paths = build_local_pronabec_output_paths(
         output_dir=output_dir,
@@ -745,6 +848,22 @@ def write_dataset_to_local(
 
     write_json_file(paths["raw_path"], raw_payload)
     write_jsonl_file(paths["normalized_path"], normalized_records)
+
+    manifest = build_success_manifest(
+        dataset_name=dataset_name,
+        extraction_date=extraction_date,
+        run_id=run_id,
+        raw_uri=str(paths["raw_path"]),
+        normalized_uri=str(paths["normalized_path"]),
+        records_written=len(normalized_records),
+        raw_payload=raw_payload,
+    )
+
+    success_marker = build_success_marker(
+        dataset_name=dataset_name,
+        extraction_date=extraction_date,
+        run_id=run_id,
+    )
 
     metadata = build_extraction_metadata(
         source_name="PRONABEC Datos Abiertos",
@@ -756,6 +875,8 @@ def write_dataset_to_local(
         output_paths={
             "raw_path": str(paths["raw_path"]),
             "normalized_path": str(paths["normalized_path"]),
+            "manifest_path": str(paths["manifest_path"]),
+            "success_path": str(paths["success_path"]),
         },
         extra_metadata={
             "mode": "dry_run",
@@ -765,6 +886,8 @@ def write_dataset_to_local(
     )
 
     write_json_file(paths["metadata_path"], metadata)
+    write_json_file(paths["manifest_path"], manifest)
+    write_json_file(paths["success_path"], success_marker)
 
     log_event(
         logger,
@@ -774,6 +897,8 @@ def write_dataset_to_local(
         raw_path=str(paths["raw_path"]),
         normalized_path=str(paths["normalized_path"]),
         metadata_path=str(paths["metadata_path"]),
+        manifest_path=str(paths["manifest_path"]),
+        success_path=str(paths["success_path"]),
         records_written=len(normalized_records),
         extraction_date=extraction_date,
         run_id=run_id,
@@ -783,6 +908,8 @@ def write_dataset_to_local(
         "raw_uri": str(paths["raw_path"]),
         "normalized_uri": str(paths["normalized_path"]),
         "metadata_path": str(paths["metadata_path"]),
+        "manifest_uri": str(paths["manifest_path"]),
+        "success_uri": str(paths["success_path"]),
     }
 
 
@@ -886,6 +1013,7 @@ def run_extraction(args: argparse.Namespace) -> None:
                     normalized_records=normalized_records,
                     bucket_name=bucket_name,
                     extraction_date=extraction_date,
+                    run_id=run_id,
                     gcs_paths=pipeline_settings["gcs_paths"],
                     logger=logger,
                 )
@@ -908,6 +1036,8 @@ def run_extraction(args: argparse.Namespace) -> None:
                 metadata={
                     "raw_uri": uris["raw_uri"],
                     "normalized_uri": uris["normalized_uri"],
+                    "manifest_uri": uris.get("manifest_uri"),
+                    "success_uri": uris.get("success_uri"),
                 },
             )
 
