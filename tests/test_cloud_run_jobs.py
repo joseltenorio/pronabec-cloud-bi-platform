@@ -22,6 +22,7 @@ def test_selected_pronabec_api_jobs_are_defined():
     required_jobs = [
         "pronabec-extract-job",
         "pronabec-stage-reports-job",
+        "bronze-manifest-validation-job",
         "gold-publish-job",
         "gold-validate-job",
         "dataflow-pronabec-convocatorias-job",
@@ -53,6 +54,30 @@ def test_selected_mef_jobs_are_defined():
 
     for job_name in required_jobs:
         assert job_name in content, f"Falta el job MEF esperado: {job_name}"
+
+
+def test_bronze_manifest_validation_job_is_defined():
+    content = _read_deploy_script()
+
+    assert "bronze-manifest-validation-job" in content
+    assert "BronzeManifestValidationJobName" in content
+    assert "BRONZE_MANIFEST_VALIDATION_JOB_NAME" in content
+    assert "pipelines.validate_bronze_manifests" in content
+    assert "Validacion de manifests Bronze antes de promover a Silver" in content
+
+
+def test_pronabec_api_retry_env_vars_are_defined():
+    content = _read_deploy_script()
+
+    required_env_vars = [
+        "PRONABEC_REQUEST_TIMEOUT_SECONDS",
+        "PRONABEC_MAX_RETRIES",
+        "PRONABEC_BACKOFF_BASE_SECONDS",
+        "PRONABEC_BACKOFF_MAX_SECONDS",
+    ]
+
+    for env_var in required_env_vars:
+        assert env_var in content, f"Falta variable de resiliencia PRONABEC: {env_var}"
 
 
 def test_parameterized_pronabec_report_job_is_the_only_report_job():
