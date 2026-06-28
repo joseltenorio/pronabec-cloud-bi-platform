@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Pruebas unitarias para validar la configuracion del DAG de Composer."""
 
 from __future__ import annotations
@@ -122,3 +121,35 @@ def test_composer_upload_script_syncs_support_files() -> None:
 
     assert "Sync-ComposerSupportFiles" in content
     assert "git ls-files config pipelines" in content
+
+
+def test_dag_contains_bronze_manifest_validation_gate() -> None:
+    content = _read_dag_source()
+
+    assert "BRONZE_MANIFEST_VALIDATION_JOB" in content
+    assert "bronze-manifest-validation-job" in content
+    assert "validate_bronze_manifests" in content
+    assert "run_bronze_manifest_validation" in content
+    assert "RUN_BRONZE_MANIFEST_VALIDATION" in content
+
+
+def test_bronze_manifest_validation_runs_after_bronze_tasks() -> None:
+    content = _read_dag_source()
+
+    assert "extract_pronabec_api >> validate_bronze_manifests" in content
+    assert "extract_mef >> validate_bronze_manifests" in content
+    assert "stage_task >> validate_bronze_manifests" in content
+
+
+def test_bronze_manifest_validation_runs_before_silver_tasks() -> None:
+    content = _read_dag_source()
+
+    assert "validate_bronze_manifests >> pronabec_api_tasks" in content
+    assert "validate_bronze_manifests >> mef_tasks" in content
+    assert "validate_bronze_manifests >> report_tasks" in content
+
+
+def test_dag_exposes_bronze_manifest_validation_param() -> None:
+    content = _read_dag_source()
+
+    assert '"run_bronze_manifest_validation": Param(default=True, type="boolean")' in content

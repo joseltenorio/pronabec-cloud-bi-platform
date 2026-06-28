@@ -19,7 +19,7 @@ from pipelines.common.orchestration_config import (
 
 
 def resolve_repo_root() -> Path:
-    """Resolve the repository root both locally and when synced to Composer."""
+    """Resuelve la raíz del repositorio localmente y cuando se sincroniza a Composer."""
     dag_dir = Path(__file__).resolve().parent
     repo_root = Path(__file__).resolve().parents[1]
 
@@ -61,7 +61,7 @@ def airflow_var_template(var_name: str, default: str | None = None) -> str:
 
 
 def resolve_job_name(item: dict[str, str], default_job_name: str) -> str:
-    """Resolve a Cloud Run job name from the orchestration config."""
+    """Resuelve el nombre de un Cloud Run Job desde la configuración de orquestación."""
     job_name_var = item.get("job_name_var")
     job_name = item.get("job_name") or default_job_name
     if not job_name_var:
@@ -89,6 +89,14 @@ PRONABEC_REPORTS_STAGE_JOB = airflow_var_template(
     resolve_airflow_var_name(ORCHESTRATION_CONFIG, "pronabec_reports_stage_job_name_var"),
     "pronabec-stage-reports-job",
 )
+BRONZE_MANIFEST_VALIDATION_JOB = airflow_var_template(
+    resolve_airflow_var_name(
+        ORCHESTRATION_CONFIG,
+        "bronze_manifest_validation_job_name_var",
+        default="bronze_manifest_validation_job_name",
+    ),
+    "bronze-manifest-validation-job",
+)
 DATAFLOW_PRONABEC_REPORT_JOB = airflow_var_template(
     resolve_airflow_var_name(ORCHESTRATION_CONFIG, "pronabec_reports_dataflow_job_name_var"),
     "dataflow-pronabec-report-job",
@@ -110,6 +118,7 @@ EXTRACTION_DATE = "{{ dag_run.conf.get('extraction_date') or ds }}"
 RUN_PRONABEC = "{{ dag_run.conf.get('run_pronabec', true) }}"
 RUN_MEF = "{{ dag_run.conf.get('run_mef', true) }}"
 RUN_PRONABEC_REPORTS_STAGING = "{{ dag_run.conf.get('run_pronabec_reports_staging', true) }}"
+RUN_BRONZE_MANIFEST_VALIDATION = "{{ dag_run.conf.get('run_bronze_manifest_validation', true) }}"
 RUN_DATAFLOW_PRONABEC = "{{ dag_run.conf.get('run_dataflow_pronabec', true) }}"
 RUN_DATAFLOW_MEF = "{{ dag_run.conf.get('run_dataflow_mef', true) }}"
 RUN_DATAFLOW_REPORTS = "{{ dag_run.conf.get('run_dataflow_reports', true) }}"
@@ -140,7 +149,7 @@ if [ "{enabled_expression}" = "True" ] || [ "{enabled_expression}" = "true" ]; t
     --update-env-vars {joined_env_vars} \
     --wait
 else
-  echo "Task disabled by DAG configuration."
+  echo "Tarea deshabilitada por la configuración del DAG."
 fi
 """.strip()
 
@@ -184,7 +193,7 @@ default_args = {
 
 with DAG(
     dag_id=ORCHESTRATION_CONFIG["dag"]["id"],
-    description="Orchestrates the PRONABEC medallion batch pipeline using declarative config.",
+    description="Orquesta el pipeline batch medallion de PRONABEC usando configuración declarativa.",
     default_args=default_args,
     start_date=datetime(2026, 1, 1),
     schedule_interval=ORCHESTRATION_CONFIG["dag"]["schedule"],
@@ -195,11 +204,12 @@ with DAG(
         "extraction_date": Param(
             default="",
             type="string",
-            description="Logical extraction date. Defaults to the DAG execution date.",
+            description="Fecha lógica de extracción. Si se omite, usa la fecha de ejecución del DAG.",
         ),
         "run_pronabec": Param(default=True, type="boolean"),
         "run_mef": Param(default=True, type="boolean"),
         "run_pronabec_reports_staging": Param(default=True, type="boolean"),
+        "run_bronze_manifest_validation": Param(default=True, type="boolean"),
         "run_dataflow_pronabec": Param(default=True, type="boolean"),
         "run_dataflow_mef": Param(default=True, type="boolean"),
         "run_dataflow_reports": Param(default=True, type="boolean"),
@@ -241,6 +251,17 @@ with DAG(
                 ),
             )
         )
+
+    validate_bronze_manifests = BashOperator(
+        task_id="validate_bronze_manifests",
+        bash_command=cloud_run_execute_command(
+            job_name=BRONZE_MANIFEST_VALIDATION_JOB,
+            enabled_expression=RUN_BRONZE_MANIFEST_VALIDATION,
+            extra_env_vars={
+                "BRONZE_EXTRACTION_DATE": EXTRACTION_DATE,
+            },
+        ),
+    )
 
     pronabec_api_tasks = []
     for item in PRONABEC_API_ITEMS:
@@ -339,10 +360,15 @@ with DAG(
     init_run >> extract_pronabec_api >> extract_mef
     extract_pronabec_api >> report_stage_tasks
     extract_mef >> report_stage_tasks
-    extract_pronabec_api >> pronabec_api_tasks
-    extract_mef >> mef_tasks
+
+    extract_pronabec_api >> validate_bronze_manifests
+    extract_mef >> validate_bronze_manifests
     for stage_task in report_stage_tasks:
-        stage_task >> report_tasks
+        stage_task >> validate_bronze_manifests
+
+    validate_bronze_manifests >> pronabec_api_tasks
+    validate_bronze_manifests >> mef_tasks
+    validate_bronze_manifests >> report_tasks
 
     all_silver_tasks = pronabec_api_tasks + mef_tasks + report_tasks
     all_silver_tasks >> publish_gold_views >> validate_gold_contracts >> run_quality_checks >> finish_run
