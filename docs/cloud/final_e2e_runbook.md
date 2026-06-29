@@ -208,7 +208,7 @@ El archivo del DAG se cargará en el bucket de Cloud Composer y estará disponib
 Configure las variables Airflow requeridas por el DAG:
 
 ```powershell
-.\scripts\configure_airflow_variables.ps1
+./scripts/configure_airflow_variables.ps1
 ```
 
 ---
