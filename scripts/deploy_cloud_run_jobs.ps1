@@ -29,21 +29,21 @@ param(
     [string]$PronabecReportsLandingPrefix = $(if ($env:PRONABEC_REPORTS_LANDING_PREFIX) { $env:PRONABEC_REPORTS_LANDING_PREFIX } else { "landing/pronabec_reports" }),
     [string]$PronabecReportsBronzePrefix = $(if ($env:PRONABEC_REPORTS_BRONZE_PREFIX) { $env:PRONABEC_REPORTS_BRONZE_PREFIX } else { "bronze/pronabec_reports" }),
 
-    [string]$DataflowPronabecConvocatoriasJobName = "dataflow-pronabec-convocatorias-job",
-    [string]$DataflowPronabecUbigeoPostulacionJobName = "dataflow-pronabec-ubigeo-postulacion-job",
-    [string]$DataflowPronabecBecariosPaisEstudioJobName = "dataflow-pronabec-becarios-pais-estudio-job",
-    [string]$DataflowPronabecColegiosHabilesJobName = "dataflow-pronabec-colegios-habiles-job",
-    [string]$DataflowPronabecBecariosProvinciaJobName = "dataflow-pronabec-becarios-provincia-job",
-    [string]$DataflowMefPresupuestoJobName = "dataflow-mef-presupuesto-job",
-    [string]$DataflowMefPresupuestoTemporalJobName = "dataflow-mef-presupuesto-temporal-job",
-    [string]$DataflowMefProductoJobName = "dataflow-mef-producto-job",
-    [string]$DataflowMefProductoTemporalJobName = "dataflow-mef-producto-temporal-job",
-    [string]$DataflowMefActividadJobName = "dataflow-mef-actividad-job",
-    [string]$DataflowMefActividadTemporalJobName = "dataflow-mef-actividad-temporal-job",
-    [string]$DataflowMefGenericaJobName = "dataflow-mef-generica-job",
-    [string]$DataflowMefGenericaTemporalJobName = "dataflow-mef-generica-temporal-job",
-    [string]$DataflowMefHierarchyJobName = "dataflow-mef-hierarchy-job",
-    [string]$DataflowPronabecReportJobName = "dataflow-pronabec-report-job"
+    [string]$DataflowPronabecConvocatoriasJobName = $(if ($env:DATAFLOW_PRONABEC_CONVOCATORIAS_JOB_NAME) { $env:DATAFLOW_PRONABEC_CONVOCATORIAS_JOB_NAME } else { "dataflow-pronabec-convocatorias-job" }),
+    [string]$DataflowPronabecUbigeoPostulacionJobName = $(if ($env:DATAFLOW_PRONABEC_UBIGEO_POSTULACION_JOB_NAME) { $env:DATAFLOW_PRONABEC_UBIGEO_POSTULACION_JOB_NAME } else { "dataflow-pronabec-ubigeo-postulacion-job" }),
+    [string]$DataflowPronabecBecariosPaisEstudioJobName = $(if ($env:DATAFLOW_PRONABEC_BECARIOS_PAIS_ESTUDIO_JOB_NAME) { $env:DATAFLOW_PRONABEC_BECARIOS_PAIS_ESTUDIO_JOB_NAME } else { "dataflow-pronabec-becarios-pais-estudio-job" }),
+    [string]$DataflowPronabecColegiosHabilesJobName = $(if ($env:DATAFLOW_PRONABEC_COLEGIOS_HABILES_JOB_NAME) { $env:DATAFLOW_PRONABEC_COLEGIOS_HABILES_JOB_NAME } else { "dataflow-pronabec-colegios-habiles-job" }),
+    [string]$DataflowPronabecBecariosProvinciaJobName = $(if ($env:DATAFLOW_PRONABEC_BECARIOS_PROVINCIA_JOB_NAME) { $env:DATAFLOW_PRONABEC_BECARIOS_PROVINCIA_JOB_NAME } else { "dataflow-pronabec-becarios-provincia-job" }),
+    [string]$DataflowMefPresupuestoJobName = $(if ($env:DATAFLOW_MEF_PRESUPUESTO_JOB_NAME) { $env:DATAFLOW_MEF_PRESUPUESTO_JOB_NAME } else { "dataflow-mef-presupuesto-job" }),
+    [string]$DataflowMefPresupuestoTemporalJobName = $(if ($env:DATAFLOW_MEF_PRESUPUESTO_TEMPORAL_JOB_NAME) { $env:DATAFLOW_MEF_PRESUPUESTO_TEMPORAL_JOB_NAME } else { "dataflow-mef-presupuesto-temporal-job" }),
+    [string]$DataflowMefProductoJobName = $(if ($env:DATAFLOW_MEF_PRODUCTO_JOB_NAME) { $env:DATAFLOW_MEF_PRODUCTO_JOB_NAME } else { "dataflow-mef-producto-job" }),
+    [string]$DataflowMefProductoTemporalJobName = $(if ($env:DATAFLOW_MEF_PRODUCTO_TEMPORAL_JOB_NAME) { $env:DATAFLOW_MEF_PRODUCTO_TEMPORAL_JOB_NAME } else { "dataflow-mef-producto-temporal-job" }),
+    [string]$DataflowMefActividadJobName = $(if ($env:DATAFLOW_MEF_ACTIVIDAD_JOB_NAME) { $env:DATAFLOW_MEF_ACTIVIDAD_JOB_NAME } else { "dataflow-mef-actividad-job" }),
+    [string]$DataflowMefActividadTemporalJobName = $(if ($env:DATAFLOW_MEF_ACTIVIDAD_TEMPORAL_JOB_NAME) { $env:DATAFLOW_MEF_ACTIVIDAD_TEMPORAL_JOB_NAME } else { "dataflow-mef-actividad-temporal-job" }),
+    [string]$DataflowMefGenericaJobName = $(if ($env:DATAFLOW_MEF_GENERICA_JOB_NAME) { $env:DATAFLOW_MEF_GENERICA_JOB_NAME } else { "dataflow-mef-generica-job" }),
+    [string]$DataflowMefGenericaTemporalJobName = $(if ($env:DATAFLOW_MEF_GENERICA_TEMPORAL_JOB_NAME) { $env:DATAFLOW_MEF_GENERICA_TEMPORAL_JOB_NAME } else { "dataflow-mef-generica-temporal-job" }),
+    [string]$DataflowMefHierarchyJobName = $(if ($env:DATAFLOW_MEF_HIERARCHY_JOB_NAME) { $env:DATAFLOW_MEF_HIERARCHY_JOB_NAME } else { "dataflow-mef-hierarchy-job" }),
+    [string]$DataflowPronabecReportJobName = $(if ($env:DATAFLOW_PRONABEC_REPORT_JOB_NAME) { $env:DATAFLOW_PRONABEC_REPORT_JOB_NAME } else { "dataflow-pronabec-report-job" })
 )
 
 $ErrorActionPreference = "Stop"

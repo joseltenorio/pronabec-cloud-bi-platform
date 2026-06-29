@@ -1,8 +1,10 @@
 import json
 from pathlib import Path
 
+import pytest
 from bs4 import BeautifulSoup
 
+from pipelines.common.config import ConfigError
 from pipelines import scrape_mef_budget
 from pipelines.scrape_mef_budget import (
     CONSULTA_AMIGABLE_BASE_URL,
@@ -15,6 +17,7 @@ from pipelines.scrape_mef_budget import (
     find_mef_grp1_value,
     parse_breakdown_slices,
     parse_mef_temporal_period,
+    resolve_extraction_date,
     scrape_consulta_amigable_year,
     split_mef_code_description,
     write_mef_breakdown_to_local,
@@ -48,11 +51,41 @@ def base_form(body: str) -> str:
 
 def radio_row(value: str, label: str) -> str:
     return f"""
-    <tr>
-      <td><input type="radio" name="grp1" value="{value}" /></td>
-      <td>{label}</td>
-    </tr>
+        <tr>
+          <td><input type="radio" name="grp1" value="{value}" /></td>
+          <td>{label}</td>
+        </tr>
     """
+
+
+def test_resolve_extraction_date_prefers_cli_value(monkeypatch):
+    monkeypatch.setenv("BRONZE_EXTRACTION_DATE", "2026-06-29")
+
+    assert resolve_extraction_date("2026-06-28") == "2026-06-28"
+
+
+def test_resolve_extraction_date_uses_environment(monkeypatch):
+    monkeypatch.setenv("BRONZE_EXTRACTION_DATE", "2026-06-28")
+
+    assert resolve_extraction_date(None) == "2026-06-28"
+
+
+def test_resolve_extraction_date_fails_without_date(monkeypatch):
+    monkeypatch.delenv("BRONZE_EXTRACTION_DATE", raising=False)
+
+    with pytest.raises(ConfigError) as excinfo:
+        resolve_extraction_date(None)
+
+    assert "Usa --extraction-date o BRONZE_EXTRACTION_DATE" in str(excinfo.value)
+
+
+def test_resolve_extraction_date_rejects_invalid_date(monkeypatch):
+    monkeypatch.delenv("BRONZE_EXTRACTION_DATE", raising=False)
+
+    with pytest.raises(ConfigError) as excinfo:
+        resolve_extraction_date("2026/06/28")
+
+    assert "YYYY-MM-DD" in str(excinfo.value)
 
 
 def final_budget_table() -> str:
@@ -831,6 +864,7 @@ def test_mef_scraper_parametrization_cli_vs_env(monkeypatch) -> None:
     monkeypatch.setenv("MEF_SOURCE_MODE", "source_url")
     monkeypatch.setenv("MEF_SOURCE_URL", "https://example.com/test.csv")
     monkeypatch.setenv("GCS_BUCKET_NAME", "dummy-bucket")
+    monkeypatch.setenv("BRONZE_EXTRACTION_DATE", "2026-06-28")
 
     called_modes = []
 

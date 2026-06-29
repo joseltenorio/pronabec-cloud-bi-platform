@@ -256,9 +256,6 @@ with DAG(
         bash_command=cloud_run_execute_command(
             job_name=BRONZE_MANIFEST_VALIDATION_JOB,
             enabled_expression=RUN_BRONZE_MANIFEST_VALIDATION,
-            extra_env_vars={
-                "BRONZE_EXTRACTION_DATE": EXTRACTION_DATE,
-            },
         ),
     )
 

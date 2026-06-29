@@ -6,7 +6,11 @@ from __future__ import annotations
 
 import pytest
 
-from pipelines.dataflow_bronze_to_silver import parse_arguments, validate_arguments
+from pipelines.dataflow_bronze_to_silver import (
+    parse_arguments,
+    resolve_runtime_arguments,
+    validate_arguments,
+)
 
 
 def test_direct_runner_accepts_minimal_local_config() -> None:
@@ -146,3 +150,54 @@ def test_build_pipeline_options_propagates_temp_location() -> None:
     opt_dict = options.get_all_options()
     assert opt_dict.get("temp_location") == "gs://test-bucket/temp"
 
+
+def test_runtime_arguments_resolve_cloud_run_environment(monkeypatch) -> None:
+    monkeypatch.setenv("SOURCE_DATASET", "report_dataset")
+    monkeypatch.setenv("BRONZE_EXTRACTION_DATE", "2026-06-28")
+    monkeypatch.setenv("INPUT_PATH", "gs://bucket/bronze/report_dataset/data.csv")
+    monkeypatch.setenv("OUTPUT_TABLE", "project:silver.report_dataset")
+    monkeypatch.setenv("PIPELINE_RUN_ID", "manual__2026-06-28")
+
+    argv = [
+        "--source-system", "pronabec_reports",
+        "--source-dataset", "${SOURCE_DATASET}",
+        "--input-path", "${INPUT_PATH}",
+        "--input-format", "csv",
+        "--output-table", "${OUTPUT_TABLE}",
+        "--summary-output-path", "gs://bucket/audit/${SOURCE_DATASET}_${BRONZE_EXTRACTION_DATE}.json",
+        "--runner", "DirectRunner",
+        "--dry-run",
+    ]
+    args, _ = parse_arguments(argv)
+
+    resolved = resolve_runtime_arguments(args)
+
+    assert resolved.source_dataset == "report_dataset"
+    assert resolved.extraction_date == "2026-06-28"
+    assert resolved.input_path == "gs://bucket/bronze/report_dataset/data.csv"
+    assert resolved.output_table == "project:silver.report_dataset"
+    assert resolved.pipeline_run_id == "manual__2026-06-28"
+    assert resolved.summary_output_path == "gs://bucket/audit/report_dataset_2026-06-28.json"
+    validate_arguments(resolved)
+
+
+def test_runtime_arguments_reject_unresolved_placeholder(monkeypatch) -> None:
+    monkeypatch.delenv("INPUT_PATH", raising=False)
+
+    args, _ = parse_arguments(
+        [
+            "--source-system", "pronabec_reports",
+            "--source-dataset", "report_dataset",
+            "--extraction-date", "2026-06-28",
+            "--input-path", "${INPUT_PATH}",
+            "--input-format", "csv",
+            "--output-table", "project:silver.report_dataset",
+            "--runner", "DirectRunner",
+            "--dry-run",
+        ]
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        resolve_runtime_arguments(args)
+
+    assert "Variable de entorno requerida no definida: INPUT_PATH" in str(excinfo.value)

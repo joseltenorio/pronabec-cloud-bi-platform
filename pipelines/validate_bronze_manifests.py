@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from pipelines.common.config import ConfigError, get_pipeline_settings, load_yaml_config
@@ -24,6 +26,25 @@ class BronzeManifestCheck:
 
 class BronzeManifestValidationError(Exception):
     """Raised when one or more Bronze manifests are missing or invalid."""
+
+
+def resolve_extraction_date(cli_value: str | None) -> str:
+    """Resolve the logical extraction date from CLI first, then environment."""
+    value = cli_value or os.getenv("BRONZE_EXTRACTION_DATE")
+
+    if not value:
+        raise BronzeManifestValidationError(
+            "No extraction date provided. Use --extraction-date or BRONZE_EXTRACTION_DATE."
+        )
+
+    try:
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise BronzeManifestValidationError(
+            f"Invalid extraction date, expected YYYY-MM-DD: {value}"
+        ) from exc
+
+    return value
 
 
 def build_pronabec_manifest_check(
@@ -180,7 +201,6 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--extraction-date",
-        required=True,
         help="Fecha lógica de extracción YYYY-MM-DD.",
     )
     parser.add_argument(
@@ -195,6 +215,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    extraction_date = resolve_extraction_date(args.extraction_date)
 
     pipeline_settings = get_pipeline_settings(args.pipeline_config)
     endpoints_config = load_yaml_config(args.endpoints_config)
@@ -219,14 +240,14 @@ def main() -> None:
             endpoints_config=endpoints_config,
             bucket_name=bucket_name,
             bronze_normalized_template=gcs_paths["pronabec_bronze_normalized"],
-            extraction_date=args.extraction_date,
+            extraction_date=extraction_date,
         )
     else:
         checks = []
 
     validate_bronze_manifests(
         checks=checks,
-        extraction_date=args.extraction_date,
+        extraction_date=extraction_date,
         logger=logger,
     )
 
@@ -235,10 +256,13 @@ def main() -> None:
         "INFO",
         "Validación Bronze manifests completada",
         source_system=args.source_system,
-        extraction_date=args.extraction_date,
+        extraction_date=extraction_date,
         checks=len(checks),
     )
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except BronzeManifestValidationError as exc:
+        raise SystemExit(str(exc)) from None

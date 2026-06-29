@@ -6,6 +6,7 @@ from pipelines.validate_bronze_manifests import (
     BronzeManifestCheck,
     BronzeManifestValidationError,
     build_pronabec_manifest_check,
+    resolve_extraction_date,
     validate_manifest_payload,
 )
 
@@ -71,3 +72,36 @@ def test_validate_manifest_payload_rejects_wrong_date():
             },
             extraction_date="2026-06-28",
         )
+
+
+def test_resolve_extraction_date_prefers_cli_value(monkeypatch):
+    monkeypatch.setenv("BRONZE_EXTRACTION_DATE", "2026-06-29")
+
+    assert resolve_extraction_date("2026-06-28") == "2026-06-28"
+
+
+def test_resolve_extraction_date_uses_environment(monkeypatch):
+    monkeypatch.setenv("BRONZE_EXTRACTION_DATE", "2026-06-28")
+
+    assert resolve_extraction_date(None) == "2026-06-28"
+
+
+def test_resolve_extraction_date_fails_without_date(monkeypatch):
+    monkeypatch.delenv("BRONZE_EXTRACTION_DATE", raising=False)
+
+    with pytest.raises(BronzeManifestValidationError) as excinfo:
+        resolve_extraction_date(None)
+
+    assert (
+        "No extraction date provided. Use --extraction-date or BRONZE_EXTRACTION_DATE."
+        in str(excinfo.value)
+    )
+
+
+def test_resolve_extraction_date_rejects_invalid_date(monkeypatch):
+    monkeypatch.delenv("BRONZE_EXTRACTION_DATE", raising=False)
+
+    with pytest.raises(BronzeManifestValidationError) as excinfo:
+        resolve_extraction_date("2026/06/28")
+
+    assert "Invalid extraction date, expected YYYY-MM-DD: 2026/06/28" in str(excinfo.value)

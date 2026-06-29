@@ -409,6 +409,25 @@ class MEFExtractionError(Exception):
     """Error controlado durante extracción MEF."""
 
 
+def resolve_extraction_date(cli_value: str | None) -> str:
+    """Resolve the logical extraction date from CLI first, then environment."""
+    value = cli_value or os.getenv("BRONZE_EXTRACTION_DATE")
+
+    if not value:
+        raise ConfigError(
+            "No se definió extraction_date. Usa --extraction-date o BRONZE_EXTRACTION_DATE."
+        )
+
+    try:
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise ConfigError(
+            f"extraction_date inválida, se esperaba YYYY-MM-DD: {value}"
+        ) from exc
+
+    return value
+
+
 COLUMN_ALIASES = {
     "ano": {
         "ano",
@@ -2317,7 +2336,7 @@ def run_extraction(args: argparse.Namespace) -> None:
                     "o configura MEF_SOURCE_MODE en el entorno."
                 )
 
-    extraction_date = args.extraction_date or date.today().isoformat()
+    extraction_date = resolve_extraction_date(args.extraction_date)
     run_id = args.run_id or generate_run_id("mef_extraction")
 
     # 2. Determine range of years: CLI > env > defaults

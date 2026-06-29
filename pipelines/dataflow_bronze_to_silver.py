@@ -9,6 +9,7 @@ import csv
 import io
 import json
 import os
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -23,6 +24,8 @@ from pipelines.transforms.mef import transform_mef_record
 from pipelines.transforms.pronabec import transform_pronabec_record
 
 logger = setup_structured_logger("dataflow_bronze_to_silver", level="INFO")
+
+ENV_PLACEHOLDER_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
 class ReadCsvDoFn(beam.DoFn):
@@ -335,6 +338,54 @@ def parse_arguments(argv: list[str] | None = None) -> tuple[argparse.Namespace, 
     return args, pipeline_args
 
 
+def expand_env_placeholders(value: str | None) -> str | None:
+    """Expand ${VAR} placeholders in Cloud Run job args before validation."""
+    if value is None:
+        return None
+
+    def replace(match: re.Match[str]) -> str:
+        env_name = match.group(1)
+        env_value = os.getenv(env_name)
+        if env_value is None:
+            raise ValueError(f"Variable de entorno requerida no definida: {env_name}")
+        return env_value
+
+    return ENV_PLACEHOLDER_PATTERN.sub(replace, value)
+
+
+def resolve_runtime_arguments(args: argparse.Namespace) -> argparse.Namespace:
+    """Resolve Cloud Run environment-driven arguments used by launcher jobs."""
+    env_defaults = {
+        "source_dataset": "SOURCE_DATASET",
+        "extraction_date": "BRONZE_EXTRACTION_DATE",
+        "input_path": "INPUT_PATH",
+        "output_table": "OUTPUT_TABLE",
+        "pipeline_run_id": "PIPELINE_RUN_ID",
+    }
+
+    for field, env_name in env_defaults.items():
+        current_value = getattr(args, field, None)
+        if current_value is None or str(current_value).strip() == "":
+            env_value = os.getenv(env_name)
+            if env_value:
+                setattr(args, field, env_value)
+
+    expandable_fields = [
+        "source_dataset",
+        "extraction_date",
+        "input_path",
+        "output_table",
+        "pipeline_run_id",
+        "summary_output_path",
+    ]
+    for field in expandable_fields:
+        value = getattr(args, field, None)
+        if isinstance(value, str):
+            setattr(args, field, expand_env_placeholders(value))
+
+    return args
+
+
 def validate_arguments(args: argparse.Namespace) -> None:
     """
     Valida las opciones ingresadas por el usuario.
@@ -517,6 +568,7 @@ def run(argv: list[str] | None = None) -> None:
     # Intentar parsear argumentos de entrada de forma segura
     try:
         args, pipeline_args = parse_arguments(argv)
+        args = resolve_runtime_arguments(args)
         # Asegurar que el ID de proyecto esté en el entorno para DirectRunner
         project_id = args.project
         if not project_id and args.output_table:
