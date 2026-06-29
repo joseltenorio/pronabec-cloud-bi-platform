@@ -6,8 +6,13 @@ import pytest
 
 from pipelines.common.config import ConfigError
 from pipelines.common.orchestration_config import (
+    DatasetExtractionPolicy,
     build_bq_table_ref,
     build_gcs_uri,
+    get_chunked_pronabec_datasets,
+    get_enabled_pronabec_datasets,
+    get_pronabec_dataset_policies,
+    get_required_pronabec_datasets,
     load_endpoints_config,
     load_orchestration_config,
     resolve_airflow_var_name,
@@ -117,3 +122,124 @@ def test_bronze_manifest_validation_job_is_configured() -> None:
         resolve_airflow_var_name(config, "bronze_manifest_validation_job_name_var")
         == "bronze_manifest_validation_job_name"
     )
+
+
+def test_pronabec_dataset_policies_are_loaded_from_manifest() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+    policies = get_pronabec_dataset_policies(config)
+
+    assert policies
+    assert all(isinstance(policy, DatasetExtractionPolicy) for policy in policies)
+    assert {policy.source_dataset for policy in policies} >= {
+        "convocatorias",
+        "becarios_pais_estudio",
+        "notas_becarios",
+        "convocatorias_carrera_sede",
+    }
+
+
+def test_pronabec_dataset_policy_fields_are_typed() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+
+    for policy in get_pronabec_dataset_policies(config):
+        assert policy.source_dataset
+        assert isinstance(policy.extraction_enabled, bool)
+        assert isinstance(policy.silver_enabled, bool)
+        assert isinstance(policy.required_for_e2e, bool)
+        assert policy.extraction_mode in {"single", "chunked"}
+        assert policy.max_parallel_chunks > 0
+        if policy.extraction_mode == "chunked":
+            assert policy.chunk_size_pages is not None
+            assert policy.chunk_size_pages > 0
+        else:
+            assert policy.chunk_size_pages is None
+            assert policy.max_parallel_chunks == 1
+
+
+def test_pronabec_dataset_policies_use_real_endpoint_names() -> None:
+    orchestration_config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+    endpoints_config = load_endpoints_config(ENDPOINTS_CONFIG_PATH)
+
+    endpoint_names = {
+        endpoint["name"]
+        for endpoint in endpoints_config["pronabec"]["endpoints"]
+    }
+    policy_names = {
+        policy.source_dataset
+        for policy in get_pronabec_dataset_policies(orchestration_config)
+    }
+
+    assert policy_names <= endpoint_names
+
+
+def test_pronabec_dataset_policy_helpers_filter_by_flags() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+
+    assert get_enabled_pronabec_datasets(config) == [
+        "convocatorias",
+        "becarios_provincia",
+        "ubigeo_postulacion",
+        "colegios_habiles",
+        "becarios_pais_estudio",
+    ]
+    assert get_required_pronabec_datasets(config) == [
+        "convocatorias",
+        "becarios_provincia",
+        "ubigeo_postulacion",
+        "colegios_habiles",
+        "becarios_pais_estudio",
+    ]
+    assert "becarios_pais_estudio" in get_chunked_pronabec_datasets(config)
+    assert "notas_becarios" in get_chunked_pronabec_datasets(config)
+
+
+def test_pronabec_bronze_only_datasets_are_not_required_for_e2e() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+    policies = {
+        policy.source_dataset: policy
+        for policy in get_pronabec_dataset_policies(config)
+    }
+
+    for dataset in [
+        "notas_becarios",
+        "convocatorias_carrera_sede",
+        "perdida_becas",
+        "concepto_pago",
+        "periodos_academicos",
+        "nota_postulante_region",
+    ]:
+        assert policies[dataset].extraction_enabled is False
+        assert policies[dataset].silver_enabled is False
+        assert policies[dataset].required_for_e2e is False
+
+
+def test_invalid_pronabec_policy_mode_is_rejected() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+    config["datasets"]["pronabec_api"]["extraction_policies"][0]["extraction_mode"] = "full"
+
+    with pytest.raises(ConfigError, match="extraction_mode invalido"):
+        validate_orchestration_config(config)
+
+
+def test_chunked_pronabec_policy_requires_positive_chunk_size() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+    config["datasets"]["pronabec_api"]["extraction_policies"][0]["chunk_size_pages"] = 0
+
+    with pytest.raises(ConfigError, match="chunk_size_pages debe ser entero positivo"):
+        validate_orchestration_config(config)
+
+
+def test_pronabec_policy_requires_positive_max_parallel_chunks() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+    config["datasets"]["pronabec_api"]["extraction_policies"][0]["max_parallel_chunks"] = 0
+
+    with pytest.raises(ConfigError, match="max_parallel_chunks debe ser entero positivo"):
+        validate_orchestration_config(config)
+
+
+def test_pronabec_policy_requires_boolean_flags() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+    config["datasets"]["pronabec_api"]["extraction_policies"][0]["extraction_enabled"] = "yes"
+
+    with pytest.raises(ConfigError, match="extraction_enabled debe ser boolean"):
+        validate_orchestration_config(config)

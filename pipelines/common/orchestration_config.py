@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -10,6 +11,18 @@ from pipelines.common.gcs import build_gs_uri
 
 DEFAULT_ORCHESTRATION_CONFIG_PATH = Path("config/orchestration.yaml")
 DEFAULT_ENDPOINTS_CONFIG_PATH = Path("config/endpoints.yaml")
+PRONABEC_EXTRACTION_MODES = {"single", "chunked"}
+
+
+@dataclass(frozen=True)
+class DatasetExtractionPolicy:
+    source_dataset: str
+    extraction_enabled: bool
+    silver_enabled: bool
+    extraction_mode: str
+    required_for_e2e: bool
+    chunk_size_pages: int | None
+    max_parallel_chunks: int
 
 
 def load_orchestration_config(path: str | Path = DEFAULT_ORCHESTRATION_CONFIG_PATH) -> dict[str, Any]:
@@ -68,7 +81,45 @@ def validate_orchestration_config(config: dict[str, Any]) -> None:
         raise ConfigError(f"Faltan secciones requeridas en orchestration.yaml: {', '.join(sorted(missing))}")
 
     _validate_pronabec_reports_config(config)
+    _validate_pronabec_dataset_policies(config)
     _validate_gold_config(config)
+
+
+def get_pronabec_dataset_policies(config: dict[str, Any]) -> list[DatasetExtractionPolicy]:
+    """Return PRONABEC API extraction policies declared in orchestration.yaml."""
+    pronabec_api = config.get("datasets", {}).get("pronabec_api", {})
+    policies = pronabec_api.get("extraction_policies", [])
+    if not isinstance(policies, list):
+        raise ConfigError("datasets.pronabec_api.extraction_policies debe ser una lista")
+
+    return [_build_pronabec_dataset_policy(item) for item in policies]
+
+
+def get_enabled_pronabec_datasets(config: dict[str, Any]) -> list[str]:
+    """Return PRONABEC API datasets enabled for Bronze extraction."""
+    return [
+        policy.source_dataset
+        for policy in get_pronabec_dataset_policies(config)
+        if policy.extraction_enabled
+    ]
+
+
+def get_required_pronabec_datasets(config: dict[str, Any]) -> list[str]:
+    """Return PRONABEC API datasets required for the E2E path."""
+    return [
+        policy.source_dataset
+        for policy in get_pronabec_dataset_policies(config)
+        if policy.required_for_e2e
+    ]
+
+
+def get_chunked_pronabec_datasets(config: dict[str, Any]) -> list[str]:
+    """Return PRONABEC API datasets configured for chunked extraction."""
+    return [
+        policy.source_dataset
+        for policy in get_pronabec_dataset_policies(config)
+        if policy.extraction_mode == "chunked"
+    ]
 
 
 def resolve_pronabec_report_groups(
@@ -132,6 +183,69 @@ def resolve_pronabec_report_datasets(
     for group in resolve_pronabec_report_groups(orchestration_config, endpoints_config):
         datasets.extend(group["datasets"])
     return datasets
+
+
+def _validate_pronabec_dataset_policies(config: dict[str, Any]) -> None:
+    get_pronabec_dataset_policies(config)
+
+
+def _build_pronabec_dataset_policy(item: Any) -> DatasetExtractionPolicy:
+    if not isinstance(item, dict):
+        raise ConfigError("Cada policy PRONABEC debe ser un objeto")
+
+    source_dataset = item.get("source_dataset")
+    if not isinstance(source_dataset, str) or not source_dataset.strip():
+        raise ConfigError("Cada policy PRONABEC requiere source_dataset no vacio")
+
+    extraction_enabled = _require_bool(item, "extraction_enabled", source_dataset)
+    silver_enabled = _require_bool(item, "silver_enabled", source_dataset)
+    required_for_e2e = _require_bool(item, "required_for_e2e", source_dataset)
+
+    extraction_mode = item.get("extraction_mode")
+    if extraction_mode not in PRONABEC_EXTRACTION_MODES:
+        raise ConfigError(
+            f"extraction_mode invalido para {source_dataset}: {extraction_mode}. "
+            "Debe ser single o chunked"
+        )
+
+    chunk_size_pages = item.get("chunk_size_pages")
+    max_parallel_chunks = item.get("max_parallel_chunks", 1)
+
+    if extraction_mode == "chunked":
+        if not isinstance(chunk_size_pages, int) or chunk_size_pages <= 0:
+            raise ConfigError(
+                f"chunk_size_pages debe ser entero positivo para {source_dataset}"
+            )
+    elif chunk_size_pages is not None:
+        raise ConfigError(
+            f"chunk_size_pages debe ser null u omitirse para extraction_mode=single en {source_dataset}"
+        )
+
+    if not isinstance(max_parallel_chunks, int) or max_parallel_chunks <= 0:
+        raise ConfigError(
+            f"max_parallel_chunks debe ser entero positivo para {source_dataset}"
+        )
+    if extraction_mode == "single" and max_parallel_chunks != 1:
+        raise ConfigError(
+            f"max_parallel_chunks debe ser 1 para extraction_mode=single en {source_dataset}"
+        )
+
+    return DatasetExtractionPolicy(
+        source_dataset=source_dataset.strip(),
+        extraction_enabled=extraction_enabled,
+        silver_enabled=silver_enabled,
+        extraction_mode=extraction_mode,
+        required_for_e2e=required_for_e2e,
+        chunk_size_pages=chunk_size_pages,
+        max_parallel_chunks=max_parallel_chunks,
+    )
+
+
+def _require_bool(item: dict[str, Any], key: str, source_dataset: str) -> bool:
+    value = item.get(key)
+    if not isinstance(value, bool):
+        raise ConfigError(f"{key} debe ser boolean para {source_dataset}")
+    return value
 
 
 def _validate_pronabec_reports_config(config: dict[str, Any]) -> None:
