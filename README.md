@@ -197,7 +197,7 @@ Documentación técnica relacionada:
 
 ## Cloud Run Jobs
 
-El repositorio incluye scripts para publicar la imagen batch en Artifact Registry y registrar Cloud Run Jobs asociados a extracción PRONABEC, extracción MEF, staging de reportes documentales, validación de manifests Bronze (`bronze-manifest-validation-job`), publicación Gold, validación Gold y ejecución de controles de calidad.
+El repositorio incluye scripts para publicar la imagen batch en Artifact Registry y registrar Cloud Run Jobs asociados a discovery PRONABEC, construcción de plan, extracción particionada PRONABEC, finalización de datasets PRONABEC, extracción MEF, staging de reportes documentales, validación de manifests Bronze (`bronze-manifest-validation-job`), publicación Gold, validación Gold y ejecución de controles de calidad.
 
 Los jobs utilizan una imagen común y comandos diferenciados por módulo Python, manteniendo separación entre runtime, configuración y lógica de procesamiento.
 

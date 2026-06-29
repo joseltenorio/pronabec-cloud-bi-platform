@@ -129,7 +129,11 @@ Registre y actualice la configuración de todos los Cloud Run Jobs necesarios pa
 
 Este comando registrará los siguientes Cloud Run Jobs en su región de GCP:
 
-- **`pronabec-extract-job`**: extractor de la API pública PRONABEC.
+- **`pronabec-discovery-job`**: discovery PRONABEC por dataset para generar `discovery.json`.
+- **`pronabec-build-plan-job`**: construcción del `plan.json` con chunks lógicos.
+- **`pronabec-extract-chunk-job`**: extracción particionada PRONABEC con `OUTPUT_MODE=chunk`.
+- **`pronabec-finalize-dataset-job`**: consolidación final de chunks en Bronze.
+- **`pronabec-extract-job`**: extractor PRONABEC legado, mantenido por compatibilidad.
 - **`mef-extract-job`**: extractor presupuestal MEF.
 - **`pronabec-stage-reports-job`**: staging para reportes de Landing a Bronze.
 - **`bronze-manifest-validation-job`**: validación de manifests y marcadores `_SUCCESS` antes de ejecutar transformaciones Bronze a Silver.
@@ -153,7 +157,21 @@ Este comando registrará los siguientes Cloud Run Jobs en su región de GCP:
   - `dataflow-mef-hierarchy-job`
   - **`dataflow-pronabec-report-job`**: job parametrizable único para los 23 reportes documentales.
 
-El orden operativo completo orquestado por Composer es:
+El flujo manual recomendado para PRONABEC particionado es:
+
+```text
+build image
+deploy_cloud_run_jobs.ps1
+pronabec-discovery-job
+pronabec-build-plan-job
+pronabec-extract-chunk-job
+pronabec-finalize-dataset-job
+validar Bronze final en GCS
+```
+
+Composer todavía no participa en este bloque particionado. El DAG se actualizará en el siguiente bloque para orquestar estos jobs nuevos.
+
+El orden operativo completo orquestado por Composer, para la versión anterior del flujo, es:
 
 ```text
 extract_pronabec_api
@@ -168,6 +186,8 @@ publish_gold_views
 validate_gold_contracts
 run_quality_checks
 ```
+
+La extracción PRONABEC se optimizó calibrando el `page_size` por endpoint: la carga estimada de paginación bajó de 6,623 requests a 122 requests, con fallbacks por dataset para endpoints públicos inestables.
 
 ---
 
@@ -252,6 +272,8 @@ _SUCCESS
 ```
 
 La tarea `validate_bronze_manifests` valida estas señales antes de lanzar los jobs Dataflow. Si la validación falla, el flujo se detiene y las capas Silver/Gold no se actualizan con datos incompletos.
+
+Los chunks intermedios de PRONABEC se escriben primero en `bronze_work/` y no deben ser leídos por Dataflow. Solo el Bronze final consolidado por `pronabec-finalize-dataset-job` se considera apto para la validación y promoción.
 
 ---
 

@@ -88,6 +88,46 @@ El job utiliza la lógica de extracción versionada en:
 pipelines/extract_pronabec.py
 ```
 
+### `pronabec-discovery-job`
+
+Ejecuta el discovery PRONABEC por dataset. El job calcula el `effective_page_size`, observa `total_records` y `total_pages`, y escribe `discovery.json` en `bronze_work/pronabec/_plans/`.
+
+El job utiliza:
+
+```text
+pipelines/discover_pronabec.py
+```
+
+### `pronabec-build-plan-job`
+
+Construye `plan.json` a partir del `discovery.json` generado previamente. El planificador divide los datasets en chunks lógicos cuando la política declarativa lo requiere.
+
+El job utiliza:
+
+```text
+python -m pipelines.build_pronabec_extraction_plan
+```
+
+### `pronabec-extract-chunk-job`
+
+Ejecuta la extracción particionada PRONABEC para un `SOURCE_DATASET` y un rango `PAGE_START`/`PAGE_END` concretos. El job usa `OUTPUT_MODE=chunk` y escribe en `bronze_work/pronabec/...` para permitir consolidación posterior.
+
+El job utiliza:
+
+```text
+python -m pipelines.extract_pronabec
+```
+
+### `pronabec-finalize-dataset-job`
+
+Consolida los chunks de un dataset PRONABEC en la ubicación Bronze final, escribiendo `data.jsonl`, `manifest.json` y `_SUCCESS` una vez que todos los chunks requeridos están disponibles.
+
+El job utiliza:
+
+```text
+python -m pipelines.finalize_pronabec_dataset
+```
+
 ### `mef-extract-job`
 
 Ejecuta el proceso batch de extracción MEF. Su responsabilidad es obtener información presupuestal pública y conservarla en la zona Bronze bajo las reglas de preservación del dato crudo.
@@ -213,7 +253,10 @@ Los jobs de calidad ejecutan reglas SQL y registran resultados estructurados en 
 Los jobs utilizan una imagen común y comandos diferenciados mediante argumentos de ejecución. La imagen define `python` como punto de entrada, por lo que cada job declara el módulo Python correspondiente como argumento.
 
 ```text
+python -m pipelines.discover_pronabec
+python -m pipelines.build_pronabec_extraction_plan
 python -m pipelines.extract_pronabec
+python -m pipelines.finalize_pronabec_dataset
 python -m pipelines.scrape_mef_budget
 python tools/stage_pronabec_manual_reports.py --input-uri gs://<bucket>/landing/pronabec_reports/<subset> --output-uri gs://<bucket>/bronze/pronabec_reports --extraction-date <YYYY-MM-DD> --source-subset <subset> --strict
 python -m pipelines.publish_gold_views
@@ -240,6 +283,13 @@ BQ_LOCATION
 STRUCTURED_LOGGING
 LOG_LEVEL
 BRONZE_EXTRACTION_DATE
+PIPELINE_RUN_ID
+SOURCE_DATASET
+PAGE_START
+PAGE_END
+OUTPUT_MODE
+PRONABEC_PAGE_SIZE
+PAGE_SIZE
 SOURCE_SUBSET
 PRONABEC_REPORTS_LANDING_PREFIX
 PRONABEC_REPORTS_BRONZE_PREFIX
