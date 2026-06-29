@@ -87,8 +87,10 @@ def build_plan(
         if source_dataset_filter and dataset_name != source_dataset_filter:
             continue
 
-        # Solo planificar si discovery fue SUCCESS y extraction_enabled es True
-        if ds_discovered.get("status") != "SUCCESS" or not ds_discovered.get("extraction_enabled"):
+        # Si el dataset fue solicitado explícitamente, permitimos planificarlo aunque esté deshabilitado.
+        if ds_discovered.get("status") != "SUCCESS":
+            continue
+        if not ds_discovered.get("extraction_enabled") and not source_dataset_filter:
             continue
 
         policy = policies.get(dataset_name)

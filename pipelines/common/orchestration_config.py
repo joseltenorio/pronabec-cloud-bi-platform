@@ -274,7 +274,12 @@ def _build_pronabec_dataset_policy(item: Any) -> DatasetExtractionPolicy:
     if not isinstance(page_size_policy, str) or not page_size_policy.strip():
         raise ConfigError(f"page_size_policy debe ser string no vacio para {source_dataset}")
 
-    allow_record_count_mismatch = bool(item.get("allow_record_count_mismatch", False))
+    allow_record_count_mismatch = _require_optional_bool(
+        item,
+        "allow_record_count_mismatch",
+        source_dataset,
+        default=False,
+    )
 
     return DatasetExtractionPolicy(
         source_dataset=source_dataset.strip(),
@@ -293,6 +298,20 @@ def _build_pronabec_dataset_policy(item: Any) -> DatasetExtractionPolicy:
 
 
 def _require_bool(item: dict[str, Any], key: str, source_dataset: str) -> bool:
+    value = item.get(key)
+    if not isinstance(value, bool):
+        raise ConfigError(f"{key} debe ser boolean para {source_dataset}")
+    return value
+
+
+def _require_optional_bool(
+    item: dict[str, Any],
+    key: str,
+    source_dataset: str,
+    default: bool,
+) -> bool:
+    if key not in item or item.get(key) is None:
+        return default
     value = item.get(key)
     if not isinstance(value, bool):
         raise ConfigError(f"{key} debe ser boolean para {source_dataset}")
