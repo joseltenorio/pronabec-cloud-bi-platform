@@ -250,7 +250,7 @@ Documentación técnica relacionada:
 
 ## Orquestación batch
 
-El proyecto define un DAG de Cloud Composer para coordinar procesos batch de la plataforma Medallion. Composer actúa como capa de orquestación y ejecuta Cloud Run Jobs registrados para extracción PRONABEC, extracción MEF, staging de reportes documentales, validación de manifests Bronze, publicación Gold, validación Gold y controles de calidad.
+El proyecto define un DAG de Cloud Composer para coordinar procesos batch de la plataforma Medallion. Composer actúa como capa de orquestación y ejecuta Cloud Run Jobs registrados para discovery PRONABEC, plan de extracción, extracción particionada, finalización Bronze, extracción MEF, staging de reportes documentales, validación de manifests Bronze, publicación Gold, validación Gold y controles de calidad.
 
 La lógica de procesamiento permanece separada en los módulos Python, Cloud Run Jobs, Dataflow y BigQuery. El DAG mantiene dependencias, parámetros operativos, reintentos y control de concurrencia.
 

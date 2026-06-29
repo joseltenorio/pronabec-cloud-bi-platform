@@ -169,12 +169,15 @@ pronabec-finalize-dataset-job
 validar Bronze final en GCS
 ```
 
-Composer todavía no participa en este bloque particionado. El DAG se actualizará en el siguiente bloque para orquestar estos jobs nuevos.
+Composer orquesta este flujo particionado desde el DAG `pronabec_medallion_batch`.
 
-El orden operativo completo orquestado por Composer, para la versión anterior del flujo, es:
+El orden operativo completo orquestado por Composer es:
 
 ```text
-extract_pronabec_api
+discover_pronabec_datasets
+build_pronabec_extraction_plan
+extract_pronabec_chunks
+finalize_pronabec_datasets
 extract_mef
 stage_pronabec_reports_pes_2025
 stage_pronabec_reports_beca18_universitarios_2012_2026
@@ -253,6 +256,30 @@ Aunque el DAG `pronabec_medallion_batch` está programado para ejecutarse de for
 1. Abra la interfaz web de Airflow en Google Cloud Composer.
 2. Busque el DAG `pronabec_medallion_batch`.
 3. Presione el botón **Trigger DAG** o use **Trigger DAG w/ config** para enviar parámetros como una `extraction_date` personalizada.
+
+Ejemplo de configuración manual:
+
+```json
+{
+  "extraction_date": "2026-06-29",
+  "run_pronabec": true,
+  "run_pronabec_discovery": true,
+  "run_pronabec_build_plan": true,
+  "run_pronabec_chunk_extraction": true,
+  "run_pronabec_finalize": true,
+  "run_mef": true,
+  "run_pronabec_reports_staging": true,
+  "run_bronze_manifest_validation": true,
+  "run_dataflow_pronabec": true,
+  "run_dataflow_mef": true,
+  "run_dataflow_reports": true,
+  "run_gold_publish": true,
+  "run_gold_validation": true,
+  "run_quality": true
+}
+```
+
+Para depurar PRONABEC, pruebe primero `pronabec-discovery-job`, luego `pronabec-build-plan-job`, luego un `pronabec-extract-chunk-job` con un rango pequeño y finalmente `pronabec-finalize-dataset-job`. Después ejecute el DAG completo.
 
 ---
 
