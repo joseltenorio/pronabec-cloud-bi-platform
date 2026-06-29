@@ -39,6 +39,10 @@ datasets:
         required_for_e2e: false
         chunk_size_pages: 100
         max_parallel_chunks: 2
+        recommended_page_size: 500
+        fallback_page_sizes: [100]
+        max_page_size_tested_ok: 10000
+        page_size_policy: dataset_safe_default
       - source_dataset: notas_becarios
         extraction_enabled: false
         silver_enabled: false
@@ -46,6 +50,10 @@ datasets:
         required_for_e2e: false
         chunk_size_pages: 100
         max_parallel_chunks: 2
+        recommended_page_size: 10000
+        fallback_page_sizes: [5000, 2000, 1000, 500, 100]
+        max_page_size_tested_ok: 20000
+        page_size_policy: dataset_safe_default
       - source_dataset: concepto_pago
         extraction_enabled: false
         silver_enabled: false
@@ -53,6 +61,10 @@ datasets:
         required_for_e2e: false
         chunk_size_pages: 100
         max_parallel_chunks: 2
+        recommended_page_size: 1000
+        fallback_page_sizes: [500, 100]
+        max_page_size_tested_ok: 10000
+        page_size_policy: dataset_safe_default
       - source_dataset: convocatorias
         extraction_enabled: true
         silver_enabled: true
@@ -60,6 +72,10 @@ datasets:
         required_for_e2e: true
         chunk_size_pages: null
         max_parallel_chunks: 1
+        recommended_page_size: 1000
+        fallback_page_sizes: [500, 100]
+        max_page_size_tested_ok: 10000
+        page_size_policy: dataset_safe_default
       - source_dataset: becarios_provincia
         extraction_enabled: true
         silver_enabled: true
@@ -67,6 +83,10 @@ datasets:
         required_for_e2e: true
         chunk_size_pages: null
         max_parallel_chunks: 1
+        recommended_page_size: 500
+        fallback_page_sizes: [100]
+        max_page_size_tested_ok: 10000
+        page_size_policy: dataset_safe_default
       - source_dataset: ubigeo_postulacion
         extraction_enabled: true
         silver_enabled: true
@@ -74,6 +94,10 @@ datasets:
         required_for_e2e: true
         chunk_size_pages: null
         max_parallel_chunks: 1
+        recommended_page_size: 2000
+        fallback_page_sizes: [1000, 500, 100]
+        max_page_size_tested_ok: 10000
+        page_size_policy: dataset_safe_default
       - source_dataset: periodos_academicos
         extraction_enabled: false
         silver_enabled: false
@@ -81,6 +105,10 @@ datasets:
         required_for_e2e: false
         chunk_size_pages: 100
         max_parallel_chunks: 2
+        recommended_page_size: 500
+        fallback_page_sizes: [100]
+        max_page_size_tested_ok: 10000
+        page_size_policy: dataset_safe_default
       - source_dataset: colegios_habiles
         extraction_enabled: true
         silver_enabled: true
@@ -88,6 +116,10 @@ datasets:
         required_for_e2e: true
         chunk_size_pages: null
         max_parallel_chunks: 1
+        recommended_page_size: 5000
+        fallback_page_sizes: [2000, 1000, 500, 100]
+        max_page_size_tested_ok: 5000
+        page_size_policy: dataset_safe_default
       - source_dataset: becarios_pais_estudio
         extraction_enabled: true
         silver_enabled: true
@@ -95,6 +127,10 @@ datasets:
         required_for_e2e: true
         chunk_size_pages: 100
         max_parallel_chunks: 3
+        recommended_page_size: 10000
+        fallback_page_sizes: [5000, 2000, 1000, 500, 100]
+        max_page_size_tested_ok: 10000
+        page_size_policy: dataset_safe_default
       - source_dataset: convocatorias_carrera_sede
         extraction_enabled: false
         silver_enabled: false
@@ -102,6 +138,10 @@ datasets:
         required_for_e2e: false
         chunk_size_pages: 100
         max_parallel_chunks: 2
+        recommended_page_size: 5000
+        fallback_page_sizes: [2000, 1000, 500, 100]
+        max_page_size_tested_ok: 5000
+        page_size_policy: dataset_safe_default
       - source_dataset: nota_postulante_region
         extraction_enabled: false
         silver_enabled: false
@@ -109,6 +149,10 @@ datasets:
         required_for_e2e: false
         chunk_size_pages: 100
         max_parallel_chunks: 2
+        recommended_page_size: 500
+        fallback_page_sizes: [100]
+        max_page_size_tested_ok: 10000
+        page_size_policy: dataset_safe_default
     items:
       - source_dataset: convocatorias
         job_name: dataflow-pronabec-convocatorias-job

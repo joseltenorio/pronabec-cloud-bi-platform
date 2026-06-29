@@ -23,6 +23,10 @@ class DatasetExtractionPolicy:
     required_for_e2e: bool
     chunk_size_pages: int | None
     max_parallel_chunks: int
+    recommended_page_size: int
+    fallback_page_sizes: list[int]
+    max_page_size_tested_ok: int | None
+    page_size_policy: str
 
 
 def load_orchestration_config(path: str | Path = DEFAULT_ORCHESTRATION_CONFIG_PATH) -> dict[str, Any]:
@@ -230,6 +234,45 @@ def _build_pronabec_dataset_policy(item: Any) -> DatasetExtractionPolicy:
             f"max_parallel_chunks debe ser 1 para extraction_mode=single en {source_dataset}"
         )
 
+    recommended_page_size = item.get("recommended_page_size")
+    if not isinstance(recommended_page_size, int) or recommended_page_size <= 0:
+        raise ConfigError(
+            f"recommended_page_size debe ser entero positivo para {source_dataset}"
+        )
+
+    fallback_page_sizes = item.get("fallback_page_sizes")
+    if not isinstance(fallback_page_sizes, list) or not fallback_page_sizes:
+        raise ConfigError(
+            f"fallback_page_sizes debe ser una lista no vacia para {source_dataset}"
+        )
+    if not all(isinstance(value, int) and value > 0 for value in fallback_page_sizes):
+        raise ConfigError(
+            f"fallback_page_sizes debe contener enteros positivos para {source_dataset}"
+        )
+    if fallback_page_sizes != sorted(fallback_page_sizes, reverse=True):
+        raise ConfigError(
+            f"fallback_page_sizes debe estar ordenado de mayor a menor para {source_dataset}"
+        )
+    if any(value > recommended_page_size for value in fallback_page_sizes):
+        raise ConfigError(
+            f"fallback_page_sizes no puede contener valores mayores que recommended_page_size para {source_dataset}"
+        )
+
+    max_page_size_tested_ok = item.get("max_page_size_tested_ok")
+    if max_page_size_tested_ok is not None:
+        if not isinstance(max_page_size_tested_ok, int) or max_page_size_tested_ok <= 0:
+            raise ConfigError(
+                f"max_page_size_tested_ok debe ser entero positivo o null para {source_dataset}"
+            )
+        if recommended_page_size > max_page_size_tested_ok:
+            raise ConfigError(
+                f"recommended_page_size no puede ser mayor que max_page_size_tested_ok para {source_dataset}"
+            )
+
+    page_size_policy = item.get("page_size_policy")
+    if not isinstance(page_size_policy, str) or not page_size_policy.strip():
+        raise ConfigError(f"page_size_policy debe ser string no vacio para {source_dataset}")
+
     return DatasetExtractionPolicy(
         source_dataset=source_dataset.strip(),
         extraction_enabled=extraction_enabled,
@@ -238,6 +281,10 @@ def _build_pronabec_dataset_policy(item: Any) -> DatasetExtractionPolicy:
         required_for_e2e=required_for_e2e,
         chunk_size_pages=chunk_size_pages,
         max_parallel_chunks=max_parallel_chunks,
+        recommended_page_size=recommended_page_size,
+        fallback_page_sizes=fallback_page_sizes,
+        max_page_size_tested_ok=max_page_size_tested_ok,
+        page_size_policy=page_size_policy.strip(),
     )
 
 

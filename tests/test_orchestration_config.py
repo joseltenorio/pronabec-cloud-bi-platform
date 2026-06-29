@@ -148,6 +148,15 @@ def test_pronabec_dataset_policy_fields_are_typed() -> None:
         assert isinstance(policy.required_for_e2e, bool)
         assert policy.extraction_mode in {"single", "chunked"}
         assert policy.max_parallel_chunks > 0
+        assert policy.recommended_page_size > 0
+        assert policy.fallback_page_sizes
+        assert all(value > 0 for value in policy.fallback_page_sizes)
+        assert policy.fallback_page_sizes == sorted(policy.fallback_page_sizes, reverse=True)
+        assert all(value <= policy.recommended_page_size for value in policy.fallback_page_sizes)
+        if policy.max_page_size_tested_ok is not None:
+            assert policy.max_page_size_tested_ok > 0
+            assert policy.recommended_page_size <= policy.max_page_size_tested_ok
+        assert policy.page_size_policy == "dataset_safe_default"
         if policy.extraction_mode == "chunked":
             assert policy.chunk_size_pages is not None
             assert policy.chunk_size_pages > 0
@@ -242,4 +251,68 @@ def test_pronabec_policy_requires_boolean_flags() -> None:
     config["datasets"]["pronabec_api"]["extraction_policies"][0]["extraction_enabled"] = "yes"
 
     with pytest.raises(ConfigError, match="extraction_enabled debe ser boolean"):
+        validate_orchestration_config(config)
+
+
+def test_pronabec_page_size_policy_values_are_calibrated() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+    policies = {
+        policy.source_dataset: policy
+        for policy in get_pronabec_dataset_policies(config)
+    }
+
+    assert policies["notas_becarios"].recommended_page_size == 10000
+    assert policies["notas_becarios"].fallback_page_sizes == [5000, 2000, 1000, 500, 100]
+    assert policies["notas_becarios"].max_page_size_tested_ok == 20000
+    assert policies["becarios_pais_estudio"].recommended_page_size == 10000
+    assert policies["convocatorias_carrera_sede"].recommended_page_size == 5000
+    assert policies["ubigeo_postulacion"].recommended_page_size == 2000
+    assert policies["becarios_provincia"].recommended_page_size == 500
+
+
+def test_pronabec_policy_requires_positive_recommended_page_size() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+    config["datasets"]["pronabec_api"]["extraction_policies"][0]["recommended_page_size"] = 0
+
+    with pytest.raises(ConfigError, match="recommended_page_size debe ser entero positivo"):
+        validate_orchestration_config(config)
+
+
+def test_pronabec_policy_requires_positive_fallback_page_sizes() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+    config["datasets"]["pronabec_api"]["extraction_policies"][0]["fallback_page_sizes"] = [100, 0]
+
+    with pytest.raises(ConfigError, match="fallback_page_sizes debe contener enteros positivos"):
+        validate_orchestration_config(config)
+
+
+def test_pronabec_policy_requires_descending_fallback_page_sizes() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+    config["datasets"]["pronabec_api"]["extraction_policies"][0]["fallback_page_sizes"] = [100, 500]
+
+    with pytest.raises(ConfigError, match="fallback_page_sizes debe estar ordenado"):
+        validate_orchestration_config(config)
+
+
+def test_pronabec_policy_rejects_fallback_above_recommended_page_size() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+    config["datasets"]["pronabec_api"]["extraction_policies"][0]["fallback_page_sizes"] = [1000, 100]
+
+    with pytest.raises(ConfigError, match="fallback_page_sizes no puede contener valores mayores"):
+        validate_orchestration_config(config)
+
+
+def test_pronabec_policy_rejects_recommended_above_tested_max() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+    config["datasets"]["pronabec_api"]["extraction_policies"][0]["recommended_page_size"] = 20000
+
+    with pytest.raises(ConfigError, match="recommended_page_size no puede ser mayor"):
+        validate_orchestration_config(config)
+
+
+def test_pronabec_policy_requires_non_empty_page_size_policy() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+    config["datasets"]["pronabec_api"]["extraction_policies"][0]["page_size_policy"] = ""
+
+    with pytest.raises(ConfigError, match="page_size_policy debe ser string no vacio"):
         validate_orchestration_config(config)
