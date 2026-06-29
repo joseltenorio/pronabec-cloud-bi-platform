@@ -17,6 +17,10 @@ runtime:
 
 jobs:
   pronabec_extract_job_name_var: pronabec_extract_job_name
+  pronabec_discovery_job_name_var: pronabec_discovery_job_name
+  pronabec_build_plan_job_name_var: pronabec_build_plan_job_name
+  pronabec_extract_chunk_job_name_var: pronabec_extract_chunk_job_name
+  pronabec_finalize_dataset_job_name_var: pronabec_finalize_dataset_job_name
   mef_extract_job_name_var: mef_extract_job_name
   pronabec_reports_stage_job_name_var: pronabec_reports_stage_job_name
   pronabec_reports_dataflow_job_name_var: dataflow_pronabec_report_job_name
@@ -31,6 +35,25 @@ datasets:
     source_system: pronabec
     bronze_path_template: "bronze/pronabec/{dataset}/extraction_date={extraction_date}/data.jsonl"
     silver_table_template: "{project_id}:{silver_dataset}.pronabec_{dataset}"
+    static_chunk_ranges:
+      - source_dataset: convocatorias_carrera_sede
+        ranges:
+          - page_start: 1
+            page_end: 10
+          - page_start: 11
+            page_end: 20
+          - page_start: 21
+            page_end: 30
+          - page_start: 31
+            page_end: 40
+          - page_start: 41
+            page_end: 50
+          - page_start: 51
+            page_end: 60
+          - page_start: 61
+            page_end: 70
+          - page_start: 71
+            page_end: 80
     extraction_policies:
       - source_dataset: perdida_becas
         extraction_enabled: false

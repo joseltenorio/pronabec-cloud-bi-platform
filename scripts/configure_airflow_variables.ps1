@@ -15,6 +15,10 @@ param(
     [string]$AuditDataset = $(if ($env:BQ_AUDIT_DATASET) { $env:BQ_AUDIT_DATASET } else { "audit" }),
 
     [string]$PronabecExtractJobName = $(if ($env:PRONABEC_EXTRACT_JOB_NAME) { $env:PRONABEC_EXTRACT_JOB_NAME } else { "pronabec-extract-job" }),
+    [string]$PronabecDiscoveryJobName = $(if ($env:PRONABEC_DISCOVERY_JOB_NAME) { $env:PRONABEC_DISCOVERY_JOB_NAME } else { "pronabec-discovery-job" }),
+    [string]$PronabecBuildPlanJobName = $(if ($env:PRONABEC_BUILD_PLAN_JOB_NAME) { $env:PRONABEC_BUILD_PLAN_JOB_NAME } else { "pronabec-build-plan-job" }),
+    [string]$PronabecExtractChunkJobName = $(if ($env:PRONABEC_EXTRACT_CHUNK_JOB_NAME) { $env:PRONABEC_EXTRACT_CHUNK_JOB_NAME } else { "pronabec-extract-chunk-job" }),
+    [string]$PronabecFinalizeDatasetJobName = $(if ($env:PRONABEC_FINALIZE_DATASET_JOB_NAME) { $env:PRONABEC_FINALIZE_DATASET_JOB_NAME } else { "pronabec-finalize-dataset-job" }),
     [string]$MefExtractJobName = $(if ($env:MEF_EXTRACT_JOB_NAME) { $env:MEF_EXTRACT_JOB_NAME } else { "mef-extract-job" }),
     [string]$PronabecReportsStageJobName = $(if ($env:PRONABEC_REPORTS_STAGE_JOB_NAME) { $env:PRONABEC_REPORTS_STAGE_JOB_NAME } else { "pronabec-stage-reports-job" }),
     [string]$BronzeManifestValidationJobName = $(if ($env:BRONZE_MANIFEST_VALIDATION_JOB_NAME) { $env:BRONZE_MANIFEST_VALIDATION_JOB_NAME } else { "bronze-manifest-validation-job" }),
@@ -93,6 +97,10 @@ $Variables = [ordered]@{
     "bq_audit_dataset" = $AuditDataset
 
     "pronabec_extract_job_name" = $PronabecExtractJobName
+    "pronabec_discovery_job_name" = $PronabecDiscoveryJobName
+    "pronabec_build_plan_job_name" = $PronabecBuildPlanJobName
+    "pronabec_extract_chunk_job_name" = $PronabecExtractChunkJobName
+    "pronabec_finalize_dataset_job_name" = $PronabecFinalizeDatasetJobName
     "mef_extract_job_name" = $MefExtractJobName
     "pronabec_reports_stage_job_name" = $PronabecReportsStageJobName
     "bronze_manifest_validation_job_name" = $BronzeManifestValidationJobName
