@@ -27,6 +27,7 @@ class DatasetExtractionPolicy:
     fallback_page_sizes: list[int]
     max_page_size_tested_ok: int | None
     page_size_policy: str
+    allow_record_count_mismatch: bool = False
 
 
 def load_orchestration_config(path: str | Path = DEFAULT_ORCHESTRATION_CONFIG_PATH) -> dict[str, Any]:
@@ -273,6 +274,8 @@ def _build_pronabec_dataset_policy(item: Any) -> DatasetExtractionPolicy:
     if not isinstance(page_size_policy, str) or not page_size_policy.strip():
         raise ConfigError(f"page_size_policy debe ser string no vacio para {source_dataset}")
 
+    allow_record_count_mismatch = bool(item.get("allow_record_count_mismatch", False))
+
     return DatasetExtractionPolicy(
         source_dataset=source_dataset.strip(),
         extraction_enabled=extraction_enabled,
@@ -285,6 +288,7 @@ def _build_pronabec_dataset_policy(item: Any) -> DatasetExtractionPolicy:
         fallback_page_sizes=fallback_page_sizes,
         max_page_size_tested_ok=max_page_size_tested_ok,
         page_size_policy=page_size_policy.strip(),
+        allow_record_count_mismatch=allow_record_count_mismatch,
     )
 
 

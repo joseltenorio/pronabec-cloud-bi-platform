@@ -87,6 +87,7 @@ datasets:
         fallback_page_sizes: [100]
         max_page_size_tested_ok: 10000
         page_size_policy: dataset_safe_default
+        allow_record_count_mismatch: true
       - source_dataset: ubigeo_postulacion
         extraction_enabled: true
         silver_enabled: true
