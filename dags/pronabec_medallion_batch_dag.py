@@ -93,7 +93,6 @@ BRONZE_MANIFEST_VALIDATION_JOB = airflow_var_template(
     resolve_airflow_var_name(
         ORCHESTRATION_CONFIG,
         "bronze_manifest_validation_job_name_var",
-        default="bronze_manifest_validation_job_name",
     ),
     "bronze-manifest-validation-job",
 )
