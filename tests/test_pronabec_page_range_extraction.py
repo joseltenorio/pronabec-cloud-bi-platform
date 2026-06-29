@@ -64,6 +64,7 @@ def test_page_end_above_total_pages_processes_until_total_pages(monkeypatch: pyt
         endpoint={"name": "convocatorias", "path": "Convocatorias", "expected_columns": ["valor"]},
         base_url="https://example.test/Dataset",
         rows_per_page=500,
+        requested_page_size=500,
         max_pages=None,
         page_start=1,
         page_end=10,

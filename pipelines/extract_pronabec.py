@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 import random
+import re
 import time
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -43,6 +44,7 @@ DEFAULT_ENDPOINTS_CONFIG = "config/endpoints.yaml"
 DEFAULT_PIPELINE_CONFIG = "config/pipeline.yaml"
 DEFAULT_ORCHESTRATION_CONFIG = "config/orchestration.yaml"
 DEFAULT_ROWS_PER_PAGE = 100
+OUTPUT_MODES = {"final", "chunk"}
 
 DEFAULT_TIMEOUT_SECONDS = 180
 DEFAULT_MAX_RETRIES = 5
@@ -172,6 +174,43 @@ def resolve_page_range(
     if page_end < page_start:
         raise PronabecExtractionError("PAGE_END debe ser mayor o igual que PAGE_START.")
     return page_start, page_end
+
+
+def resolve_output_mode(cli_value: str | None) -> str:
+    value = cli_value or os.getenv("OUTPUT_MODE") or "final"
+    if value not in OUTPUT_MODES:
+        raise PronabecExtractionError("OUTPUT_MODE debe ser final o chunk.")
+    return value
+
+
+def resolve_pipeline_run_id(cli_value: str | None, legacy_value: str | None = None) -> str | None:
+    return cli_value or legacy_value or os.getenv("PIPELINE_RUN_ID")
+
+
+def validate_chunk_output_contract(
+    output_mode: str,
+    source_dataset: str | None,
+    page_start: int | None,
+    page_end: int | None,
+    pipeline_run_id: str | None,
+) -> None:
+    if output_mode != "chunk":
+        return
+    if not source_dataset:
+        raise PronabecExtractionError("OUTPUT_MODE=chunk requiere SOURCE_DATASET o --source-dataset.")
+    if page_start is None or page_end is None:
+        raise PronabecExtractionError("OUTPUT_MODE=chunk requiere PAGE_START y PAGE_END.")
+    if not pipeline_run_id:
+        raise PronabecExtractionError("OUTPUT_MODE=chunk requiere PIPELINE_RUN_ID o --pipeline-run-id.")
+    validate_chunk_path_component(source_dataset, "source_dataset")
+    validate_chunk_path_component(pipeline_run_id, "pipeline_run_id")
+
+
+def validate_chunk_path_component(value: str, name: str) -> None:
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", value):
+        raise PronabecExtractionError(
+            f"{name} contiene caracteres no permitidos para rutas chunk: {value}"
+        )
 
 
 def resolve_retry_settings(
@@ -575,6 +614,7 @@ def consolidate_raw_payload(
     dataset_name: str,
     url: str,
     pages: list[dict[str, Any]],
+    requested_page_size: int | None = None,
     effective_page_size: int | None = None,
     page_start: int | None = None,
     page_end: int | None = None,
@@ -591,6 +631,7 @@ def consolidate_raw_payload(
         "total_pages": first_page.get("total"),
         "reported_records": first_page.get("records"),
         "pages_read": len(pages),
+        "requested_page_size": requested_page_size,
         "effective_page_size": effective_page_size,
         "page_start": page_start,
         "page_end": page_end,
@@ -674,6 +715,7 @@ def extract_dataset(
     endpoint: dict[str, Any],
     base_url: str,
     rows_per_page: int,
+    requested_page_size: int | None,
     max_pages: int | None,
     page_start: int | None,
     page_end: int | None,
@@ -800,6 +842,7 @@ def extract_dataset(
         dataset_name=dataset_name,
         url=url,
         pages=pages,
+        requested_page_size=requested_page_size,
         effective_page_size=rows_per_page,
         page_start=first_page_number,
         page_end=pages_to_read,
@@ -921,6 +964,115 @@ def write_dataset_to_gcs(
     }
 
 
+def build_pronabec_chunk_base_path(
+    dataset_name: str,
+    extraction_date: str,
+    pipeline_run_id: str,
+    page_start: int,
+    page_end: int,
+) -> str:
+    validate_chunk_path_component(dataset_name, "source_dataset")
+    validate_chunk_path_component(pipeline_run_id, "pipeline_run_id")
+    return (
+        "bronze_work/pronabec/"
+        f"{dataset_name}/"
+        f"extraction_date={extraction_date}/"
+        f"run_id={pipeline_run_id}/"
+        f"chunk_start={page_start}_chunk_end={page_end}"
+    )
+
+
+def build_chunk_manifest(
+    dataset_name: str,
+    extraction_date: str,
+    pipeline_run_id: str,
+    page_start: int,
+    page_end: int,
+    raw_payload: dict[str, Any],
+    records_written: int,
+    started_at: datetime,
+    finished_at: datetime,
+    status: str = "SUCCESS",
+    error_message: str | None = None,
+) -> dict[str, Any]:
+    manifest = {
+        "source_system": "pronabec",
+        "source_dataset": dataset_name,
+        "extraction_date": extraction_date,
+        "pipeline_run_id": pipeline_run_id,
+        "page_start": page_start,
+        "page_end": page_end,
+        "requested_page_size": raw_payload.get("requested_page_size"),
+        "effective_page_size": raw_payload.get("effective_page_size"),
+        "records_written": records_written,
+        "total_records_observed": raw_payload.get("reported_records"),
+        "total_pages_observed": raw_payload.get("total_pages"),
+        "started_at": started_at.isoformat(),
+        "finished_at": finished_at.isoformat(),
+        "status": status,
+    }
+    if error_message:
+        manifest["error_message"] = error_message
+    return manifest
+
+
+def write_chunk_dataset_to_gcs(
+    dataset_name: str,
+    raw_payload: dict[str, Any],
+    normalized_records: list[dict[str, Any]],
+    bucket_name: str,
+    extraction_date: str,
+    pipeline_run_id: str,
+    page_start: int,
+    page_end: int,
+    started_at: datetime,
+    logger,
+) -> dict[str, str]:
+    base_path = build_pronabec_chunk_base_path(
+        dataset_name=dataset_name,
+        extraction_date=extraction_date,
+        pipeline_run_id=pipeline_run_id,
+        page_start=page_start,
+        page_end=page_end,
+    )
+    data_uri = upload_jsonl(
+        bucket_name=bucket_name,
+        object_path=f"{base_path}/data.jsonl",
+        records=normalized_records,
+    )
+    finished_at = datetime.now(UTC)
+    manifest = build_chunk_manifest(
+        dataset_name=dataset_name,
+        extraction_date=extraction_date,
+        pipeline_run_id=pipeline_run_id,
+        page_start=page_start,
+        page_end=page_end,
+        raw_payload=raw_payload,
+        records_written=len(normalized_records),
+        started_at=started_at,
+        finished_at=finished_at,
+    )
+    manifest_uri = upload_json(
+        bucket_name=bucket_name,
+        object_path=f"{base_path}/chunk_manifest.json",
+        payload=manifest,
+    )
+    log_event(
+        logger,
+        "INFO",
+        "Chunk PRONABEC escrito en bronze_work",
+        dataset=dataset_name,
+        data_uri=data_uri,
+        chunk_manifest_uri=manifest_uri,
+        extraction_date=extraction_date,
+        run_id=pipeline_run_id,
+    )
+    return {
+        "normalized_uri": data_uri,
+        "chunk_manifest_uri": manifest_uri,
+    }
+
+
 def write_json_file(path: Path, payload: Any) -> None:
     """
     Escribe un archivo JSON local.
@@ -968,6 +1120,30 @@ def build_local_pronabec_output_paths(
         "metadata_path": base_path / "extraction_metadata.json",
         "manifest_path": base_path / "manifest.json",
         "success_path": base_path / "_SUCCESS",
+    }
+
+
+def build_local_pronabec_chunk_output_paths(
+    output_dir: str | Path,
+    dataset_name: str,
+    extraction_date: str,
+    pipeline_run_id: str,
+    page_start: int,
+    page_end: int,
+) -> dict[str, Path]:
+    base_path = (
+        Path(output_dir)
+        / build_pronabec_chunk_base_path(
+            dataset_name=dataset_name,
+            extraction_date=extraction_date,
+            pipeline_run_id=pipeline_run_id,
+            page_start=page_start,
+            page_end=page_end,
+        )
+    )
+    return {
+        "normalized_path": base_path / "data.jsonl",
+        "chunk_manifest_path": base_path / "chunk_manifest.json",
     }
 
 
@@ -1035,6 +1211,7 @@ def build_success_manifest(
         "status": "SUCCESS",
         "records_written": records_written,
         "pages_read": raw_payload.get("pages_read"),
+        "requested_page_size": raw_payload.get("requested_page_size"),
         "effective_page_size": raw_payload.get("effective_page_size"),
         "page_start": raw_payload.get("page_start"),
         "page_end": raw_payload.get("page_end"),
@@ -1150,6 +1327,56 @@ def write_dataset_to_local(
     }
 
 
+def write_chunk_dataset_to_local(
+    dataset_name: str,
+    raw_payload: dict[str, Any],
+    normalized_records: list[dict[str, Any]],
+    extraction_date: str,
+    output_dir: str | Path,
+    pipeline_run_id: str,
+    page_start: int,
+    page_end: int,
+    started_at: datetime,
+    logger,
+) -> dict[str, str]:
+    paths = build_local_pronabec_chunk_output_paths(
+        output_dir=output_dir,
+        dataset_name=dataset_name,
+        extraction_date=extraction_date,
+        pipeline_run_id=pipeline_run_id,
+        page_start=page_start,
+        page_end=page_end,
+    )
+    write_jsonl_file(paths["normalized_path"], normalized_records)
+    finished_at = datetime.now(UTC)
+    manifest = build_chunk_manifest(
+        dataset_name=dataset_name,
+        extraction_date=extraction_date,
+        pipeline_run_id=pipeline_run_id,
+        page_start=page_start,
+        page_end=page_end,
+        raw_payload=raw_payload,
+        records_written=len(normalized_records),
+        started_at=started_at,
+        finished_at=finished_at,
+    )
+    write_json_file(paths["chunk_manifest_path"], manifest)
+    log_event(
+        logger,
+        "INFO",
+        "Chunk PRONABEC escrito localmente en bronze_work",
+        dataset=dataset_name,
+        normalized_path=str(paths["normalized_path"]),
+        chunk_manifest_path=str(paths["chunk_manifest_path"]),
+        extraction_date=extraction_date,
+        run_id=pipeline_run_id,
+    )
+    return {
+        "normalized_uri": str(paths["normalized_path"]),
+        "chunk_manifest_uri": str(paths["chunk_manifest_path"]),
+    }
+
+
 def run_extraction(args: argparse.Namespace) -> None:
     """
     Orquesta la extracción PRONABEC.
@@ -1211,6 +1438,19 @@ def run_extraction(args: argparse.Namespace) -> None:
         cli_value=args.page_size,
         legacy_value=args.rows_per_page,
     )
+    output_mode = resolve_output_mode(args.output_mode)
+    pipeline_run_id = resolve_pipeline_run_id(args.pipeline_run_id, args.run_id)
+    if pipeline_run_id:
+        run_id = pipeline_run_id
+    elif output_mode == "chunk":
+        run_id = ""
+    validate_chunk_output_contract(
+        output_mode=output_mode,
+        source_dataset=source_dataset,
+        page_start=page_start,
+        page_end=page_end,
+        pipeline_run_id=pipeline_run_id,
+    )
 
     endpoints = select_pronabec_endpoints(
         endpoints_config=endpoints_config,
@@ -1267,6 +1507,7 @@ def run_extraction(args: argparse.Namespace) -> None:
                 endpoint=endpoint,
                 base_url=base_url,
                 rows_per_page=effective_page_size,
+                requested_page_size=requested_page_size,
                 max_pages=args.max_pages,
                 page_start=page_start,
                 page_end=page_end,
@@ -1280,7 +1521,34 @@ def run_extraction(args: argparse.Namespace) -> None:
                 logger=logger,
             )
 
-            if args.dry_run:
+            if output_mode == "chunk":
+                if args.dry_run:
+                    uris = write_chunk_dataset_to_local(
+                        dataset_name=dataset_name,
+                        raw_payload=raw_payload,
+                        normalized_records=normalized_records,
+                        extraction_date=extraction_date,
+                        output_dir=args.output_dir,
+                        pipeline_run_id=run_id,
+                        page_start=page_start or 1,
+                        page_end=page_end or raw_payload["page_end"],
+                        started_at=started_at,
+                        logger=logger,
+                    )
+                else:
+                    uris = write_chunk_dataset_to_gcs(
+                        dataset_name=dataset_name,
+                        raw_payload=raw_payload,
+                        normalized_records=normalized_records,
+                        bucket_name=bucket_name,
+                        extraction_date=extraction_date,
+                        pipeline_run_id=run_id,
+                        page_start=page_start or 1,
+                        page_end=page_end or raw_payload["page_end"],
+                        started_at=started_at,
+                        logger=logger,
+                    )
+            elif args.dry_run:
                 uris = write_dataset_to_local(
                     dataset_name=dataset_name,
                     raw_payload=raw_payload,
@@ -1318,10 +1586,11 @@ def run_extraction(args: argparse.Namespace) -> None:
                 started_at=started_at,
                 finished_at=finished_at,
                 metadata={
-                    "raw_uri": uris["raw_uri"],
+                    "raw_uri": uris.get("raw_uri"),
                     "normalized_uri": uris["normalized_uri"],
                     "manifest_uri": uris.get("manifest_uri"),
                     "success_uri": uris.get("success_uri"),
+                    "chunk_manifest_uri": uris.get("chunk_manifest_uri"),
                 },
             )
 
@@ -1419,6 +1688,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--run-id",
         help="Identificador de ejecución. Si se omite, se genera automáticamente.",
+    )
+    parser.add_argument(
+        "--pipeline-run-id",
+        help="Identificador de ejecucion para chunks. Tambien puede venir de PIPELINE_RUN_ID.",
+    )
+    parser.add_argument(
+        "--output-mode",
+        choices=["final", "chunk"],
+        help="Modo de salida: final conserva Bronze actual; chunk escribe en bronze_work.",
     )
     parser.add_argument(
         "--rows-per-page",

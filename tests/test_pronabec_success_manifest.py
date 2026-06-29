@@ -24,6 +24,10 @@ def test_build_success_manifest_contains_control_fields():
         records_written=10,
         raw_payload={
             "pages_read": 2,
+            "requested_page_size": 1000,
+            "effective_page_size": 500,
+            "page_start": 1,
+            "page_end": 2,
             "reported_records": 10,
             "total_pages": 2,
         },
@@ -36,3 +40,5 @@ def test_build_success_manifest_contains_control_fields():
     assert manifest["status"] == "SUCCESS"
     assert manifest["records_written"] == 10
     assert manifest["pages_read"] == 2
+    assert manifest["requested_page_size"] == 1000
+    assert manifest["effective_page_size"] == 500
