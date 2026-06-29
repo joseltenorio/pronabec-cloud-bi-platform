@@ -26,6 +26,11 @@ param(
     [string]$GoldValidateJobName = $(if ($env:GOLD_VALIDATE_JOB_NAME) { $env:GOLD_VALIDATE_JOB_NAME } else { "gold-validate-job" }),
     [string]$QualityJobName = $(if ($env:QUALITY_CHECKS_JOB_NAME) { $env:QUALITY_CHECKS_JOB_NAME } else { "quality-checks-job" }),
 
+    [string]$PronabecDiscoveryJobName = $(if ($env:PRONABEC_DISCOVERY_JOB_NAME) { $env:PRONABEC_DISCOVERY_JOB_NAME } else { "pronabec-discovery-job" }),
+    [string]$PronabecBuildPlanJobName = $(if ($env:PRONABEC_BUILD_PLAN_JOB_NAME) { $env:PRONABEC_BUILD_PLAN_JOB_NAME } else { "pronabec-build-plan-job" }),
+    [string]$PronabecExtractChunkJobName = $(if ($env:PRONABEC_EXTRACT_CHUNK_JOB_NAME) { $env:PRONABEC_EXTRACT_CHUNK_JOB_NAME } else { "pronabec-extract-chunk-job" }),
+    [string]$PronabecFinalizeDatasetJobName = $(if ($env:PRONABEC_FINALIZE_DATASET_JOB_NAME) { $env:PRONABEC_FINALIZE_DATASET_JOB_NAME } else { "pronabec-finalize-dataset-job" }),
+
     [string]$PronabecReportsLandingPrefix = $(if ($env:PRONABEC_REPORTS_LANDING_PREFIX) { $env:PRONABEC_REPORTS_LANDING_PREFIX } else { "landing/pronabec_reports" }),
     [string]$PronabecReportsBronzePrefix = $(if ($env:PRONABEC_REPORTS_BRONZE_PREFIX) { $env:PRONABEC_REPORTS_BRONZE_PREFIX } else { "bronze/pronabec_reports" }),
 
@@ -209,6 +214,41 @@ Upsert-CloudRunJob `
     -ContainerArgs @(
         "-m",
         "pipelines.extract_pronabec"
+    )
+
+Upsert-CloudRunJob `
+    -JobName $PronabecDiscoveryJobName `
+    -Description "Discovery de datasets PRONABEC para planificacion particionada" `
+    -ContainerArgs @(
+        "-m",
+        "pipelines.discover_pronabec"
+    )
+
+Upsert-CloudRunJob `
+    -JobName $PronabecBuildPlanJobName `
+    -Description "Construccion del plan de extraccion PRONABEC particionado" `
+    -ContainerArgs @(
+        "-m",
+        "pipelines.build_pronabec_extraction_plan"
+    )
+
+Upsert-CloudRunJob `
+    -JobName $PronabecExtractChunkJobName `
+    -Description "Extraccion particionada PRONABEC hacia Bronze work" `
+    -SetEnvVars @(
+        "OUTPUT_MODE=chunk"
+    ) `
+    -ContainerArgs @(
+        "-m",
+        "pipelines.extract_pronabec"
+    )
+
+Upsert-CloudRunJob `
+    -JobName $PronabecFinalizeDatasetJobName `
+    -Description "Consolidacion final de chunks PRONABEC hacia Bronze" `
+    -ContainerArgs @(
+        "-m",
+        "pipelines.finalize_pronabec_dataset"
     )
 
 Upsert-CloudRunJob `

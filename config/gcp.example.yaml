@@ -33,6 +33,26 @@ cloud_run_jobs:
       command:
         - -m
         - pipelines.extract_pronabec
+    pronabec_discovery:
+      name: pronabec-discovery-job
+      command:
+        - -m
+        - pipelines.discover_pronabec
+    pronabec_build_plan:
+      name: pronabec-build-plan-job
+      command:
+        - -m
+        - pipelines.build_pronabec_extraction_plan
+    pronabec_extract_chunk:
+      name: pronabec-extract-chunk-job
+      command:
+        - -m
+        - pipelines.extract_pronabec
+    pronabec_finalize_dataset:
+      name: pronabec-finalize-dataset-job
+      command:
+        - -m
+        - pipelines.finalize_pronabec_dataset
     mef_extract:
       name: mef-extract-job
       command:

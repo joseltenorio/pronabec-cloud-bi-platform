@@ -21,6 +21,10 @@ def test_selected_pronabec_api_jobs_are_defined():
 
     required_jobs = [
         "pronabec-extract-job",
+        "pronabec-discovery-job",
+        "pronabec-build-plan-job",
+        "pronabec-extract-chunk-job",
+        "pronabec-finalize-dataset-job",
         "pronabec-stage-reports-job",
         "bronze-manifest-validation-job",
         "gold-publish-job",
@@ -64,6 +68,7 @@ def test_bronze_manifest_validation_job_is_defined():
     assert "BRONZE_MANIFEST_VALIDATION_JOB_NAME" in content
     assert "pipelines.validate_bronze_manifests" in content
     assert "Validacion de manifests Bronze antes de promover a Silver" in content
+    assert "bronze-manifest-validation-job" in content
 
 
 def test_pronabec_api_retry_env_vars_are_defined():
@@ -104,6 +109,10 @@ def test_parameterized_pronabec_report_job_is_the_only_report_job():
 def test_gold_jobs_and_env_vars_are_defined():
     content = _read_deploy_script()
 
+    assert "PRONABEC_DISCOVERY_JOB_NAME" in content
+    assert "PRONABEC_BUILD_PLAN_JOB_NAME" in content
+    assert "PRONABEC_EXTRACT_CHUNK_JOB_NAME" in content
+    assert "PRONABEC_FINALIZE_DATASET_JOB_NAME" in content
     assert "GOLD_PUBLISH_JOB_NAME" in content
     assert "GOLD_VALIDATE_JOB_NAME" in content
     assert "BQ_LOCATION=$Location" in content
@@ -113,6 +122,39 @@ def test_gold_jobs_and_env_vars_are_defined():
     assert "CLOUD_RUN_REGION" in content
     assert "pipelines.publish_gold_views" in content
     assert "pipelines.validate_gold" in content
+    assert "pipelines.discover_pronabec" in content
+    assert "pipelines.build_pronabec_extraction_plan" in content
+    assert "pipelines.extract_pronabec" in content
+    assert "pipelines.finalize_pronabec_dataset" in content
+
+
+def test_pronabec_chunked_jobs_have_expected_names_and_no_dataset_specific_jobs():
+    content = _read_deploy_script()
+
+    forbidden_job_names = [
+        "pronabec-extract-notas-becarios-job",
+        "pronabec-extract-becarios-pais-estudio-job",
+        "pronabec-extract-convocatorias-carrera-sede-job",
+        "dataflow-pronabec-convocatorias-carrera-sede-job",
+    ]
+
+    for job_name in forbidden_job_names:
+        assert job_name not in content, f"Nombre de job específico por dataset detectado: {job_name}"
+
+    assert "OUTPUT_MODE=chunk" in content
+
+
+def test_pronabec_chunked_job_modules_are_correct():
+    content = _read_deploy_script()
+
+    assert "pronabec-discovery-job" in content
+    assert "pronabec-build-plan-job" in content
+    assert "pronabec-extract-chunk-job" in content
+    assert "pronabec-finalize-dataset-job" in content
+    assert "pipelines.discover_pronabec" in content
+    assert "pipelines.build_pronabec_extraction_plan" in content
+    assert "pipelines.extract_pronabec" in content
+    assert "pipelines.finalize_pronabec_dataset" in content
 
 
 def test_bronze_only_jobs_are_not_defined():
