@@ -33,6 +33,10 @@ def test_configure_airflow_variables_sets_job_names():
 
     required_variables = [
         "pronabec_extract_job_name",
+        "pronabec_discovery_job_name",
+        "pronabec_build_plan_job_name",
+        "pronabec_extract_chunk_job_name",
+        "pronabec_finalize_dataset_job_name",
         "mef_extract_job_name",
         "pronabec_reports_stage_job_name",
         "bronze_manifest_validation_job_name",

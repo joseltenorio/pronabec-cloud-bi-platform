@@ -47,6 +47,10 @@ def test_resolve_airflow_var_name_reads_runtime_and_jobs() -> None:
 
     assert resolve_airflow_var_name(config, "project_id_var") == "gcp_project_id"
     assert resolve_airflow_var_name(config, "gold_publish_job_name_var") == "gold_publish_job_name"
+    assert resolve_airflow_var_name(config, "pronabec_discovery_job_name_var") == "pronabec_discovery_job_name"
+    assert resolve_airflow_var_name(config, "pronabec_build_plan_job_name_var") == "pronabec_build_plan_job_name"
+    assert resolve_airflow_var_name(config, "pronabec_extract_chunk_job_name_var") == "pronabec_extract_chunk_job_name"
+    assert resolve_airflow_var_name(config, "pronabec_finalize_dataset_job_name_var") == "pronabec_finalize_dataset_job_name"
     assert (
         resolve_airflow_var_name(config, "bronze_manifest_validation_job_name_var")
         == "bronze_manifest_validation_job_name"
