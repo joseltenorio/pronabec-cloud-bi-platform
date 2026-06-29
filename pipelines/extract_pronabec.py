@@ -108,6 +108,72 @@ def get_env_float(name: str, default: float) -> float:
     return value
 
 
+def get_env_int_optional(name: str) -> int | None:
+    raw_value = os.getenv(name)
+    if raw_value is None or raw_value.strip() == "":
+        return None
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise PronabecExtractionError(
+            f"Variable de entorno invalida para entero: {name}={raw_value}"
+        ) from exc
+    if value <= 0:
+        raise PronabecExtractionError(
+            f"Variable de entorno debe ser mayor a cero: {name}={raw_value}"
+        )
+    return value
+
+
+def resolve_optional_positive_int(
+    cli_value: int | None,
+    env_name: str,
+    label: str,
+) -> int | None:
+    value = cli_value if cli_value is not None else get_env_int_optional(env_name)
+    if value is not None and value <= 0:
+        raise PronabecExtractionError(f"{label} debe ser un entero positivo.")
+    return value
+
+
+def resolve_page_size_override(cli_value: int | None, legacy_value: int | None = None) -> int | None:
+    if cli_value is not None:
+        if cli_value <= 0:
+            raise PronabecExtractionError("--page-size debe ser un entero positivo.")
+        return cli_value
+    env_value = os.getenv("PAGE_SIZE") or os.getenv("PRONABEC_PAGE_SIZE")
+    if env_value:
+        try:
+            parsed = int(env_value)
+        except ValueError as exc:
+            raise PronabecExtractionError(
+                f"PAGE_SIZE/PRONABEC_PAGE_SIZE debe ser entero positivo: {env_value}"
+            ) from exc
+        if parsed <= 0:
+            raise PronabecExtractionError(
+                f"PAGE_SIZE/PRONABEC_PAGE_SIZE debe ser entero positivo: {env_value}"
+            )
+        return parsed
+    return legacy_value
+
+
+def resolve_page_range(
+    page_start: int | None,
+    page_end: int | None,
+) -> tuple[int | None, int | None]:
+    if (page_start is None) != (page_end is None):
+        raise PronabecExtractionError(
+            "PAGE_START y PAGE_END deben definirse juntos para extraccion por rango."
+        )
+    if page_start is None and page_end is None:
+        return None, None
+    if page_start <= 0 or page_end <= 0:
+        raise PronabecExtractionError("PAGE_START y PAGE_END deben ser enteros positivos.")
+    if page_end < page_start:
+        raise PronabecExtractionError("PAGE_END debe ser mayor o igual que PAGE_START.")
+    return page_start, page_end
+
+
 def resolve_retry_settings(
     timeout: int | None,
     max_retries: int | None,
@@ -152,6 +218,102 @@ def resolve_retry_settings(
         "backoff_base_seconds": resolved_backoff_base,
         "backoff_max_seconds": resolved_backoff_max,
     }
+
+
+def get_pronabec_policy_by_dataset(
+    orchestration_config: dict[str, Any],
+    dataset_name: str,
+):
+    policies = {
+        policy.source_dataset: policy
+        for policy in get_pronabec_dataset_policies(orchestration_config)
+    }
+    return policies.get(dataset_name)
+
+
+def resolve_requested_page_size(
+    dataset_name: str,
+    requested_page_size: int | None,
+    orchestration_config: dict[str, Any],
+) -> int:
+    if requested_page_size is not None:
+        if requested_page_size <= 0:
+            raise PronabecExtractionError("--page-size debe ser un entero positivo.")
+        return requested_page_size
+
+    policy = get_pronabec_policy_by_dataset(orchestration_config, dataset_name)
+    if policy and policy.recommended_page_size:
+        return policy.recommended_page_size
+
+    return DEFAULT_ROWS_PER_PAGE
+
+
+def resolve_page_size_fallbacks(
+    dataset_name: str,
+    orchestration_config: dict[str, Any],
+) -> list[int]:
+    policy = get_pronabec_policy_by_dataset(orchestration_config, dataset_name)
+    if not policy:
+        return []
+    return policy.fallback_page_sizes
+
+
+def is_http_500_pronabec_error(exc: Exception) -> bool:
+    cause = getattr(exc, "__cause__", None)
+    if isinstance(cause, requests.exceptions.HTTPError):
+        response = cause.response
+        return response is not None and response.status_code == 500
+    return False
+
+
+def resolve_effective_page_size(
+    dataset: str,
+    requested_page_size: int,
+    fallback_page_sizes: list[int],
+    page_start: int,
+    fetch_page,
+    logger=None,
+) -> int:
+    page_sizes = [requested_page_size, *fallback_page_sizes]
+    seen: set[int] = set()
+    failures: list[str] = []
+
+    for index, page_size in enumerate(page_sizes):
+        if page_size in seen:
+            continue
+        seen.add(page_size)
+        try:
+            fetch_page(page_start, page_size)
+            if index > 0 and logger:
+                log_event(
+                    logger,
+                    "WARNING",
+                    "Usando fallback page_size PRONABEC",
+                    dataset=dataset,
+                    requested_page_size=requested_page_size,
+                    effective_page_size=page_size,
+                    page_start=page_start,
+                )
+            return page_size
+        except Exception as exc:
+            if not is_http_500_pronabec_error(exc):
+                raise
+            failures.append(f"page_size={page_size}: {exc}")
+            if logger:
+                log_event(
+                    logger,
+                    "WARNING",
+                    "Fallo HTTP 500 probando page_size PRONABEC",
+                    dataset=dataset,
+                    page_size=page_size,
+                    page_start=page_start,
+                    error_message=str(exc),
+                )
+
+    raise PronabecExtractionError(
+        "Todos los page_size fallaron con HTTP 500 para "
+        f"{dataset}: {'; '.join(failures)}"
+    )
 
 
 def resolve_extraction_date(
@@ -413,6 +575,9 @@ def consolidate_raw_payload(
     dataset_name: str,
     url: str,
     pages: list[dict[str, Any]],
+    effective_page_size: int | None = None,
+    page_start: int | None = None,
+    page_end: int | None = None,
 ) -> dict[str, Any]:
     """
     Consolida la respuesta cruda en un JSON trazable.
@@ -426,6 +591,9 @@ def consolidate_raw_payload(
         "total_pages": first_page.get("total"),
         "reported_records": first_page.get("records"),
         "pages_read": len(pages),
+        "effective_page_size": effective_page_size,
+        "page_start": page_start,
+        "page_end": page_end,
         "pages": pages,
     }
 
@@ -507,6 +675,8 @@ def extract_dataset(
     base_url: str,
     rows_per_page: int,
     max_pages: int | None,
+    page_start: int | None,
+    page_end: int | None,
     timeout: int,
     max_retries: int,
     backoff_base_seconds: float,
@@ -539,10 +709,11 @@ def extract_dataset(
         run_id=run_id,
     )
 
+    first_page_number = page_start or 1
     first_page = fetch_pronabec_page(
         session=session,
         url=url,
-        page=1,
+        page=first_page_number,
         rows=rows_per_page,
         timeout=timeout,
         max_retries=max_retries,
@@ -555,7 +726,21 @@ def extract_dataset(
     )
 
     total_pages = int(first_page.get("total") or 1)
-    pages_to_read = min(total_pages, max_pages) if max_pages else total_pages
+    if page_end is not None:
+        pages_to_read = min(total_pages, page_end)
+        if page_end > total_pages:
+            log_event(
+                logger,
+                "WARNING",
+                "PAGE_END excede total_pages observado; se procesa hasta total_pages",
+                dataset=dataset_name,
+                page_end=page_end,
+                total_pages=total_pages,
+                extraction_date=extraction_date,
+                run_id=run_id,
+            )
+    else:
+        pages_to_read = min(total_pages, max_pages) if max_pages else total_pages
 
     pages.append(first_page)
     normalized_records.extend(
@@ -567,6 +752,7 @@ def extract_dataset(
         "INFO",
         "Primera página PRONABEC descargada",
         dataset=dataset_name,
+        page=first_page_number,
         total_pages=total_pages,
         pages_to_read=pages_to_read,
         reported_records=first_page.get("records"),
@@ -575,7 +761,7 @@ def extract_dataset(
         run_id=run_id,
     )
 
-    for page_number in range(2, pages_to_read + 1):
+    for page_number in range(first_page_number + 1, pages_to_read + 1):
         if sleep_seconds > 0:
             time.sleep(sleep_seconds)
 
@@ -614,6 +800,9 @@ def extract_dataset(
         dataset_name=dataset_name,
         url=url,
         pages=pages,
+        effective_page_size=rows_per_page,
+        page_start=first_page_number,
+        page_end=pages_to_read,
     )
 
     if normalized_records:
@@ -846,6 +1035,9 @@ def build_success_manifest(
         "status": "SUCCESS",
         "records_written": records_written,
         "pages_read": raw_payload.get("pages_read"),
+        "effective_page_size": raw_payload.get("effective_page_size"),
+        "page_start": raw_payload.get("page_start"),
+        "page_end": raw_payload.get("page_end"),
         "reported_records": raw_payload.get("reported_records"),
         "total_pages": raw_payload.get("total_pages"),
         "raw_uri": raw_uri,
@@ -1011,6 +1203,14 @@ def run_extraction(args: argparse.Namespace) -> None:
         cli_value=args.source_dataset,
         legacy_value=args.dataset,
     )
+    page_start, page_end = resolve_page_range(
+        resolve_optional_positive_int(args.page_start, "PAGE_START", "PAGE_START"),
+        resolve_optional_positive_int(args.page_end, "PAGE_END", "PAGE_END"),
+    )
+    page_size_override = resolve_page_size_override(
+        cli_value=args.page_size,
+        legacy_value=args.rows_per_page,
+    )
 
     endpoints = select_pronabec_endpoints(
         endpoints_config=endpoints_config,
@@ -1032,13 +1232,44 @@ def run_extraction(args: argparse.Namespace) -> None:
     for endpoint in endpoints:
         dataset_name = endpoint["name"]
         started_at = datetime.now(UTC)
+        requested_page_size = resolve_requested_page_size(
+            dataset_name=dataset_name,
+            requested_page_size=page_size_override,
+            orchestration_config=orchestration_config,
+        )
 
         try:
+            probe_session = requests.Session()
+            probe_url = build_pronabec_data_url(base_url, endpoint["path"])
+            effective_page_size = resolve_effective_page_size(
+                dataset=dataset_name,
+                requested_page_size=requested_page_size,
+                fallback_page_sizes=resolve_page_size_fallbacks(dataset_name, orchestration_config),
+                page_start=page_start or 1,
+                fetch_page=lambda page_number, page_size: fetch_pronabec_page(
+                    session=probe_session,
+                    url=probe_url,
+                    page=page_number,
+                    rows=page_size,
+                    timeout=int(retry_settings["timeout"]),
+                    max_retries=int(retry_settings["max_retries"]),
+                    backoff_base_seconds=float(retry_settings["backoff_base_seconds"]),
+                    backoff_max_seconds=float(retry_settings["backoff_max_seconds"]),
+                    dataset_name=dataset_name,
+                    extraction_date=extraction_date,
+                    run_id=run_id,
+                    logger=logger,
+                ),
+                logger=logger,
+            )
+
             raw_payload, normalized_records = extract_dataset(
                 endpoint=endpoint,
                 base_url=base_url,
-                rows_per_page=args.rows_per_page,
+                rows_per_page=effective_page_size,
                 max_pages=args.max_pages,
+                page_start=page_start,
+                page_end=page_end,
                 timeout=int(retry_settings["timeout"]),
                 max_retries=int(retry_settings["max_retries"]),
                 backoff_base_seconds=float(retry_settings["backoff_base_seconds"]),
@@ -1192,8 +1423,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--rows-per-page",
         type=int,
-        default=DEFAULT_ROWS_PER_PAGE,
-        help="Cantidad de filas por página.",
+        default=None,
+        help="Alias legacy de --page-size.",
+    )
+    parser.add_argument(
+        "--page-size",
+        type=int,
+        default=None,
+        help="Cantidad de filas por pagina. Si se omite, usa la politica declarativa del dataset.",
+    )
+    parser.add_argument(
+        "--page-start",
+        type=int,
+        default=None,
+        help="Pagina inicial para extraccion por rango. Tambien puede venir de PAGE_START.",
+    )
+    parser.add_argument(
+        "--page-end",
+        type=int,
+        default=None,
+        help="Pagina final para extraccion por rango. Tambien puede venir de PAGE_END.",
     )
     parser.add_argument(
         "--max-pages",
