@@ -32,11 +32,16 @@ from pipelines.common.gcs import (
     upload_jsonl,
 )
 from pipelines.common.logging import log_event, setup_structured_logger
+from pipelines.common.orchestration_config import (
+    get_pronabec_dataset_policies,
+    load_orchestration_config,
+)
 from pipelines.common.validation import validate_required_columns
 
 
 DEFAULT_ENDPOINTS_CONFIG = "config/endpoints.yaml"
 DEFAULT_PIPELINE_CONFIG = "config/pipeline.yaml"
+DEFAULT_ORCHESTRATION_CONFIG = "config/orchestration.yaml"
 DEFAULT_ROWS_PER_PAGE = 100
 
 DEFAULT_TIMEOUT_SECONDS = 180
@@ -455,6 +460,46 @@ def get_enabled_pronabec_endpoints(
             )
 
     return enabled
+
+
+def resolve_source_dataset(cli_value: str | None, legacy_value: str | None = None) -> str | None:
+    """Resolve the dataset filter from CLI first, then environment."""
+    return cli_value or legacy_value or os.getenv("SOURCE_DATASET")
+
+
+def select_pronabec_endpoints(
+    endpoints_config: dict[str, Any],
+    orchestration_config: dict[str, Any],
+    source_dataset: str | None,
+    allow_disabled_dataset: bool = False,
+) -> list[dict[str, Any]]:
+    if not source_dataset:
+        return get_enabled_pronabec_endpoints(endpoints_config=endpoints_config)
+
+    endpoints = endpoints_config["pronabec"]["endpoints"]
+    endpoint_by_name = {endpoint["name"]: endpoint for endpoint in endpoints}
+    if source_dataset not in endpoint_by_name:
+        available = ", ".join(endpoint_by_name)
+        raise ConfigError(
+            f"Dataset PRONABEC no encontrado: {source_dataset}. Disponibles: {available}"
+        )
+
+    policies = {
+        policy.source_dataset: policy
+        for policy in get_pronabec_dataset_policies(orchestration_config)
+    }
+    policy = policies.get(source_dataset)
+    if policy is None:
+        raise ConfigError(
+            f"No existe politica de extraccion PRONABEC para: {source_dataset}"
+        )
+    if not policy.extraction_enabled and not allow_disabled_dataset:
+        raise ConfigError(
+            f"Dataset PRONABEC deshabilitado para extraccion: {source_dataset}. "
+            "Usa --allow-disabled-dataset para una ejecucion manual."
+        )
+
+    return [endpoint_by_name[source_dataset]]
 
 
 def extract_dataset(
@@ -919,6 +964,7 @@ def run_extraction(args: argparse.Namespace) -> None:
     """
     pipeline_settings = get_pipeline_settings(args.pipeline_config)
     endpoints_config = load_yaml_config(args.endpoints_config)
+    orchestration_config = load_orchestration_config(args.orchestration_config)
 
     retry_settings = resolve_retry_settings(
         timeout=args.timeout,
@@ -961,9 +1007,16 @@ def run_extraction(args: argparse.Namespace) -> None:
     pronabec_config = endpoints_config["pronabec"]
     base_url = pronabec_config["base_url"]
 
-    endpoints = get_enabled_pronabec_endpoints(
+    source_dataset = resolve_source_dataset(
+        cli_value=args.source_dataset,
+        legacy_value=args.dataset,
+    )
+
+    endpoints = select_pronabec_endpoints(
         endpoints_config=endpoints_config,
-        dataset_filter=args.dataset,
+        orchestration_config=orchestration_config,
+        source_dataset=source_dataset,
+        allow_disabled_dataset=args.allow_disabled_dataset,
     )
 
     log_event(
@@ -1099,8 +1152,22 @@ def parse_args() -> argparse.Namespace:
         help="Ruta a config/endpoints.yaml.",
     )
     parser.add_argument(
+        "--orchestration-config",
+        default=DEFAULT_ORCHESTRATION_CONFIG,
+        help="Ruta a config/orchestration.yaml.",
+    )
+    parser.add_argument(
+        "--source-dataset",
+        help="Dataset PRONABEC especifico a extraer. Tiene prioridad sobre SOURCE_DATASET.",
+    )
+    parser.add_argument(
         "--dataset",
-        help="Dataset PRONABEC específico. Si se omite, extrae todos los habilitados.",
+        help="Alias legacy de --source-dataset.",
+    )
+    parser.add_argument(
+        "--allow-disabled-dataset",
+        action="store_true",
+        help="Permite ejecutar manualmente un dataset deshabilitado por politica declarativa.",
     )
     parser.add_argument(
         "--bucket",
