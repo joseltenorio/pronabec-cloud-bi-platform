@@ -29,6 +29,7 @@ def mock_orchestration():
                     {
                         "source_dataset": "becarios_pais_estudio",
                         "extraction_enabled": True,
+                        "bronze_enabled": True,
                         "silver_enabled": True,
                         "extraction_mode": "chunked",
                         "required_for_e2e": True,
@@ -84,6 +85,7 @@ def test_build_plan_pipeline_integration(
             {
                 "source_dataset": "becarios_pais_estudio",
                 "extraction_enabled": True,
+                "bronze_enabled": True,
                 "silver_enabled": True,
                 "required_for_e2e": True,
                 "extraction_mode": "chunked",
@@ -109,9 +111,16 @@ def test_build_plan_pipeline_integration(
         plan = json.load(f)
 
     assert plan["source_system"] == "pronabec"
+    assert plan["scope"] == "e2e"
     assert plan["extraction_date"] == "2026-06-29"
     assert plan["pipeline_run_id"] == "test-run"
     assert plan["source_snapshot_observed_at"] == "2026-06-29T20:30:00Z"
     assert plan["status"] == "READY"
     assert len(plan["datasets"]) == 1
     assert len(plan["chunks"]) == 1 # 3 pages with chunk size 10 -> 1 chunk
+    assert plan["datasets"][0]["bronze_enabled"] is True
+    assert plan["datasets"][0]["silver_enabled"] is True
+    assert plan["datasets"][0]["required_for_e2e"] is True
+    assert plan["chunks"][0]["bronze_enabled"] is True
+    assert plan["chunks"][0]["silver_enabled"] is True
+    assert plan["chunks"][0]["required_for_e2e"] is True

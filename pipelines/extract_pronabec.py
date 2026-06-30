@@ -702,7 +702,7 @@ def select_pronabec_endpoints(
         raise ConfigError(
             f"No existe politica de extraccion PRONABEC para: {source_dataset}"
         )
-    if not policy.extraction_enabled and not allow_disabled_dataset:
+    if not policy.bronze_enabled and not allow_disabled_dataset:
         raise ConfigError(
             f"Dataset PRONABEC deshabilitado para extraccion: {source_dataset}. "
             "Usa --allow-disabled-dataset para una ejecucion manual."

@@ -93,6 +93,7 @@ class DummyArgs:
         self.source_dataset = None
         self.dataset = None
         self.allow_disabled_dataset = False
+        self.scope = None
         self.bucket = "test-bucket"
         self.extraction_date = "2026-06-29"
         self.allow_default_date = False
@@ -142,12 +143,14 @@ def test_discovery_includes_only_enabled_datasets(
     assert data["pipeline_run_id"] == "test-run"
     assert "source_snapshot_observed_at" in data
     assert data["status"] == "SUCCESS"
+    assert data["scope"] == "e2e"
 
     datasets = data["datasets"]
     # Only becarios_pais_estudio is enabled in mock_orchestration
     assert len(datasets) == 1
     assert datasets[0]["source_dataset"] == "becarios_pais_estudio"
     assert datasets[0]["extraction_enabled"] is True
+    assert datasets[0]["bronze_enabled"] is True
     assert datasets[0]["total_records"] == 2500
     assert datasets[0]["total_pages"] == 3
     assert datasets[0]["effective_page_size"] == 1000
@@ -353,3 +356,41 @@ def test_non_required_dataset_failure_does_not_abort_by_default(
     assert data["status"] == "SUCCESS" # El discovery general fue exitoso a pesar de la falla del opcional
     assert data["datasets"][0]["status"] == "FAILED"
     assert "error" in data["datasets"][0]
+
+
+@patch("pipelines.discover_pronabec.get_pipeline_settings")
+@patch("pipelines.discover_pronabec.load_yaml_config")
+@patch("pipelines.discover_pronabec.load_orchestration_config")
+@patch("pipelines.discover_pronabec.fetch_pronabec_page")
+def test_discovery_bronze_full_includes_bronze_only_datasets(
+    mock_fetch, mock_load_orch, mock_load_endpoints, mock_settings,
+    mock_pipeline_settings, mock_endpoints, mock_orchestration, tmp_path
+):
+    mock_settings.return_value = mock_pipeline_settings
+    mock_load_endpoints.return_value = mock_endpoints
+    mock_orch = dict(mock_orchestration)
+    policies = mock_orch["datasets"]["pronabec_api"]["extraction_policies"]
+    policies[1]["bronze_enabled"] = True
+    policies[1]["extraction_enabled"] = True
+    mock_load_orch.return_value = mock_orch
+    mock_fetch.return_value = {
+        "records": 100,
+        "total": 1,
+        "rows": [{"id": 1, "cell": []}] * 100,
+    }
+
+    args = DummyArgs(dry_run=True, output_dir=str(tmp_path), scope="bronze_full")
+    run_discovery(args)
+
+    plan_file = tmp_path / "bronze_work" / "pronabec" / "_plans" / "extraction_date=2026-06-29" / "run_id=test-run" / "discovery.json"
+    with open(plan_file, "r") as f:
+        data = json.load(f)
+
+    assert data["scope"] == "bronze_full"
+    assert [dataset["source_dataset"] for dataset in data["datasets"]] == [
+        "becarios_pais_estudio",
+        "perdida_becas",
+    ]
+    assert data["datasets"][1]["bronze_enabled"] is True
+    assert data["datasets"][1]["silver_enabled"] is False
+    assert data["datasets"][1]["required_for_e2e"] is False

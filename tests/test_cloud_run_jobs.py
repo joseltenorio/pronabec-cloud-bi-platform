@@ -110,6 +110,8 @@ def test_parameterized_pronabec_report_job_is_the_only_report_job():
 def test_gold_jobs_and_env_vars_are_defined():
     content = _read_deploy_script()
 
+    assert "PRONABEC_EXTRACTION_SCOPE" in content
+    assert 'else { "e2e" }' in content
     assert "PRONABEC_DISCOVERY_JOB_NAME" in content
     assert "PRONABEC_BUILD_PLAN_JOB_NAME" in content
     assert "PRONABEC_RUN_PLAN_JOB_NAME" in content

@@ -12,12 +12,14 @@ from pipelines.common.gcs import build_gs_uri
 DEFAULT_ORCHESTRATION_CONFIG_PATH = Path("config/orchestration.yaml")
 DEFAULT_ENDPOINTS_CONFIG_PATH = Path("config/endpoints.yaml")
 PRONABEC_EXTRACTION_MODES = {"single", "chunked"}
+PRONABEC_EXTRACTION_SCOPES = {"e2e", "bronze_full"}
 
 
 @dataclass(frozen=True)
 class DatasetExtractionPolicy:
     source_dataset: str
     extraction_enabled: bool
+    bronze_enabled: bool
     silver_enabled: bool
     extraction_mode: str
     required_for_e2e: bool
@@ -105,7 +107,7 @@ def get_enabled_pronabec_datasets(config: dict[str, Any]) -> list[str]:
     return [
         policy.source_dataset
         for policy in get_pronabec_dataset_policies(config)
-        if policy.extraction_enabled
+        if policy.bronze_enabled
     ]
 
 
@@ -125,6 +127,29 @@ def get_chunked_pronabec_datasets(config: dict[str, Any]) -> list[str]:
         for policy in get_pronabec_dataset_policies(config)
         if policy.extraction_mode == "chunked"
     ]
+
+
+def resolve_pronabec_extraction_scope(value: str | None) -> str:
+    """Resolve PRONABEC extraction scope with a conservative E2E default."""
+    scope = (value or "e2e").strip()
+    if scope not in PRONABEC_EXTRACTION_SCOPES:
+        raise ConfigError(
+            f"PRONABEC extraction scope invalido: {scope}. Debe ser e2e o bronze_full"
+        )
+    return scope
+
+
+def get_pronabec_datasets_for_scope(config: dict[str, Any], scope: str) -> list[str]:
+    """Return datasets selected for a PRONABEC extraction scope."""
+    resolved_scope = resolve_pronabec_extraction_scope(scope)
+    selected: list[str] = []
+    for policy in get_pronabec_dataset_policies(config):
+        if not policy.bronze_enabled:
+            continue
+        if resolved_scope == "e2e" and not policy.required_for_e2e:
+            continue
+        selected.append(policy.source_dataset)
+    return selected
 
 
 def resolve_pronabec_report_groups(
@@ -203,6 +228,12 @@ def _build_pronabec_dataset_policy(item: Any) -> DatasetExtractionPolicy:
         raise ConfigError("Cada policy PRONABEC requiere source_dataset no vacio")
 
     extraction_enabled = _require_bool(item, "extraction_enabled", source_dataset)
+    bronze_enabled = _require_optional_bool(
+        item,
+        "bronze_enabled",
+        source_dataset,
+        default=extraction_enabled,
+    )
     silver_enabled = _require_bool(item, "silver_enabled", source_dataset)
     required_for_e2e = _require_bool(item, "required_for_e2e", source_dataset)
 
@@ -284,6 +315,7 @@ def _build_pronabec_dataset_policy(item: Any) -> DatasetExtractionPolicy:
     return DatasetExtractionPolicy(
         source_dataset=source_dataset.strip(),
         extraction_enabled=extraction_enabled,
+        bronze_enabled=bronze_enabled,
         silver_enabled=silver_enabled,
         extraction_mode=extraction_mode,
         required_for_e2e=required_for_e2e,

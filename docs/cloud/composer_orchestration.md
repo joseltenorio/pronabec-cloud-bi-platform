@@ -32,15 +32,29 @@ init_run
 
 MEF y PRONABEC reports siguen corriendo como ramas Bronze independientes antes de `validate_bronze_manifests`. La compuerta Bronze espera los finalizers PRONABEC, la extraccion MEF y el staging de reportes antes de lanzar cualquier transformacion Dataflow.
 
+## Alcances PRONABEC
+
+Las politicas declarativas separan tres conceptos:
+
+```text
+bronze_enabled: el dataset debe aterrizar en Bronze.
+silver_enabled: el dataset tiene transformacion Silver habilitada.
+required_for_e2e: el dataset es obligatorio para el E2E principal.
+```
+
+`PRONABEC_EXTRACTION_SCOPE=e2e` es el modo por defecto del DAG y de los jobs plan-driven. En este modo, discovery y build-plan incluyen solo datasets con `bronze_enabled=true` y `required_for_e2e=true`.
+
+`PRONABEC_EXTRACTION_SCOPE=bronze_full` incluye todos los datasets `bronze_enabled=true`, incluidos datasets Bronze-only con `silver_enabled=false`. Estos datasets pueden generar `data.jsonl`, `manifest.json` y `_SUCCESS` en Bronze final, pero no obligan a crear ni ejecutar tareas Dataflow/Silver.
+
 ## Tareas PRONABEC particionadas
 
 ### `discover_pronabec_datasets`
 
-Ejecuta `pronabec-discovery-job`. Genera `discovery.json` en `bronze_work/pronabec/_plans/` con conteos observados, `effective_page_size`, paginas totales y estado por dataset.
+Ejecuta `pronabec-discovery-job`. Genera `discovery.json` en `bronze_work/pronabec/_plans/` con alcance, conteos observados, `effective_page_size`, paginas totales y estado por dataset.
 
 ### `build_pronabec_extraction_plan`
 
-Ejecuta `pronabec-build-plan-job`. Genera `plan.json` a partir de `discovery.json`.
+Ejecuta `pronabec-build-plan-job`. Genera `plan.json` a partir de `discovery.json`, preservando `bronze_enabled`, `silver_enabled` y `required_for_e2e` por dataset y chunk.
 
 ### `run_pronabec_extraction_plan`
 
@@ -68,6 +82,7 @@ El DAG acepta parametros para habilitar o deshabilitar ramas sin cambiar codigo:
 
 ```text
 extraction_date
+pronabec_extraction_scope
 run_pronabec
 run_pronabec_discovery
 run_pronabec_build_plan
@@ -85,13 +100,14 @@ run_gold_validation
 run_quality
 ```
 
-`run_pronabec_chunk_extraction` se conserva como alias de compatibilidad para `run_pronabec_plan_execution`. `extraction_date` usa `dag_run.conf.get('extraction_date') or ds`. Si `run_pronabec=false`, las subtareas PRONABEC particionadas tambien quedan deshabilitadas.
+`pronabec_extraction_scope` acepta `e2e` o `bronze_full`; el valor por defecto es `e2e`. `run_pronabec_chunk_extraction` se conserva como alias de compatibilidad para `run_pronabec_plan_execution`. `extraction_date` usa `dag_run.conf.get('extraction_date') or ds`. Si `run_pronabec=false`, las subtareas PRONABEC particionadas tambien quedan deshabilitadas.
 
 Ejemplo de `dag_run.conf` para ejecucion manual:
 
 ```json
 {
   "extraction_date": "2026-06-29",
+  "pronabec_extraction_scope": "e2e",
   "run_pronabec": true,
   "run_pronabec_discovery": true,
   "run_pronabec_build_plan": true,

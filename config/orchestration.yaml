@@ -38,7 +38,8 @@ datasets:
     silver_table_template: "{project_id}:{silver_dataset}.pronabec_{dataset}"
     extraction_policies:
       - source_dataset: perdida_becas
-        extraction_enabled: false
+        extraction_enabled: true
+        bronze_enabled: true
         silver_enabled: false
         extraction_mode: single
         required_for_e2e: false
@@ -49,7 +50,8 @@ datasets:
         max_page_size_tested_ok: 10000
         page_size_policy: dataset_safe_default
       - source_dataset: notas_becarios
-        extraction_enabled: false
+        extraction_enabled: true
+        bronze_enabled: true
         silver_enabled: false
         extraction_mode: single
         required_for_e2e: false
@@ -60,7 +62,8 @@ datasets:
         max_page_size_tested_ok: 20000
         page_size_policy: dataset_safe_default
       - source_dataset: concepto_pago
-        extraction_enabled: false
+        extraction_enabled: true
+        bronze_enabled: true
         silver_enabled: false
         extraction_mode: single
         required_for_e2e: false
@@ -72,6 +75,7 @@ datasets:
         page_size_policy: dataset_safe_default
       - source_dataset: convocatorias
         extraction_enabled: true
+        bronze_enabled: true
         silver_enabled: true
         extraction_mode: single
         required_for_e2e: true
@@ -83,6 +87,7 @@ datasets:
         page_size_policy: dataset_safe_default
       - source_dataset: becarios_provincia
         extraction_enabled: true
+        bronze_enabled: true
         silver_enabled: true
         extraction_mode: single
         required_for_e2e: true
@@ -95,6 +100,7 @@ datasets:
         allow_record_count_mismatch: true
       - source_dataset: ubigeo_postulacion
         extraction_enabled: true
+        bronze_enabled: true
         silver_enabled: true
         extraction_mode: single
         required_for_e2e: true
@@ -105,7 +111,8 @@ datasets:
         max_page_size_tested_ok: 10000
         page_size_policy: dataset_safe_default
       - source_dataset: periodos_academicos
-        extraction_enabled: false
+        extraction_enabled: true
+        bronze_enabled: true
         silver_enabled: false
         extraction_mode: single
         required_for_e2e: false
@@ -117,6 +124,7 @@ datasets:
         page_size_policy: dataset_safe_default
       - source_dataset: colegios_habiles
         extraction_enabled: true
+        bronze_enabled: true
         silver_enabled: true
         extraction_mode: single
         required_for_e2e: true
@@ -128,6 +136,7 @@ datasets:
         page_size_policy: dataset_safe_default
       - source_dataset: becarios_pais_estudio
         extraction_enabled: true
+        bronze_enabled: true
         silver_enabled: true
         extraction_mode: single
         required_for_e2e: true
@@ -138,7 +147,8 @@ datasets:
         max_page_size_tested_ok: 10000
         page_size_policy: dataset_safe_default
       - source_dataset: convocatorias_carrera_sede
-        extraction_enabled: false
+        extraction_enabled: true
+        bronze_enabled: true
         silver_enabled: false
         extraction_mode: chunked
         required_for_e2e: false
@@ -149,7 +159,8 @@ datasets:
         max_page_size_tested_ok: 5000
         page_size_policy: dataset_safe_default
       - source_dataset: nota_postulante_region
-        extraction_enabled: false
+        extraction_enabled: true
+        bronze_enabled: true
         silver_enabled: false
         extraction_mode: single
         required_for_e2e: false

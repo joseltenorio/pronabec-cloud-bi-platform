@@ -449,3 +449,54 @@ def test_finalizer_empty_dataset(
         manifest = json.load(f)
     assert manifest["records_written"] == 0
     assert manifest["total_records_observed"] == 0
+
+
+@patch("pipelines.finalize_pronabec_dataset.get_pipeline_settings")
+@patch("pipelines.finalize_pronabec_dataset.load_orchestration_config")
+def test_finalizer_writes_bronze_only_manifest_flags(
+    mock_load_orch, mock_settings,
+    mock_pipeline_settings, mock_orchestration, tmp_path
+):
+    mock_settings.return_value = mock_pipeline_settings
+    mock_load_orch.return_value = mock_orchestration
+
+    chunks_list = [
+        {
+            "chunk_id": "c1",
+            "source_dataset": "dataset_single",
+            "page_start": 1,
+            "page_end": 1,
+            "effective_page_size": 1000,
+            "bronze_enabled": True,
+            "silver_enabled": False,
+            "required_for_e2e": False,
+            "output_mode": "chunk",
+        }
+    ]
+    create_mock_plan(tmp_path, "dataset_single", 1, 1, 1, None, chunks_list)
+    plan_file = tmp_path / "bronze_work" / "pronabec" / "_plans" / "extraction_date=2026-06-29" / "run_id=test-run" / "plan.json"
+    with open(plan_file, "r", encoding="utf-8") as f:
+        plan = json.load(f)
+    plan["scope"] = "bronze_full"
+    plan["datasets"][0]["bronze_enabled"] = True
+    plan["datasets"][0]["silver_enabled"] = False
+    plan["datasets"][0]["required_for_e2e"] = False
+    with open(plan_file, "w", encoding="utf-8") as f:
+        json.dump(plan, f)
+    create_mock_chunk(tmp_path, "dataset_single", "c1", 1, 1, 1)
+
+    args = DummyArgs(dry_run=True, output_dir=str(tmp_path), source_dataset="dataset_single")
+    run_finalize(args)
+
+    final_dir = tmp_path / "bronze" / "pronabec" / "dataset_single" / "extraction_date=2026-06-29"
+    with open(final_dir / "manifest.json", "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+    with open(final_dir / "_SUCCESS", "r", encoding="utf-8") as f:
+        success = json.load(f)
+
+    assert manifest["scope"] == "bronze_full"
+    assert manifest["bronze_enabled"] is True
+    assert manifest["silver_enabled"] is False
+    assert manifest["required_for_e2e"] is False
+    assert manifest["bronze_only"] is True
+    assert success["bronze_only"] is True

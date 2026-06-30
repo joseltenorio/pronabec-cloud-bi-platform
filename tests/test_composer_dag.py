@@ -193,6 +193,10 @@ def test_dag_passes_chunk_runtime_env_vars() -> None:
 def test_dag_uses_pronabec_flags_for_chunked_tasks() -> None:
     content = _read_dag_source()
 
+    assert "PRONABEC_EXTRACTION_SCOPE" in content
+    assert "pronabec_extraction_scope" in content
+    assert '"pronabec_extraction_scope": Param(default="e2e", type="string")' in content
+    assert "policy.bronze_enabled and policy.required_for_e2e" in content
     assert "RUN_PRONABEC_DISCOVERY" in content
     assert "RUN_PRONABEC_BUILD_PLAN" in content
     assert "RUN_PRONABEC_PLAN_EXECUTION" in content

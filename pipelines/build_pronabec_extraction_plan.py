@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Módulo para construir el plan de extracción de PRONABEC API.
+"""Modulo para construir el plan de extraccion de PRONABEC API.
 
 Lee discovery.json y genera plan.json con los chunks a extraer.
 """
@@ -22,6 +22,7 @@ from pipelines.common.logging import log_event, setup_structured_logger
 from pipelines.common.orchestration_config import (
     get_pronabec_dataset_policies,
     load_orchestration_config,
+    resolve_pronabec_extraction_scope,
 )
 from pipelines.extract_pronabec import (
     resolve_extraction_date,
@@ -37,7 +38,7 @@ def read_discovery_json(
     extraction_date: str,
     run_id: str,
 ) -> dict[str, Any]:
-    """Lee el archivo discovery.json de la ubicación correspondiente."""
+    """Lee el archivo discovery.json de la ubicacion correspondiente."""
     if dry_run:
         path = (
             Path(output_dir)
@@ -49,7 +50,7 @@ def read_discovery_json(
             / "discovery.json"
         )
         if not path.exists():
-            raise FileNotFoundError(f"No se encontró discovery.json local en: {path}")
+            raise FileNotFoundError(f"No se encontro discovery.json local en: {path}")
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     else:
@@ -69,8 +70,10 @@ def build_plan(
     discovery_data: dict[str, Any],
     orchestration_config: dict[str, Any],
     source_dataset_filter: str | None,
+    scope: str | None = None,
 ) -> dict[str, Any]:
-    """Genera el plan de extracción basándose en discovery.json y orchestration policies."""
+    """Genera el plan de extraccion basandose en discovery.json y orchestration policies."""
+    resolved_scope = resolve_pronabec_extraction_scope(scope or discovery_data.get("scope"))
     policies = {
         p.source_dataset: p
         for p in get_pronabec_dataset_policies(orchestration_config)
@@ -83,14 +86,19 @@ def build_plan(
     for ds_discovered in discovery_data.get("datasets", []):
         dataset_name = ds_discovered["source_dataset"]
 
-        # Si se filtró por source_dataset, saltarse los demás
+        # Si se filtro por source_dataset, saltarse los demas
         if source_dataset_filter and dataset_name != source_dataset_filter:
             continue
 
-        # Si el dataset fue solicitado explícitamente, permitimos planificarlo aunque esté deshabilitado.
+        # Si el dataset fue solicitado explicitamente, permitimos planificarlo aunque este deshabilitado.
         if ds_discovered.get("status") != "SUCCESS":
             continue
-        if not ds_discovered.get("extraction_enabled") and not source_dataset_filter:
+        bronze_enabled = bool(ds_discovered.get("bronze_enabled", ds_discovered.get("extraction_enabled", False)))
+        silver_enabled = bool(ds_discovered.get("silver_enabled", False))
+        required_for_e2e = bool(ds_discovered.get("required_for_e2e", False))
+        if not bronze_enabled and not source_dataset_filter:
+            continue
+        if resolved_scope == "e2e" and not required_for_e2e and not source_dataset_filter:
             continue
 
         policy = policies.get(dataset_name)
@@ -101,7 +109,6 @@ def build_plan(
         effective_page_size = ds_discovered["effective_page_size"]
         total_records = ds_discovered["total_records"]
         total_pages = ds_discovered["total_pages"]
-        required_for_e2e = ds_discovered["required_for_e2e"]
 
         chunk_size_pages = policy.chunk_size_pages
         max_parallel_chunks = policy.max_parallel_chunks
@@ -109,7 +116,7 @@ def build_plan(
         chunks: list[dict[str, Any]] = []
 
         if total_pages == 0:
-            # Caso dataset vacío
+            # Caso dataset vacio
             chunk_id = f"{dataset_name}_0001"
             chunks.append({
                 "chunk_id": chunk_id,
@@ -117,6 +124,8 @@ def build_plan(
                 "page_start": 1,
                 "page_end": 0,
                 "effective_page_size": effective_page_size,
+                "bronze_enabled": bronze_enabled,
+                "silver_enabled": silver_enabled,
                 "required_for_e2e": required_for_e2e,
                 "output_mode": "chunk",
             })
@@ -128,6 +137,8 @@ def build_plan(
                 "page_start": 1,
                 "page_end": total_pages,
                 "effective_page_size": effective_page_size,
+                "bronze_enabled": bronze_enabled,
+                "silver_enabled": silver_enabled,
                 "required_for_e2e": required_for_e2e,
                 "output_mode": "chunk", # Escribe en bronze_work intermedio
             })
@@ -149,6 +160,8 @@ def build_plan(
                     "page_start": page_start,
                     "page_end": page_end,
                     "effective_page_size": effective_page_size,
+                    "bronze_enabled": bronze_enabled,
+                    "silver_enabled": silver_enabled,
                     "required_for_e2e": required_for_e2e,
                     "output_mode": "chunk",
                 })
@@ -157,6 +170,9 @@ def build_plan(
 
         datasets_plans.append({
             "source_dataset": dataset_name,
+            "bronze_enabled": bronze_enabled,
+            "silver_enabled": silver_enabled,
+            "required_for_e2e": required_for_e2e,
             "extraction_mode": extraction_mode,
             "effective_page_size": effective_page_size,
             "total_records": total_records,
@@ -170,6 +186,7 @@ def build_plan(
 
     return {
         "source_system": "pronabec",
+        "scope": resolved_scope,
         "extraction_date": discovery_data["extraction_date"],
         "pipeline_run_id": discovery_data["pipeline_run_id"],
         "created_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
@@ -181,7 +198,7 @@ def build_plan(
 
 
 def run_build_plan(args: argparse.Namespace) -> None:
-    """Orquesta la construcción del plan de extracción."""
+    """Orquesta la construccion del plan de extraccion."""
     pipeline_settings = get_pipeline_settings(args.pipeline_config)
     orchestration_config = load_orchestration_config(args.orchestration_config)
 
@@ -195,7 +212,7 @@ def run_build_plan(args: argparse.Namespace) -> None:
 
     if not args.dry_run and not bucket_name:
         raise ConfigError(
-            "No se definió bucket. Configura GCS_BUCKET_NAME o usa --bucket."
+            "No se definio bucket. Configura GCS_BUCKET_NAME o usa --bucket."
         )
 
     extraction_date = resolve_extraction_date(
@@ -211,12 +228,18 @@ def run_build_plan(args: argparse.Namespace) -> None:
         cli_value=args.source_dataset,
         legacy_value=args.dataset,
     )
+    scope = resolve_pronabec_extraction_scope(
+        getattr(args, "scope", None)
+        or os.getenv("PRONABEC_PLAN_SCOPE")
+        or os.getenv("PRONABEC_EXTRACTION_SCOPE")
+    )
 
     log_event(
         logger,
         "INFO",
-        "Construyendo plan de extracción PRONABEC",
+        "Construyendo plan de extraccion PRONABEC",
         source_dataset=source_dataset,
+        scope=scope,
         extraction_date=extraction_date,
         run_id=run_id,
         dry_run=args.dry_run,
@@ -236,6 +259,7 @@ def run_build_plan(args: argparse.Namespace) -> None:
         discovery_data=discovery_data,
         orchestration_config=orchestration_config,
         source_dataset_filter=source_dataset,
+        scope=scope,
     )
 
     # 3. Guardar plan.json
@@ -255,7 +279,7 @@ def run_build_plan(args: argparse.Namespace) -> None:
         log_event(
             logger,
             "INFO",
-            "Plan de extracción escrito localmente (dry-run)",
+            "Plan de extraccion escrito localmente (dry-run)",
             path=str(out_path),
         )
     else:
@@ -271,7 +295,7 @@ def run_build_plan(args: argparse.Namespace) -> None:
         log_event(
             logger,
             "INFO",
-            "Plan de extracción escrito en GCS",
+            "Plan de extraccion escrito en GCS",
             bucket=bucket_name,
             object_path=object_path,
         )
@@ -280,7 +304,7 @@ def run_build_plan(args: argparse.Namespace) -> None:
 def parse_args() -> argparse.Namespace:
     """Parsea argumentos CLI."""
     parser = argparse.ArgumentParser(
-        description="Construye plan.json para la extracción de PRONABEC."
+        description="Construye plan.json para la extraccion de PRONABEC."
     )
     parser.add_argument(
         "--pipeline-config",
@@ -299,11 +323,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--source-dataset",
-        help="Dataset específico a planificar.",
+        help="Dataset especifico a planificar.",
     )
     parser.add_argument(
         "--dataset",
         help="Alias legacy de --source-dataset.",
+    )
+    parser.add_argument(
+        "--scope",
+        choices=["e2e", "bronze_full"],
+        help="Alcance del plan PRONABEC. Default: PRONABEC_PLAN_SCOPE, PRONABEC_EXTRACTION_SCOPE o e2e.",
     )
     parser.add_argument(
         "--bucket",
@@ -311,7 +340,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--extraction-date",
-        help="Fecha lógica YYYY-MM-DD.",
+        help="Fecha logica YYYY-MM-DD.",
     )
     parser.add_argument(
         "--allow-default-date",
@@ -320,11 +349,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--run-id",
-        help="Identificador de ejecución legacy.",
+        help="Identificador de ejecucion legacy.",
     )
     parser.add_argument(
         "--pipeline-run-id",
-        help="Identificador de ejecución.",
+        help="Identificador de ejecucion.",
     )
     parser.add_argument(
         "--dry-run",
@@ -345,8 +374,9 @@ def main() -> None:
     try:
         run_build_plan(args)
     except Exception as exc:
-        sys.exit(f"Error fatal durante construcción del plan: {exc}")
+        sys.exit(f"Error fatal durante construccion del plan: {exc}")
 
 
 if __name__ == "__main__":
     main()
+

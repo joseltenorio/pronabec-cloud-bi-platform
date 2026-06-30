@@ -7,6 +7,7 @@ from pipelines.validate_bronze_manifests import (
     BronzeManifestValidationError,
     build_pronabec_manifest_check,
     resolve_extraction_date,
+    resolve_pronabec_checks,
     validate_manifest_payload,
 )
 
@@ -105,3 +106,119 @@ def test_resolve_extraction_date_rejects_invalid_date(monkeypatch):
         resolve_extraction_date("2026/06/28")
 
     assert "Invalid extraction date, expected YYYY-MM-DD: 2026/06/28" in str(excinfo.value)
+
+
+def test_resolve_pronabec_checks_respects_e2e_scope():
+    endpoints_config = {
+        "pronabec": {
+            "endpoints": [
+                {"name": "convocatorias", "enabled": True},
+                {"name": "notas_becarios", "enabled": True},
+            ]
+        }
+    }
+    orchestration_config = {
+        "datasets": {
+            "pronabec_api": {
+                "extraction_policies": [
+                    {
+                        "source_dataset": "convocatorias",
+                        "extraction_enabled": True,
+                        "bronze_enabled": True,
+                        "silver_enabled": True,
+                        "required_for_e2e": True,
+                        "extraction_mode": "single",
+                        "chunk_size_pages": None,
+                        "max_parallel_chunks": 1,
+                        "recommended_page_size": 1000,
+                        "fallback_page_sizes": [500, 100],
+                        "max_page_size_tested_ok": 1000,
+                        "page_size_policy": "dataset_safe_default",
+                    },
+                    {
+                        "source_dataset": "notas_becarios",
+                        "extraction_enabled": True,
+                        "bronze_enabled": True,
+                        "silver_enabled": False,
+                        "required_for_e2e": False,
+                        "extraction_mode": "single",
+                        "chunk_size_pages": None,
+                        "max_parallel_chunks": 1,
+                        "recommended_page_size": 1000,
+                        "fallback_page_sizes": [500, 100],
+                        "max_page_size_tested_ok": 1000,
+                        "page_size_policy": "dataset_safe_default",
+                    },
+                ]
+            }
+        }
+    }
+
+    checks = resolve_pronabec_checks(
+        endpoints_config=endpoints_config,
+        orchestration_config=orchestration_config,
+        bucket_name="bucket",
+        bronze_normalized_template="bronze/pronabec/{dataset}/extraction_date={extraction_date}/data.jsonl",
+        extraction_date="2026-06-30",
+        scope="e2e",
+    )
+
+    assert [check.source_dataset for check in checks] == ["convocatorias"]
+
+
+def test_resolve_pronabec_checks_respects_bronze_full_scope():
+    endpoints_config = {
+        "pronabec": {
+            "endpoints": [
+                {"name": "convocatorias", "enabled": True},
+                {"name": "notas_becarios", "enabled": True},
+            ]
+        }
+    }
+    orchestration_config = {
+        "datasets": {
+            "pronabec_api": {
+                "extraction_policies": [
+                    {
+                        "source_dataset": "convocatorias",
+                        "extraction_enabled": True,
+                        "bronze_enabled": True,
+                        "silver_enabled": True,
+                        "required_for_e2e": True,
+                        "extraction_mode": "single",
+                        "chunk_size_pages": None,
+                        "max_parallel_chunks": 1,
+                        "recommended_page_size": 1000,
+                        "fallback_page_sizes": [500, 100],
+                        "max_page_size_tested_ok": 1000,
+                        "page_size_policy": "dataset_safe_default",
+                    },
+                    {
+                        "source_dataset": "notas_becarios",
+                        "extraction_enabled": True,
+                        "bronze_enabled": True,
+                        "silver_enabled": False,
+                        "required_for_e2e": False,
+                        "extraction_mode": "single",
+                        "chunk_size_pages": None,
+                        "max_parallel_chunks": 1,
+                        "recommended_page_size": 1000,
+                        "fallback_page_sizes": [500, 100],
+                        "max_page_size_tested_ok": 1000,
+                        "page_size_policy": "dataset_safe_default",
+                    },
+                ]
+            }
+        }
+    }
+
+    checks = resolve_pronabec_checks(
+        endpoints_config=endpoints_config,
+        orchestration_config=orchestration_config,
+        bucket_name="bucket",
+        bronze_normalized_template="bronze/pronabec/{dataset}/extraction_date={extraction_date}/data.jsonl",
+        extraction_date="2026-06-30",
+        scope="bronze_full",
+    )
+
+    assert [check.source_dataset for check in checks] == ["convocatorias", "notas_becarios"]

@@ -19,6 +19,7 @@ def _base_discovery(dataset_name: str, extraction_mode: str, effective_page_size
         "datasets": [
             {
                 "source_dataset": dataset_name,
+                "bronze_enabled": True,
                 "extraction_enabled": True,
                 "silver_enabled": True,
                 "required_for_e2e": False,
@@ -70,6 +71,8 @@ def test_actual_plan_builds_one_chunk_for_becarios_pais_estudio() -> None:
             "page_start": 1,
             "page_end": 9,
             "effective_page_size": 10000,
+            "bronze_enabled": True,
+            "silver_enabled": True,
             "required_for_e2e": False,
             "output_mode": "chunk",
         }

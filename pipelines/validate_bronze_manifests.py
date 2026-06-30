@@ -10,9 +10,15 @@ from typing import Any
 from pipelines.common.config import ConfigError, get_pipeline_settings, load_yaml_config
 from pipelines.common.gcs import build_gs_uri, parse_gs_uri, read_gcs_bytes
 from pipelines.common.logging import log_event, setup_structured_logger
+from pipelines.common.orchestration_config import (
+    get_pronabec_datasets_for_scope,
+    load_orchestration_config,
+    resolve_pronabec_extraction_scope,
+)
 
 
 DEFAULT_ENDPOINTS_CONFIG = "config/endpoints.yaml"
+DEFAULT_ORCHESTRATION_CONFIG = "config/orchestration.yaml"
 DEFAULT_PIPELINE_CONFIG = "config/pipeline.yaml"
 
 
@@ -164,11 +170,23 @@ def resolve_pronabec_checks(
     bucket_name: str,
     bronze_normalized_template: str,
     extraction_date: str,
+    orchestration_config: dict[str, Any] | None = None,
+    scope: str = "e2e",
 ) -> list[BronzeManifestCheck]:
     checks: list[BronzeManifestCheck] = []
+    if orchestration_config is None:
+        selected_dataset_names = {
+            endpoint["name"]
+            for endpoint in endpoints_config["pronabec"]["endpoints"]
+            if endpoint.get("enabled", True)
+        }
+    else:
+        selected_dataset_names = set(get_pronabec_datasets_for_scope(orchestration_config, scope))
 
     for endpoint in endpoints_config["pronabec"]["endpoints"]:
         if not endpoint.get("enabled", True):
+            continue
+        if endpoint["name"] not in selected_dataset_names:
             continue
 
         checks.append(
@@ -196,6 +214,10 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_ENDPOINTS_CONFIG,
     )
     parser.add_argument(
+        "--orchestration-config",
+        default=DEFAULT_ORCHESTRATION_CONFIG,
+    )
+    parser.add_argument(
         "--bucket",
         help="Bucket GCS. Si se omite, usa GCS_BUCKET_NAME.",
     )
@@ -209,6 +231,11 @@ def parse_args() -> argparse.Namespace:
         default="pronabec",
         help="Sistema fuente a validar.",
     )
+    parser.add_argument(
+        "--scope",
+        choices=["e2e", "bronze_full"],
+        help="Alcance PRONABEC a validar. Default: PRONABEC_VALIDATION_SCOPE, PRONABEC_EXTRACTION_SCOPE o e2e.",
+    )
 
     return parser.parse_args()
 
@@ -219,6 +246,12 @@ def main() -> None:
 
     pipeline_settings = get_pipeline_settings(args.pipeline_config)
     endpoints_config = load_yaml_config(args.endpoints_config)
+    orchestration_config = load_orchestration_config(args.orchestration_config)
+    scope = resolve_pronabec_extraction_scope(
+        args.scope
+        or os.getenv("PRONABEC_VALIDATION_SCOPE")
+        or os.getenv("PRONABEC_EXTRACTION_SCOPE")
+    )
 
     logger = setup_structured_logger(
         name="validate_bronze_manifests",
@@ -241,6 +274,8 @@ def main() -> None:
             bucket_name=bucket_name,
             bronze_normalized_template=gcs_paths["pronabec_bronze_normalized"],
             extraction_date=extraction_date,
+            orchestration_config=orchestration_config,
+            scope=scope,
         )
     else:
         checks = []
@@ -256,6 +291,7 @@ def main() -> None:
         "INFO",
         "Validación Bronze manifests completada",
         source_system=args.source_system,
+        scope=scope,
         extraction_date=extraction_date,
         checks=len(checks),
     )

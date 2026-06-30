@@ -24,8 +24,10 @@ from pipelines.common.config import ConfigError, get_pipeline_settings, load_yam
 from pipelines.common.gcs import upload_json
 from pipelines.common.logging import log_event, setup_structured_logger
 from pipelines.common.orchestration_config import (
+    get_pronabec_datasets_for_scope,
     get_pronabec_dataset_policies,
     load_orchestration_config,
+    resolve_pronabec_extraction_scope,
 )
 from pipelines.extract_pronabec import (
     build_pronabec_data_url,
@@ -102,6 +104,7 @@ def discover_dataset(
             return {
                 "source_dataset": dataset_name,
                 "extraction_enabled": policy.extraction_enabled,
+                "bronze_enabled": policy.bronze_enabled,
                 "silver_enabled": policy.silver_enabled,
                 "required_for_e2e": policy.required_for_e2e,
                 "extraction_mode": policy.extraction_mode,
@@ -180,12 +183,18 @@ def run_discovery(args: argparse.Namespace) -> None:
         cli_value=args.source_dataset,
         legacy_value=args.dataset,
     )
+    scope = resolve_pronabec_extraction_scope(
+        getattr(args, "scope", None)
+        or os.getenv("PRONABEC_DISCOVERY_SCOPE")
+        or os.getenv("PRONABEC_EXTRACTION_SCOPE")
+    )
 
     log_event(
         logger,
         "INFO",
         "Iniciando discovery de datasets PRONABEC",
         source_dataset=source_dataset,
+        scope=scope,
         extraction_date=extraction_date,
         run_id=run_id,
         dry_run=args.dry_run,
@@ -193,8 +202,7 @@ def run_discovery(args: argparse.Namespace) -> None:
 
     # Si no hay source_dataset específico, descubrimos todos los habilitados
     if not source_dataset:
-        policies = get_pronabec_dataset_policies(orchestration_config)
-        enabled_datasets = [p.source_dataset for p in policies if p.extraction_enabled]
+        enabled_datasets = get_pronabec_datasets_for_scope(orchestration_config, scope)
         endpoints = [
             ep for ep in endpoints_config["pronabec"]["endpoints"]
             if ep["name"] in enabled_datasets
@@ -264,6 +272,7 @@ def run_discovery(args: argparse.Namespace) -> None:
             res_failed = {
                 "source_dataset": dataset_name,
                 "extraction_enabled": policy.extraction_enabled,
+                "bronze_enabled": policy.bronze_enabled,
                 "silver_enabled": policy.silver_enabled,
                 "required_for_e2e": policy.required_for_e2e,
                 "extraction_mode": policy.extraction_mode,
@@ -282,6 +291,7 @@ def run_discovery(args: argparse.Namespace) -> None:
     # Guardar metadata de discovery
     discovery_manifest = {
         "source_system": "pronabec",
+        "scope": scope,
         "extraction_date": extraction_date,
         "pipeline_run_id": run_id,
         "source_snapshot_observed_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
@@ -367,6 +377,11 @@ def parse_args() -> argparse.Namespace:
         "--allow-disabled-dataset",
         action="store_true",
         help="Permite descubrir datasets deshabilitados.",
+    )
+    parser.add_argument(
+        "--scope",
+        choices=["e2e", "bronze_full"],
+        help="Alcance de discovery PRONABEC. Default: PRONABEC_DISCOVERY_SCOPE, PRONABEC_EXTRACTION_SCOPE o e2e.",
     )
     parser.add_argument(
         "--bucket",

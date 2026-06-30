@@ -11,6 +11,7 @@ from pipelines.common.orchestration_config import (
     build_gcs_uri,
     get_chunked_pronabec_datasets,
     get_enabled_pronabec_datasets,
+    get_pronabec_datasets_for_scope,
     get_pronabec_dataset_policies,
     get_required_pronabec_datasets,
     load_endpoints_config,
@@ -150,6 +151,7 @@ def test_pronabec_dataset_policy_fields_are_typed() -> None:
     for policy in get_pronabec_dataset_policies(config):
         assert policy.source_dataset
         assert isinstance(policy.extraction_enabled, bool)
+        assert isinstance(policy.bronze_enabled, bool)
         assert isinstance(policy.silver_enabled, bool)
         assert isinstance(policy.required_for_e2e, bool)
         assert policy.extraction_mode in {"single", "chunked"}
@@ -193,11 +195,17 @@ def test_pronabec_dataset_policy_helpers_filter_by_flags() -> None:
     config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
 
     assert get_enabled_pronabec_datasets(config) == [
+        "perdida_becas",
+        "notas_becarios",
+        "concepto_pago",
         "convocatorias",
         "becarios_provincia",
         "ubigeo_postulacion",
+        "periodos_academicos",
         "colegios_habiles",
         "becarios_pais_estudio",
+        "convocatorias_carrera_sede",
+        "nota_postulante_region",
     ]
     assert get_required_pronabec_datasets(config) == [
         "convocatorias",
@@ -224,9 +232,22 @@ def test_pronabec_bronze_only_datasets_are_not_required_for_e2e() -> None:
         "periodos_academicos",
         "nota_postulante_region",
     ]:
-        assert policies[dataset].extraction_enabled is False
+        assert policies[dataset].bronze_enabled is True
         assert policies[dataset].silver_enabled is False
         assert policies[dataset].required_for_e2e is False
+
+
+def test_pronabec_dataset_scope_helpers_split_e2e_and_bronze_full() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+
+    assert get_pronabec_datasets_for_scope(config, "e2e") == [
+        "convocatorias",
+        "becarios_provincia",
+        "ubigeo_postulacion",
+        "colegios_habiles",
+        "becarios_pais_estudio",
+    ]
+    assert get_pronabec_datasets_for_scope(config, "bronze_full") == get_enabled_pronabec_datasets(config)
 
 
 def test_invalid_pronabec_policy_mode_is_rejected() -> None:

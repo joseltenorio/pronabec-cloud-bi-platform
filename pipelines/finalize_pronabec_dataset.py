@@ -151,6 +151,9 @@ def run_finalize(args: argparse.Namespace) -> None:
     total_records_observed = dataset_plan["total_records"]
     total_pages_observed = dataset_plan["total_pages"]
     expected_chunks = dataset_plan["expected_chunks"]
+    bronze_enabled = bool(dataset_plan.get("bronze_enabled", True))
+    silver_enabled = bool(dataset_plan.get("silver_enabled", False))
+    required_for_e2e = bool(dataset_plan.get("required_for_e2e", False))
 
     # 3. Filtrar chunks esperados para el dataset en plan.json
     plan_chunks = [
@@ -319,7 +322,12 @@ def run_finalize(args: argparse.Namespace) -> None:
 
     final_manifest = {
         "source_system": "pronabec",
+        "scope": plan_dict.get("scope", "e2e"),
         "source_dataset": source_dataset,
+        "bronze_enabled": bronze_enabled,
+        "silver_enabled": silver_enabled,
+        "required_for_e2e": required_for_e2e,
+        "bronze_only": bronze_enabled and not silver_enabled,
         "extraction_date": extraction_date,
         "pipeline_run_id": run_id,
         "source_snapshot_observed_at": plan_dict["source_snapshot_observed_at"],
@@ -337,7 +345,12 @@ def run_finalize(args: argparse.Namespace) -> None:
 
     final_success_marker = {
         "source_system": "pronabec",
+        "scope": plan_dict.get("scope", "e2e"),
         "source_dataset": source_dataset,
+        "bronze_enabled": bronze_enabled,
+        "silver_enabled": silver_enabled,
+        "required_for_e2e": required_for_e2e,
+        "bronze_only": bronze_enabled and not silver_enabled,
         "extraction_date": extraction_date,
         "pipeline_run_id": run_id,
         "status": "SUCCESS",

@@ -45,7 +45,7 @@ PRONABEC_API_ITEMS = [
 PRONABEC_EXTRACTION_POLICIES = [
     policy
     for policy in get_pronabec_dataset_policies(ORCHESTRATION_CONFIG)
-    if policy.extraction_enabled
+    if policy.bronze_enabled and policy.required_for_e2e
 ]
 MEF_ITEMS = [
     item
@@ -140,6 +140,7 @@ QUALITY_CHECKS_JOB = airflow_var_template(
 )
 
 EXTRACTION_DATE = "{{ dag_run.conf.get('extraction_date') or ds }}"
+PRONABEC_EXTRACTION_SCOPE = "{{ dag_run.conf.get('pronabec_extraction_scope', 'e2e') }}"
 RUN_PRONABEC = "{{ dag_run.conf.get('run_pronabec', true) }}"
 RUN_PRONABEC_DISCOVERY = "{{ dag_run.conf.get('run_pronabec', true) and dag_run.conf.get('run_pronabec_discovery', true) }}"
 RUN_PRONABEC_BUILD_PLAN = "{{ dag_run.conf.get('run_pronabec', true) and dag_run.conf.get('run_pronabec_build_plan', true) }}"
@@ -236,6 +237,7 @@ with DAG(
             description="Fecha lógica de extracción. Si se omite, usa la fecha de ejecución del DAG.",
         ),
         "run_pronabec": Param(default=True, type="boolean"),
+        "pronabec_extraction_scope": Param(default="e2e", type="string"),
         "run_pronabec_discovery": Param(default=True, type="boolean"),
         "run_pronabec_build_plan": Param(default=True, type="boolean"),
         "run_pronabec_plan_execution": Param(default=True, type="boolean"),
@@ -259,6 +261,9 @@ with DAG(
         bash_command=cloud_run_execute_command(
             job_name=PRONABEC_DISCOVERY_JOB,
             enabled_expression=RUN_PRONABEC_DISCOVERY,
+            extra_env_vars={
+                "PRONABEC_EXTRACTION_SCOPE": PRONABEC_EXTRACTION_SCOPE,
+            },
         ),
     )
 
@@ -267,6 +272,9 @@ with DAG(
         bash_command=cloud_run_execute_command(
             job_name=PRONABEC_BUILD_PLAN_JOB,
             enabled_expression=RUN_PRONABEC_BUILD_PLAN,
+            extra_env_vars={
+                "PRONABEC_EXTRACTION_SCOPE": PRONABEC_EXTRACTION_SCOPE,
+            },
         ),
     )
 
@@ -324,6 +332,9 @@ with DAG(
         bash_command=cloud_run_execute_command(
             job_name=BRONZE_MANIFEST_VALIDATION_JOB,
             enabled_expression=RUN_BRONZE_MANIFEST_VALIDATION,
+            extra_env_vars={
+                "PRONABEC_EXTRACTION_SCOPE": PRONABEC_EXTRACTION_SCOPE,
+            },
         ),
     )
 
