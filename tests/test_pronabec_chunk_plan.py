@@ -3,6 +3,7 @@
 
 import pytest
 from pipelines.build_pronabec_extraction_plan import build_plan
+from pipelines.common.config import ConfigError
 
 
 @pytest.fixture
@@ -178,6 +179,7 @@ def test_does_not_plan_failed_datasets(base_discovery, base_orchestration):
         {
             "source_dataset": "dataset_1",
             "extraction_enabled": True,
+            "bronze_enabled": True,
             "silver_enabled": True,
             "required_for_e2e": True,
             "extraction_mode": "chunked",
@@ -189,9 +191,8 @@ def test_does_not_plan_failed_datasets(base_discovery, base_orchestration):
             "status": "FAILED", # FAILED!
         }
     ]
-    plan = build_plan(disc, base_orchestration, None)
-    assert len(plan["chunks"]) == 0
-    assert len(plan["datasets"]) == 0
+    with pytest.raises(ConfigError, match="datasets Bronze habilitados"):
+        build_plan(disc, base_orchestration, None)
 
 
 def test_chunk_id_determinism_and_gaps(base_discovery, base_orchestration):

@@ -237,11 +237,11 @@ def run_discovery(args: argparse.Namespace) -> None:
             dataset=dataset_name,
         )
 
-        # Resolver fail_on_error desde el raw dict o requerido
-        # Si no existe en policy, usamos policy.required_for_e2e
+        # Resolver fail_on_error desde el raw dict o, por defecto, exigir
+        # que todo dataset Bronze habilitado aborte ante un fallo.
         fail_on_error = getattr(policy, "fail_on_error", None)
         if fail_on_error is None:
-            fail_on_error = policy.required_for_e2e
+            fail_on_error = policy.bronze_enabled
 
         try:
             res = discover_dataset(

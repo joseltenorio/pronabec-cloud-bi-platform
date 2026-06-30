@@ -77,6 +77,7 @@ def build_plan(
 
     datasets_plans: list[dict[str, Any]] = []
     chunks_plans: list[dict[str, Any]] = []
+    bronze_failures: list[str] = []
 
     # Filtrar datasets del discovery
     for ds_discovered in discovery_data.get("datasets", []):
@@ -87,12 +88,13 @@ def build_plan(
             continue
 
         # Si el dataset fue solicitado explicitamente, permitimos planificarlo aunque este deshabilitado.
-        if ds_discovered.get("status") != "SUCCESS":
-            continue
         bronze_enabled = bool(ds_discovered.get("bronze_enabled", ds_discovered.get("extraction_enabled", False)))
         silver_enabled = bool(ds_discovered.get("silver_enabled", False))
         required_for_e2e = bool(ds_discovered.get("required_for_e2e", False))
         if not bronze_enabled and not source_dataset_filter:
+            continue
+        if bronze_enabled and ds_discovered.get("status") != "SUCCESS":
+            bronze_failures.append(dataset_name)
             continue
 
         policy = policies.get(dataset_name)
@@ -177,6 +179,12 @@ def build_plan(
         })
 
         chunks_plans.extend(chunks)
+
+    if bronze_failures:
+        raise ConfigError(
+            "No se puede generar plan READY porque fallaron datasets Bronze habilitados: "
+            + ", ".join(sorted(bronze_failures))
+        )
 
     return {
         "source_system": "pronabec",
