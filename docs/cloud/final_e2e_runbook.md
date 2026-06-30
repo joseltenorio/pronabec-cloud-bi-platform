@@ -59,6 +59,8 @@ run_quality_checks
 
 Composer no hardcodea rangos. `plan.json` es la fuente de verdad para los chunks.
 
+Bronze PRONABEC descarga todos los datasets `bronze_enabled=true`. Silver solo transforma datasets `silver_enabled=true`. `required_for_e2e` queda como metadata operativa y no recorta discovery, build-plan, run-plan ni finalize.
+
 ## 5. Ejecucion manual con gcloud
 
 ### Discovery
@@ -114,6 +116,8 @@ gcloud run jobs execute pronabec-finalize-dataset-job `
 ## 6. Validacion Bronze
 
 `bronze_work/` es temporal y no debe ser leido por Dataflow. Solo Bronze final consolidado con `manifest.json` y `_SUCCESS` entra a `validate_bronze_manifests` y luego a Silver.
+
+Si se quiere ejecutar un solo dataset por diagnostico, use `SOURCE_DATASET` en el job manual correspondiente. No existe un scope E2E que reduzca la descarga Bronze principal.
 
 ## 7. Configuracion manual del DAG
 

@@ -8,11 +8,11 @@ Cloud Run Jobs es la capa de ejecucion serverless para procesos batch de PRONABE
 
 ### `pronabec-discovery-job`
 
-Ejecuta `python -m pipelines.discover_pronabec`. Calcula `effective_page_size`, observa `total_records` y `total_pages`, y escribe `discovery.json` en `bronze_work/pronabec/_plans/`.
+Ejecuta `python -m pipelines.discover_pronabec`. Calcula `effective_page_size`, observa `total_records` y `total_pages`, y escribe `discovery.json` en `bronze_work/pronabec/_plans/` para todos los datasets `bronze_enabled=true`.
 
 ### `pronabec-build-plan-job`
 
-Ejecuta `python -m pipelines.build_pronabec_extraction_plan`. Construye `plan.json` a partir de `discovery.json`.
+Ejecuta `python -m pipelines.build_pronabec_extraction_plan`. Construye `plan.json` a partir de `discovery.json` para todos los datasets Bronze habilitados.
 
 ### `pronabec-run-plan-job`
 
@@ -52,6 +52,8 @@ pronabec-finalize-dataset-job
 ```
 
 `bronze_work/` es temporal. Dataflow no debe leer `bronze_work`; solo Bronze final consolidado por `pronabec-finalize-dataset-job` es consumible por `validate_bronze_manifests` y por Silver.
+
+`required_for_e2e` no recorta la descarga Bronze. Si se necesita una ejecucion acotada para debug o pruebas manuales, use `SOURCE_DATASET` en discovery, run-plan o extract-chunk segun corresponda.
 
 ## Imagen y despliegue
 
