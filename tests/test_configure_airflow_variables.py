@@ -35,6 +35,7 @@ def test_configure_airflow_variables_sets_job_names():
         "pronabec_extract_job_name",
         "pronabec_discovery_job_name",
         "pronabec_build_plan_job_name",
+        "pronabec_run_plan_job_name",
         "pronabec_extract_chunk_job_name",
         "pronabec_finalize_dataset_job_name",
         "mef_extract_job_name",

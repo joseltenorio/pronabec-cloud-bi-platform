@@ -160,10 +160,12 @@ def test_dag_contains_chunked_pronabec_job_refs() -> None:
 
     assert "PRONABEC_DISCOVERY_JOB" in content
     assert "PRONABEC_BUILD_PLAN_JOB" in content
+    assert "PRONABEC_RUN_PLAN_JOB" in content
     assert "PRONABEC_EXTRACT_CHUNK_JOB" in content
     assert "PRONABEC_FINALIZE_DATASET_JOB" in content
     assert "pronabec-discovery-job" in content
     assert "pronabec-build-plan-job" in content
+    assert "pronabec-run-plan-job" in content
     assert "pronabec-extract-chunk-job" in content
     assert "pronabec-finalize-dataset-job" in content
 
@@ -173,7 +175,7 @@ def test_dag_contains_chunked_pronabec_task_ids() -> None:
 
     assert "discover_pronabec_datasets" in content
     assert "build_pronabec_extraction_plan" in content
-    assert "extract_pronabec_" in content
+    assert "run_pronabec_extraction_plan" in content
     assert "finalize_pronabec_" in content
 
 
@@ -183,9 +185,9 @@ def test_dag_passes_chunk_runtime_env_vars() -> None:
     assert "BRONZE_EXTRACTION_DATE" in content
     assert "PIPELINE_RUN_ID={{ run_id }}" in content
     assert '"SOURCE_DATASET": source_dataset' in content
-    assert '"PAGE_START": str(page_start)' in content
-    assert '"PAGE_END": str(page_end)' in content
-    assert '"OUTPUT_MODE": "chunk"' in content
+    assert '"PAGE_START": str(page_start)' not in content
+    assert '"PAGE_END": str(page_end)' not in content
+    assert '"OUTPUT_MODE": "chunk"' not in content
 
 
 def test_dag_uses_pronabec_flags_for_chunked_tasks() -> None:
@@ -193,10 +195,13 @@ def test_dag_uses_pronabec_flags_for_chunked_tasks() -> None:
 
     assert "RUN_PRONABEC_DISCOVERY" in content
     assert "RUN_PRONABEC_BUILD_PLAN" in content
+    assert "RUN_PRONABEC_PLAN_EXECUTION" in content
     assert "RUN_PRONABEC_CHUNK_EXTRACTION" in content
     assert "RUN_PRONABEC_FINALIZE" in content
     assert "dag_run.conf.get('run_pronabec', true) and dag_run.conf.get('run_pronabec_discovery', true)" in content
+    assert "dag_run.conf.get('run_pronabec_plan_execution', dag_run.conf.get('run_pronabec_chunk_extraction', true))" in content
     assert '"run_pronabec_chunk_extraction": Param(default=True, type="boolean")' in content
+    assert '"run_pronabec_plan_execution": Param(default=True, type="boolean")' in content
 
 
 def test_dag_keeps_dataflow_on_final_bronze_paths() -> None:
@@ -205,6 +210,8 @@ def test_dag_keeps_dataflow_on_final_bronze_paths() -> None:
     assert "bronze_work" not in content
     assert "bronze/pronabec/{dataset}/extraction_date={extraction_date}/data.jsonl" in dag_mod.ORCHESTRATION_CONFIG["datasets"]["pronabec_api"]["bronze_path_template"]
     assert "build_api_input_path(source_dataset)" in content
+    assert "PAGE_END=999999" not in content
+    assert "extract_pronabec_" not in content
 
 
 def test_dag_does_not_use_dynamic_task_mapping() -> None:
