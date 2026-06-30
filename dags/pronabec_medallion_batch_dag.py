@@ -47,11 +47,6 @@ PRONABEC_EXTRACTION_POLICIES = [
     for policy in get_pronabec_dataset_policies(ORCHESTRATION_CONFIG)
     if policy.extraction_enabled
 ]
-PRONABEC_STATIC_CHUNK_RANGES = {
-    item["source_dataset"]: item.get("ranges", [])
-    for item in ORCHESTRATION_CONFIG["datasets"]["pronabec_api"].get("static_chunk_ranges", [])
-    if item.get("source_dataset")
-}
 MEF_ITEMS = [
     item
     for item in ORCHESTRATION_CONFIG["datasets"]["mef"]["items"]
@@ -100,6 +95,10 @@ PRONABEC_BUILD_PLAN_JOB = airflow_var_template(
     resolve_airflow_var_name(ORCHESTRATION_CONFIG, "pronabec_build_plan_job_name_var"),
     "pronabec-build-plan-job",
 )
+PRONABEC_RUN_PLAN_JOB = airflow_var_template(
+    resolve_airflow_var_name(ORCHESTRATION_CONFIG, "pronabec_run_plan_job_name_var"),
+    "pronabec-run-plan-job",
+)
 PRONABEC_EXTRACT_CHUNK_JOB = airflow_var_template(
     resolve_airflow_var_name(ORCHESTRATION_CONFIG, "pronabec_extract_chunk_job_name_var"),
     "pronabec-extract-chunk-job",
@@ -144,7 +143,8 @@ EXTRACTION_DATE = "{{ dag_run.conf.get('extraction_date') or ds }}"
 RUN_PRONABEC = "{{ dag_run.conf.get('run_pronabec', true) }}"
 RUN_PRONABEC_DISCOVERY = "{{ dag_run.conf.get('run_pronabec', true) and dag_run.conf.get('run_pronabec_discovery', true) }}"
 RUN_PRONABEC_BUILD_PLAN = "{{ dag_run.conf.get('run_pronabec', true) and dag_run.conf.get('run_pronabec_build_plan', true) }}"
-RUN_PRONABEC_CHUNK_EXTRACTION = "{{ dag_run.conf.get('run_pronabec', true) and dag_run.conf.get('run_pronabec_chunk_extraction', true) }}"
+RUN_PRONABEC_PLAN_EXECUTION = "{{ dag_run.conf.get('run_pronabec', true) and dag_run.conf.get('run_pronabec_plan_execution', dag_run.conf.get('run_pronabec_chunk_extraction', true)) }}"
+RUN_PRONABEC_CHUNK_EXTRACTION = RUN_PRONABEC_PLAN_EXECUTION
 RUN_PRONABEC_FINALIZE = "{{ dag_run.conf.get('run_pronabec', true) and dag_run.conf.get('run_pronabec_finalize', true) }}"
 RUN_MEF = "{{ dag_run.conf.get('run_mef', true) }}"
 RUN_PRONABEC_REPORTS_STAGING = "{{ dag_run.conf.get('run_pronabec_reports_staging', true) }}"
@@ -182,21 +182,6 @@ else
   echo "Tarea deshabilitada por la configuración del DAG."
 fi
 """.strip()
-
-
-def build_pronabec_chunk_ranges(source_dataset: str, extraction_mode: str) -> list[tuple[int, int]]:
-    if extraction_mode == "single":
-        return [(1, 999999)]
-
-    ranges = PRONABEC_STATIC_CHUNK_RANGES.get(source_dataset, [])
-    if not ranges:
-        raise ValueError(f"No existen rangos estaticos para el dataset chunked: {source_dataset}")
-
-    return [
-        (int(item["page_start"]), int(item["page_end"]))
-        for item in ranges
-    ]
-
 
 def render_gcs_path(template: str, **values: str) -> str:
     return template.format(**values)
@@ -253,6 +238,7 @@ with DAG(
         "run_pronabec": Param(default=True, type="boolean"),
         "run_pronabec_discovery": Param(default=True, type="boolean"),
         "run_pronabec_build_plan": Param(default=True, type="boolean"),
+        "run_pronabec_plan_execution": Param(default=True, type="boolean"),
         "run_pronabec_chunk_extraction": Param(default=True, type="boolean"),
         "run_pronabec_finalize": Param(default=True, type="boolean"),
         "run_mef": Param(default=True, type="boolean"),
@@ -284,30 +270,10 @@ with DAG(
         ),
     )
 
-    pronabec_extract_chunk_tasks = []
     pronabec_finalize_tasks = []
-    pronabec_extract_tasks_by_dataset = {}
     pronabec_finalize_task_by_dataset = {}
     for policy in PRONABEC_EXTRACTION_POLICIES:
         source_dataset = policy.source_dataset
-        dataset_extract_tasks = []
-        for page_start, page_end in build_pronabec_chunk_ranges(source_dataset, policy.extraction_mode):
-            extract_task = BashOperator(
-                task_id=f"extract_pronabec_{source_dataset}_{page_start}_{page_end}",
-                bash_command=cloud_run_execute_command(
-                    job_name=PRONABEC_EXTRACT_CHUNK_JOB,
-                    enabled_expression=RUN_PRONABEC_CHUNK_EXTRACTION,
-                    extra_env_vars={
-                        "SOURCE_DATASET": source_dataset,
-                        "PAGE_START": str(page_start),
-                        "PAGE_END": str(page_end),
-                        "OUTPUT_MODE": "chunk",
-                    },
-                ),
-            )
-            dataset_extract_tasks.append(extract_task)
-            pronabec_extract_chunk_tasks.append(extract_task)
-
         finalize_task = BashOperator(
             task_id=f"finalize_pronabec_{source_dataset}",
             bash_command=cloud_run_execute_command(
@@ -318,9 +284,16 @@ with DAG(
                 },
             ),
         )
-        pronabec_extract_tasks_by_dataset[source_dataset] = dataset_extract_tasks
         pronabec_finalize_task_by_dataset[source_dataset] = finalize_task
         pronabec_finalize_tasks.append(finalize_task)
+
+    run_pronabec_extraction_plan = BashOperator(
+        task_id="run_pronabec_extraction_plan",
+        bash_command=cloud_run_execute_command(
+            job_name=PRONABEC_RUN_PLAN_JOB,
+            enabled_expression=RUN_PRONABEC_PLAN_EXECUTION,
+        ),
+    )
 
     extract_mef = BashOperator(
         task_id="extract_mef",
@@ -448,13 +421,9 @@ with DAG(
 
     finish_run = EmptyOperator(task_id="finish_run")
 
-    init_run >> discover_pronabec_datasets >> build_pronabec_extraction_plan
-    for extract_task in pronabec_extract_chunk_tasks:
-        build_pronabec_extraction_plan >> extract_task
-    for source_dataset, extract_tasks in pronabec_extract_tasks_by_dataset.items():
-        finalize_task = pronabec_finalize_task_by_dataset[source_dataset]
-        for extract_task in extract_tasks:
-            extract_task >> finalize_task
+    init_run >> discover_pronabec_datasets >> build_pronabec_extraction_plan >> run_pronabec_extraction_plan
+    for source_dataset, finalize_task in pronabec_finalize_task_by_dataset.items():
+        run_pronabec_extraction_plan >> finalize_task
         finalize_task >> validate_bronze_manifests
 
     init_run >> extract_mef
