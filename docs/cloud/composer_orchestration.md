@@ -12,13 +12,13 @@ pronabec_medallion_batch
 
 ## Flujo principal
 
-El DAG ya orquesta el flujo PRONABEC particionado:
+El DAG orquesta el flujo PRONABEC particionado de forma plan-driven:
 
 ```text
 init_run
   -> discover_pronabec_datasets
   -> build_pronabec_extraction_plan
-  -> extract_pronabec_chunks
+  -> run_pronabec_extraction_plan
   -> finalize_pronabec_datasets
   -> validate_bronze_manifests
   -> Dataflow Bronze a Silver
@@ -27,6 +27,8 @@ init_run
   -> run_quality_checks
   -> finish_run
 ```
+
+`plan.json` es la fuente de verdad para los chunks ejecutados. Composer no hardcodea `PAGE_END`, no define rangos estaticos por dataset y no lee `plan.json` dinamicamente en runtime. El runner `pronabec-run-plan-job` consume el plan ya construido y ejecuta cada chunk exacto.
 
 MEF y PRONABEC reports siguen corriendo como ramas Bronze independientes antes de `validate_bronze_manifests`. La compuerta Bronze espera los finalizers PRONABEC, la extraccion MEF y el staging de reportes antes de lanzar cualquier transformacion Dataflow.
 
@@ -38,32 +40,15 @@ Ejecuta `pronabec-discovery-job`. Genera `discovery.json` en `bronze_work/pronab
 
 ### `build_pronabec_extraction_plan`
 
-Ejecuta `pronabec-build-plan-job`. Genera `plan.json` desde `discovery.json`. En esta version el DAG no lee `plan.json` dinamicamente ni usa dynamic task mapping; las tareas de extraccion se crean estaticamente desde `config/orchestration.yaml`.
+Ejecuta `pronabec-build-plan-job`. Genera `plan.json` a partir de `discovery.json`.
 
-### `extract_pronabec_<dataset>_<page_start>_<page_end>`
+### `run_pronabec_extraction_plan`
 
-Ejecuta `pronabec-extract-chunk-job` con:
-
-```text
-BRONZE_EXTRACTION_DATE
-PIPELINE_RUN_ID
-SOURCE_DATASET
-PAGE_START
-PAGE_END
-OUTPUT_MODE=chunk
-```
-
-Los chunks se escriben en `bronze_work/`.
+Ejecuta `pronabec-run-plan-job`. Lee `plan.json` y ejecuta los chunks exactos definidos en el plan, sin recomputar rangos en Composer.
 
 ### `finalize_pronabec_<dataset>`
 
-Ejecuta `pronabec-finalize-dataset-job`. Consolida los chunks en:
-
-```text
-bronze/pronabec/{dataset}/extraction_date=YYYY-MM-DD/
-```
-
-El finalizer crea `data.jsonl`, `manifest.json` y `_SUCCESS`.
+Ejecuta `pronabec-finalize-dataset-job`. Consolida los chunks de un dataset PRONABEC en la ubicacion Bronze final, escribiendo `data.jsonl`, `manifest.json` y `_SUCCESS`.
 
 ## Bronze work y Dataflow
 
@@ -86,6 +71,7 @@ extraction_date
 run_pronabec
 run_pronabec_discovery
 run_pronabec_build_plan
+run_pronabec_plan_execution
 run_pronabec_chunk_extraction
 run_pronabec_finalize
 run_mef
@@ -99,7 +85,7 @@ run_gold_validation
 run_quality
 ```
 
-`extraction_date` usa `dag_run.conf.get('extraction_date') or ds`. Si `run_pronabec=false`, las subtareas PRONABEC particionadas tambien quedan deshabilitadas.
+`run_pronabec_chunk_extraction` se conserva como alias de compatibilidad para `run_pronabec_plan_execution`. `extraction_date` usa `dag_run.conf.get('extraction_date') or ds`. Si `run_pronabec=false`, las subtareas PRONABEC particionadas tambien quedan deshabilitadas.
 
 Ejemplo de `dag_run.conf` para ejecucion manual:
 
@@ -109,7 +95,7 @@ Ejemplo de `dag_run.conf` para ejecucion manual:
   "run_pronabec": true,
   "run_pronabec_discovery": true,
   "run_pronabec_build_plan": true,
-  "run_pronabec_chunk_extraction": true,
+  "run_pronabec_plan_execution": true,
   "run_pronabec_finalize": true,
   "run_mef": true,
   "run_pronabec_reports_staging": true,
@@ -138,6 +124,7 @@ bq_audit_dataset
 pronabec_extract_job_name
 pronabec_discovery_job_name
 pronabec_build_plan_job_name
+pronabec_run_plan_job_name
 pronabec_extract_chunk_job_name
 pronabec_finalize_dataset_job_name
 mef_extract_job_name
@@ -149,7 +136,7 @@ gold_validate_job_name
 quality_checks_job_name
 ```
 
-`pronabec-extract-job` permanece registrado por compatibilidad y pruebas manuales antiguas. El DAG principal usa `pronabec-discovery-job`, `pronabec-build-plan-job`, `pronabec-extract-chunk-job` y `pronabec-finalize-dataset-job`.
+`pronabec-extract-job` permanece registrado por compatibilidad y pruebas manuales antiguas. El DAG principal usa `pronabec-discovery-job`, `pronabec-build-plan-job`, `pronabec-run-plan-job` y `pronabec-finalize-dataset-job`. `pronabec-extract-chunk-job` queda como herramienta manual para debug de chunks aislados.
 
 ## Debug operativo
 
@@ -158,6 +145,7 @@ Para depurar el flujo PRONABEC, ejecute primero los Cloud Run Jobs manualmente:
 ```text
 pronabec-discovery-job
 pronabec-build-plan-job
+pronabec-run-plan-job
 pronabec-extract-chunk-job con SOURCE_DATASET, PAGE_START, PAGE_END y OUTPUT_MODE=chunk
 pronabec-finalize-dataset-job
 ```
@@ -172,6 +160,6 @@ El DAG mantiene `catchup=False` y `max_active_runs=1`. Esta configuracion evita 
 
 ## Exclusiones
 
-`convocatorias_carrera_sede` se conserva como Bronze-only y no se promueve a Silver ni Gold. Sus rangos estaticos quedan declarados para pruebas manuales y evolucion futura, pero Dataflow no tiene job Silver para ese dataset.
+`convocatorias_carrera_sede` se conserva como Bronze-only y no se promueve a Silver ni Gold. Su plan de extraccion queda definido en `plan.json`, pero no existe job Silver para ese dataset.
 
 `presupuesto_departamento`, `presupuesto_fuente` y `presupuesto_rubro` son datasets MEF Bronze-only y estan excluidos del flujo Silver.
