@@ -12,7 +12,6 @@ from pipelines.common.gcs import build_gs_uri
 DEFAULT_ORCHESTRATION_CONFIG_PATH = Path("config/orchestration.yaml")
 DEFAULT_ENDPOINTS_CONFIG_PATH = Path("config/endpoints.yaml")
 PRONABEC_EXTRACTION_MODES = {"single", "chunked"}
-PRONABEC_EXTRACTION_SCOPES = {"e2e", "bronze_full"}
 
 
 @dataclass(frozen=True)
@@ -132,29 +131,6 @@ def get_chunked_pronabec_datasets(config: dict[str, Any]) -> list[str]:
         for policy in get_pronabec_dataset_policies(config)
         if policy.extraction_mode == "chunked"
     ]
-
-
-def resolve_pronabec_extraction_scope(value: str | None) -> str:
-    """Resolve PRONABEC extraction scope with a conservative E2E default."""
-    scope = (value or "e2e").strip()
-    if scope not in PRONABEC_EXTRACTION_SCOPES:
-        raise ConfigError(
-            f"PRONABEC extraction scope invalido: {scope}. Debe ser e2e o bronze_full"
-        )
-    return scope
-
-
-def get_pronabec_datasets_for_scope(config: dict[str, Any], scope: str) -> list[str]:
-    """Return datasets selected for a PRONABEC extraction scope."""
-    resolved_scope = resolve_pronabec_extraction_scope(scope)
-    selected: list[str] = []
-    for policy in get_pronabec_dataset_policies(config):
-        if not policy.bronze_enabled:
-            continue
-        if resolved_scope == "e2e" and not policy.required_for_e2e:
-            continue
-        selected.append(policy.source_dataset)
-    return selected
 
 
 def resolve_pronabec_report_groups(

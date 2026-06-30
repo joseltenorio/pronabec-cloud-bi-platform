@@ -143,7 +143,6 @@ def test_discovery_includes_only_enabled_datasets(
     assert data["pipeline_run_id"] == "test-run"
     assert "source_snapshot_observed_at" in data
     assert data["status"] == "SUCCESS"
-    assert data["scope"] == "e2e"
 
     datasets = data["datasets"]
     # Only becarios_pais_estudio is enabled in mock_orchestration
@@ -362,7 +361,7 @@ def test_non_required_dataset_failure_does_not_abort_by_default(
 @patch("pipelines.discover_pronabec.load_yaml_config")
 @patch("pipelines.discover_pronabec.load_orchestration_config")
 @patch("pipelines.discover_pronabec.fetch_pronabec_page")
-def test_discovery_bronze_full_includes_bronze_only_datasets(
+def test_discovery_includes_bronze_only_datasets_when_bronze_enabled(
     mock_fetch, mock_load_orch, mock_load_endpoints, mock_settings,
     mock_pipeline_settings, mock_endpoints, mock_orchestration, tmp_path
 ):
@@ -379,14 +378,13 @@ def test_discovery_bronze_full_includes_bronze_only_datasets(
         "rows": [{"id": 1, "cell": []}] * 100,
     }
 
-    args = DummyArgs(dry_run=True, output_dir=str(tmp_path), scope="bronze_full")
+    args = DummyArgs(dry_run=True, output_dir=str(tmp_path))
     run_discovery(args)
 
     plan_file = tmp_path / "bronze_work" / "pronabec" / "_plans" / "extraction_date=2026-06-29" / "run_id=test-run" / "discovery.json"
     with open(plan_file, "r") as f:
         data = json.load(f)
 
-    assert data["scope"] == "bronze_full"
     assert [dataset["source_dataset"] for dataset in data["datasets"]] == [
         "becarios_pais_estudio",
         "perdida_becas",

@@ -71,7 +71,7 @@ def test_chunk_division_rules(base_discovery, base_orchestration):
             "status": "SUCCESS",
         }
     ]
-    plan = build_plan(disc, base_orchestration, None, scope="bronze_full")
+    plan = build_plan(disc, base_orchestration, None)
     assert len(plan["chunks"]) == 8
     assert plan["datasets"][0]["expected_chunks"] == 8
     assert plan["chunks"][0]["page_start"] == 1
@@ -98,21 +98,21 @@ def test_single_mode_chunk_ranges(base_discovery, base_orchestration):
             "status": "SUCCESS",
         }
     ]
-    plan = build_plan(disc, base_orchestration, None, scope="bronze_full")
+    plan = build_plan(disc, base_orchestration, None)
     assert len(plan["chunks"]) == 1
     assert plan["chunks"][0]["page_start"] == 1
     assert plan["chunks"][0]["page_end"] == 11
 
     # 3. total_pages=15 y extraction_mode=single genera 1 chunk de 1 a 15
     disc["datasets"][0]["total_pages"] = 15
-    plan = build_plan(disc, base_orchestration, None, scope="bronze_full")
+    plan = build_plan(disc, base_orchestration, None)
     assert len(plan["chunks"]) == 1
     assert plan["chunks"][0]["page_start"] == 1
     assert plan["chunks"][0]["page_end"] == 15
 
     # 4. total_pages=9 y extraction_mode=single genera 1 chunk de 1 a 9
     disc["datasets"][0]["total_pages"] = 9
-    plan = build_plan(disc, base_orchestration, None, scope="bronze_full")
+    plan = build_plan(disc, base_orchestration, None)
     assert len(plan["chunks"]) == 1
     assert plan["chunks"][0]["page_start"] == 1
     assert plan["chunks"][0]["page_end"] == 9

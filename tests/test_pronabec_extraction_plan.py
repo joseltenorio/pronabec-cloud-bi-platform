@@ -111,7 +111,6 @@ def test_build_plan_pipeline_integration(
         plan = json.load(f)
 
     assert plan["source_system"] == "pronabec"
-    assert plan["scope"] == "e2e"
     assert plan["extraction_date"] == "2026-06-29"
     assert plan["pipeline_run_id"] == "test-run"
     assert plan["source_snapshot_observed_at"] == "2026-06-29T20:30:00Z"

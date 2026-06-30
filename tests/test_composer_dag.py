@@ -193,10 +193,10 @@ def test_dag_passes_chunk_runtime_env_vars() -> None:
 def test_dag_uses_pronabec_flags_for_chunked_tasks() -> None:
     content = _read_dag_source()
 
-    assert "PRONABEC_EXTRACTION_SCOPE" in content
-    assert "pronabec_extraction_scope" in content
-    assert '"pronabec_extraction_scope": Param(default="e2e", type="string")' in content
-    assert "policy.bronze_enabled and policy.required_for_e2e" in content
+    assert "PRONABEC_EXTRACTION_SCOPE" not in content
+    assert "pronabec_extraction_scope" not in content
+    assert "policy.bronze_enabled and policy.required_for_e2e" not in content
+    assert "if policy.bronze_enabled" in content
     assert "RUN_PRONABEC_DISCOVERY" in content
     assert "RUN_PRONABEC_BUILD_PLAN" in content
     assert "RUN_PRONABEC_PLAN_EXECUTION" in content
@@ -216,6 +216,24 @@ def test_dag_keeps_dataflow_on_final_bronze_paths() -> None:
     assert "build_api_input_path(source_dataset)" in content
     assert "PAGE_END=999999" not in content
     assert "extract_pronabec_" not in content
+
+
+def test_dag_creates_finalizers_for_all_bronze_enabled_datasets() -> None:
+    pronabec_policies = {policy.source_dataset for policy in dag_mod.PRONABEC_EXTRACTION_POLICIES}
+
+    assert pronabec_policies == {
+        "perdida_becas",
+        "notas_becarios",
+        "concepto_pago",
+        "convocatorias",
+        "becarios_provincia",
+        "ubigeo_postulacion",
+        "periodos_academicos",
+        "colegios_habiles",
+        "becarios_pais_estudio",
+        "convocatorias_carrera_sede",
+        "nota_postulante_region",
+    }
 
 
 def test_dag_does_not_use_dynamic_task_mapping() -> None:

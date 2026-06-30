@@ -9,7 +9,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,7 +21,6 @@ from pipelines.common.logging import log_event, setup_structured_logger
 from pipelines.common.orchestration_config import (
     get_pronabec_dataset_policies,
     load_orchestration_config,
-    resolve_pronabec_extraction_scope,
 )
 from pipelines.extract_pronabec import (
     resolve_extraction_date,
@@ -70,10 +68,8 @@ def build_plan(
     discovery_data: dict[str, Any],
     orchestration_config: dict[str, Any],
     source_dataset_filter: str | None,
-    scope: str | None = None,
 ) -> dict[str, Any]:
     """Genera el plan de extraccion basandose en discovery.json y orchestration policies."""
-    resolved_scope = resolve_pronabec_extraction_scope(scope or discovery_data.get("scope"))
     policies = {
         p.source_dataset: p
         for p in get_pronabec_dataset_policies(orchestration_config)
@@ -97,8 +93,6 @@ def build_plan(
         silver_enabled = bool(ds_discovered.get("silver_enabled", False))
         required_for_e2e = bool(ds_discovered.get("required_for_e2e", False))
         if not bronze_enabled and not source_dataset_filter:
-            continue
-        if resolved_scope == "e2e" and not required_for_e2e and not source_dataset_filter:
             continue
 
         policy = policies.get(dataset_name)
@@ -186,7 +180,6 @@ def build_plan(
 
     return {
         "source_system": "pronabec",
-        "scope": resolved_scope,
         "extraction_date": discovery_data["extraction_date"],
         "pipeline_run_id": discovery_data["pipeline_run_id"],
         "created_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
@@ -228,18 +221,11 @@ def run_build_plan(args: argparse.Namespace) -> None:
         cli_value=args.source_dataset,
         legacy_value=args.dataset,
     )
-    scope = resolve_pronabec_extraction_scope(
-        getattr(args, "scope", None)
-        or os.getenv("PRONABEC_PLAN_SCOPE")
-        or os.getenv("PRONABEC_EXTRACTION_SCOPE")
-    )
-
     log_event(
         logger,
         "INFO",
         "Construyendo plan de extraccion PRONABEC",
         source_dataset=source_dataset,
-        scope=scope,
         extraction_date=extraction_date,
         run_id=run_id,
         dry_run=args.dry_run,
@@ -259,7 +245,6 @@ def run_build_plan(args: argparse.Namespace) -> None:
         discovery_data=discovery_data,
         orchestration_config=orchestration_config,
         source_dataset_filter=source_dataset,
-        scope=scope,
     )
 
     # 3. Guardar plan.json
@@ -328,11 +313,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dataset",
         help="Alias legacy de --source-dataset.",
-    )
-    parser.add_argument(
-        "--scope",
-        choices=["e2e", "bronze_full"],
-        help="Alcance del plan PRONABEC. Default: PRONABEC_PLAN_SCOPE, PRONABEC_EXTRACTION_SCOPE o e2e.",
     )
     parser.add_argument(
         "--bucket",
