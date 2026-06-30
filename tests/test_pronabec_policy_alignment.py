@@ -42,6 +42,8 @@ def test_actual_policies_align_with_single_and_chunked_modes() -> None:
         for item in orchestration["datasets"]["pronabec_api"].get("extraction_policies", [])
     }
 
+    assert all(policy["bronze_enabled"] is True for policy in policies.values())
+    assert all(policy["extraction_enabled"] is True for policy in policies.values())
     assert policies["becarios_pais_estudio"]["extraction_mode"] == "single"
     assert policies["colegios_habiles"]["extraction_mode"] == "single"
     assert policies["convocatorias_carrera_sede"]["extraction_mode"] == "chunked"

@@ -104,6 +104,11 @@ def get_pronabec_dataset_policies(config: dict[str, Any]) -> list[DatasetExtract
 
 def get_enabled_pronabec_datasets(config: dict[str, Any]) -> list[str]:
     """Return PRONABEC API datasets enabled for Bronze extraction."""
+    return get_bronze_enabled_pronabec_datasets(config)
+
+
+def get_bronze_enabled_pronabec_datasets(config: dict[str, Any]) -> list[str]:
+    """Return PRONABEC API datasets enabled for Bronze extraction."""
     return [
         policy.source_dataset
         for policy in get_pronabec_dataset_policies(config)
@@ -234,6 +239,10 @@ def _build_pronabec_dataset_policy(item: Any) -> DatasetExtractionPolicy:
         source_dataset,
         default=extraction_enabled,
     )
+    if extraction_enabled != bronze_enabled:
+        raise ConfigError(
+            f"extraction_enabled y bronze_enabled deben coincidir para {source_dataset}"
+        )
     silver_enabled = _require_bool(item, "silver_enabled", source_dataset)
     required_for_e2e = _require_bool(item, "required_for_e2e", source_dataset)
 

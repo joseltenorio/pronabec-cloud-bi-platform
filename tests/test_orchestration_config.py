@@ -7,11 +7,11 @@ import pytest
 from pipelines.common.config import ConfigError
 from pipelines.common.orchestration_config import (
     DatasetExtractionPolicy,
+    get_bronze_enabled_pronabec_datasets,
     build_bq_table_ref,
     build_gcs_uri,
     get_chunked_pronabec_datasets,
     get_enabled_pronabec_datasets,
-    get_pronabec_datasets_for_scope,
     get_pronabec_dataset_policies,
     get_required_pronabec_datasets,
     load_endpoints_config,
@@ -152,6 +152,7 @@ def test_pronabec_dataset_policy_fields_are_typed() -> None:
         assert policy.source_dataset
         assert isinstance(policy.extraction_enabled, bool)
         assert isinstance(policy.bronze_enabled, bool)
+        assert policy.extraction_enabled == policy.bronze_enabled
         assert isinstance(policy.silver_enabled, bool)
         assert isinstance(policy.required_for_e2e, bool)
         assert policy.extraction_mode in {"single", "chunked"}
@@ -194,7 +195,7 @@ def test_pronabec_dataset_policies_use_real_endpoint_names() -> None:
 def test_pronabec_dataset_policy_helpers_filter_by_flags() -> None:
     config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
 
-    assert get_enabled_pronabec_datasets(config) == [
+    expected_bronze_datasets = [
         "perdida_becas",
         "notas_becarios",
         "concepto_pago",
@@ -207,6 +208,8 @@ def test_pronabec_dataset_policy_helpers_filter_by_flags() -> None:
         "convocatorias_carrera_sede",
         "nota_postulante_region",
     ]
+    assert get_bronze_enabled_pronabec_datasets(config) == expected_bronze_datasets
+    assert get_enabled_pronabec_datasets(config) == expected_bronze_datasets
     assert get_required_pronabec_datasets(config) == [
         "convocatorias",
         "becarios_provincia",
@@ -237,17 +240,15 @@ def test_pronabec_bronze_only_datasets_are_not_required_for_e2e() -> None:
         assert policies[dataset].required_for_e2e is False
 
 
-def test_pronabec_dataset_scope_helpers_split_e2e_and_bronze_full() -> None:
+def test_required_for_e2e_does_not_change_bronze_coverage() -> None:
     config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
 
-    assert get_pronabec_datasets_for_scope(config, "e2e") == [
-        "convocatorias",
-        "becarios_provincia",
-        "ubigeo_postulacion",
-        "colegios_habiles",
-        "becarios_pais_estudio",
-    ]
-    assert get_pronabec_datasets_for_scope(config, "bronze_full") == get_enabled_pronabec_datasets(config)
+    bronze_enabled = set(get_bronze_enabled_pronabec_datasets(config))
+    required = set(get_required_pronabec_datasets(config))
+
+    assert required < bronze_enabled
+    assert "notas_becarios" in bronze_enabled
+    assert "convocatorias_carrera_sede" in bronze_enabled
 
 
 def test_invalid_pronabec_policy_mode_is_rejected() -> None:
