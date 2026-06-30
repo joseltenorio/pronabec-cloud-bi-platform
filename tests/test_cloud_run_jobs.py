@@ -23,6 +23,7 @@ def test_selected_pronabec_api_jobs_are_defined():
         "pronabec-extract-job",
         "pronabec-discovery-job",
         "pronabec-build-plan-job",
+        "pronabec-run-plan-job",
         "pronabec-extract-chunk-job",
         "pronabec-finalize-dataset-job",
         "pronabec-stage-reports-job",
@@ -111,6 +112,7 @@ def test_gold_jobs_and_env_vars_are_defined():
 
     assert "PRONABEC_DISCOVERY_JOB_NAME" in content
     assert "PRONABEC_BUILD_PLAN_JOB_NAME" in content
+    assert "PRONABEC_RUN_PLAN_JOB_NAME" in content
     assert "PRONABEC_EXTRACT_CHUNK_JOB_NAME" in content
     assert "PRONABEC_FINALIZE_DATASET_JOB_NAME" in content
     assert "GOLD_PUBLISH_JOB_NAME" in content
@@ -124,6 +126,7 @@ def test_gold_jobs_and_env_vars_are_defined():
     assert "pipelines.validate_gold" in content
     assert "pipelines.discover_pronabec" in content
     assert "pipelines.build_pronabec_extraction_plan" in content
+    assert "pipelines.run_pronabec_extraction_plan" in content
     assert "pipelines.extract_pronabec" in content
     assert "pipelines.finalize_pronabec_dataset" in content
 
@@ -149,12 +152,23 @@ def test_pronabec_chunked_job_modules_are_correct():
 
     assert "pronabec-discovery-job" in content
     assert "pronabec-build-plan-job" in content
+    assert "pronabec-run-plan-job" in content
     assert "pronabec-extract-chunk-job" in content
     assert "pronabec-finalize-dataset-job" in content
     assert "pipelines.discover_pronabec" in content
     assert "pipelines.build_pronabec_extraction_plan" in content
+    assert "pipelines.run_pronabec_extraction_plan" in content
     assert "pipelines.extract_pronabec" in content
     assert "pipelines.finalize_pronabec_dataset" in content
+
+
+def test_pronabec_plan_runner_job_does_not_hardcode_chunk_ranges():
+    content = _read_deploy_script()
+
+    assert "pronabec-run-plan-job" in content
+    assert "pipelines.run_pronabec_extraction_plan" in content
+    assert "PAGE_START" not in content
+    assert "PAGE_END" not in content
 
 
 def test_bronze_only_jobs_are_not_defined():

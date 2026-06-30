@@ -28,6 +28,7 @@ param(
 
     [string]$PronabecDiscoveryJobName = $(if ($env:PRONABEC_DISCOVERY_JOB_NAME) { $env:PRONABEC_DISCOVERY_JOB_NAME } else { "pronabec-discovery-job" }),
     [string]$PronabecBuildPlanJobName = $(if ($env:PRONABEC_BUILD_PLAN_JOB_NAME) { $env:PRONABEC_BUILD_PLAN_JOB_NAME } else { "pronabec-build-plan-job" }),
+    [string]$PronabecRunPlanJobName = $(if ($env:PRONABEC_RUN_PLAN_JOB_NAME) { $env:PRONABEC_RUN_PLAN_JOB_NAME } else { "pronabec-run-plan-job" }),
     [string]$PronabecExtractChunkJobName = $(if ($env:PRONABEC_EXTRACT_CHUNK_JOB_NAME) { $env:PRONABEC_EXTRACT_CHUNK_JOB_NAME } else { "pronabec-extract-chunk-job" }),
     [string]$PronabecFinalizeDatasetJobName = $(if ($env:PRONABEC_FINALIZE_DATASET_JOB_NAME) { $env:PRONABEC_FINALIZE_DATASET_JOB_NAME } else { "pronabec-finalize-dataset-job" }),
 
@@ -230,6 +231,14 @@ Upsert-CloudRunJob `
     -ContainerArgs @(
         "-m",
         "pipelines.build_pronabec_extraction_plan"
+    )
+
+Upsert-CloudRunJob `
+    -JobName $PronabecRunPlanJobName `
+    -Description "Ejecucion del plan de chunks PRONABEC desde plan.json" `
+    -ContainerArgs @(
+        "-m",
+        "pipelines.run_pronabec_extraction_plan"
     )
 
 Upsert-CloudRunJob `
