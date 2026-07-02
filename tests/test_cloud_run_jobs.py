@@ -219,3 +219,19 @@ def test_wrong_cloud_run_job_names_are_not_documented_in_script():
 
     for job_name in wrong_job_names:
         assert job_name not in content, f"Nombre de job incorrecto detectado: {job_name}"
+
+
+def test_upsert_cloud_run_job_has_memory_and_cpu_defaults():
+    content = _read_deploy_script()
+    assert '[string]$Memory = "512Mi"' in content
+    assert '[string]$Cpu = "1"' in content
+
+
+def test_pronabec_finalize_job_memory_and_cpu():
+    content = _read_deploy_script()
+    finalize_section = content[
+        content.index("-JobName $PronabecFinalizeDatasetJobName"):
+        content.index("-JobName $MefJobName")
+    ]
+    assert '-Memory "2Gi"' in finalize_section
+    assert '-Cpu "1"' in finalize_section

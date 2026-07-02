@@ -121,7 +121,11 @@ function Upsert-CloudRunJob {
 
         [string[]]$SetEnvVars = @(),
 
-        [int]$TaskTimeoutSeconds = 3600
+        [int]$TaskTimeoutSeconds = 3600,
+
+        [string]$Memory = "512Mi",
+
+        [string]$Cpu = "1"
     )
 
     $BaseEnvVars = @(
@@ -154,7 +158,9 @@ function Upsert-CloudRunJob {
         "--service-account", $ServiceAccount,
         "--set-env-vars", $EnvVars,
         "--max-retries", "1",
-        "--task-timeout", "$($TaskTimeoutSeconds)s"
+        "--task-timeout", "$($TaskTimeoutSeconds)s",
+        "--memory", $Memory,
+        "--cpu", $Cpu
     )
 
     $JoinedArgs = Join-CloudRunArgs -ContainerArgs $ContainerArgs
@@ -255,6 +261,8 @@ Upsert-CloudRunJob `
 Upsert-CloudRunJob `
     -JobName $PronabecFinalizeDatasetJobName `
     -Description "Consolidacion final de chunks PRONABEC hacia Bronze" `
+    -Memory "2Gi" `
+    -Cpu "1" `
     -ContainerArgs @(
         "-m",
         "pipelines.finalize_pronabec_dataset"
