@@ -61,6 +61,59 @@ def test_selected_mef_jobs_are_defined():
         assert job_name in content, f"Falta el job MEF esperado: {job_name}"
 
 
+def test_mef_extract_job_has_complete_runtime_configuration():
+    content = _read_deploy_script()
+
+    required_env_vars = [
+        "MEF_SOURCE_MODE",
+        "MEF_CONSULTA_AMIGABLE_BASE_URL",
+        "MEF_START_YEAR",
+        "MEF_END_YEAR",
+        "MEF_TEXT_FILTER",
+        "MEF_TIMEOUT_SECONDS",
+        "MEF_PRONABEC_EXECUTORA_CODE",
+        "MEF_PRONABEC_EXECUTORA_NAME",
+        "MEF_INCLUDE_HIERARCHY",
+        "MEF_INCLUDE_SPENDING_BREAKDOWNS",
+        "MEF_BREAKDOWN_SLICES",
+    ]
+
+    for env_var in required_env_vars:
+        assert env_var in content, f"Falta variable MEF en Cloud Run deploy: {env_var}"
+
+    assert "Assert-RequiredValue -Name \"MEF_SOURCE_MODE\"" in content
+    assert "Assert-RequiredValue -Name \"MEF_START_YEAR\"" in content
+    assert "Assert-RequiredValue -Name \"MEF_END_YEAR\"" in content
+    assert "Assert-RequiredValue -Name \"MEF_TEXT_FILTER\"" in content
+    assert "Assert-RequiredValue -Name \"MEF_PRONABEC_EXECUTORA_CODE\"" in content
+    assert "MEF_START_YEAR=2026" not in content
+    assert "MEF_END_YEAR=2026" not in content
+
+
+def test_mef_breakdown_slices_are_complete_and_safe_as_single_env_var():
+    content = _read_deploy_script()
+
+    expected_slices = [
+        "producto",
+        "generica",
+        "fuente",
+        "rubro",
+        "departamento",
+        "temporal",
+        "producto_temporal",
+        "actividad",
+        "actividad_temporal",
+        "generica_temporal",
+    ]
+
+    for slice_name in expected_slices:
+        assert slice_name in content
+
+    assert "MEF_BREAKDOWN_SLICES=$MefBreakdownSlices" in content
+    assert "Join-CloudRunEnvVars" in content
+    assert "return \"^@^\" + ($EnvVars -join \"@\")" in content
+
+
 def test_bronze_manifest_validation_job_is_defined():
     content = _read_deploy_script()
 
@@ -161,6 +214,22 @@ def test_pronabec_chunked_job_modules_are_correct():
     assert "pipelines.run_pronabec_extraction_plan" in content
     assert "pipelines.extract_pronabec" in content
     assert "pipelines.finalize_pronabec_dataset" in content
+
+
+def test_pronabec_reports_stage_job_runs_as_module():
+    content = _read_deploy_script()
+    stage_section = content[
+        content.index("-JobName $PronabecReportsStageJobName"):
+        content.index("-JobName $BronzeManifestValidationJobName")
+    ]
+
+    assert "\"-m\"" in stage_section
+    assert "tools.stage_pronabec_manual_reports" in stage_section
+    assert "--strict" in stage_section
+    assert "--overwrite" in stage_section
+    assert "tools/stage_pronabec_manual_reports.py" not in stage_section
+    assert "PRONABEC_REPORTS_LANDING_PREFIX=$PronabecReportsLandingPrefix" in content
+    assert "PRONABEC_REPORTS_BRONZE_PREFIX=$PronabecReportsBronzePrefix" in content
 
 
 def test_pronabec_finalize_job_does_not_hardcode_source_dataset():

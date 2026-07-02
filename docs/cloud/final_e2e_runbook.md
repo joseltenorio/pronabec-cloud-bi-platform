@@ -113,6 +113,55 @@ gcloud run jobs execute pronabec-finalize-dataset-job `
   --wait
 ```
 
+### MEF Consulta Amigable
+
+`mef-extract-job` debe quedar configurado por `scripts/deploy_cloud_run_jobs.ps1` con el runtime MEF completo. Composer no lee `.env` local, por lo que el deploy del job debe persistir:
+
+```text
+MEF_SOURCE_MODE=consulta_amigable
+MEF_START_YEAR=2012
+MEF_END_YEAR=2026
+MEF_TEXT_FILTER=PRONABEC
+MEF_PRONABEC_EXECUTORA_CODE=117-1438
+MEF_INCLUDE_HIERARCHY=true
+MEF_INCLUDE_SPENDING_BREAKDOWNS=true
+MEF_BREAKDOWN_SLICES=producto,generica,fuente,rubro,departamento,temporal,producto_temporal,actividad,actividad_temporal,generica_temporal
+```
+
+La ejecucion manual solo debe pasar la fecha logica y el run id:
+
+```powershell
+gcloud run jobs execute mef-extract-job `
+  --region="$CLOUD_RUN_REGION" `
+  --project="$GCP_PROJECT_ID" `
+  --update-env-vars="BRONZE_EXTRACTION_DATE=2026-06-29,PIPELINE_RUN_ID=manual_20260629" `
+  --wait
+```
+
+Con el runtime completo se esperan 12 salidas Bronze MEF: `presupuesto`, `presupuesto_hierarchy`, `presupuesto_producto`, `presupuesto_generica`, `presupuesto_fuente`, `presupuesto_rubro`, `presupuesto_departamento`, `presupuesto_temporal`, `presupuesto_producto_temporal`, `presupuesto_actividad`, `presupuesto_actividad_temporal` y `presupuesto_generica_temporal`.
+
+### PRONABEC reports staging
+
+`pronabec-stage-reports-job` ejecuta `python -m tools.stage_pronabec_manual_reports --strict --overwrite`. Se usa modo modulo para que los imports `pipelines.common.*` funcionen dentro de la imagen.
+
+Ejecute un subset por corrida:
+
+```powershell
+gcloud run jobs execute pronabec-stage-reports-job `
+  --region="$CLOUD_RUN_REGION" `
+  --project="$GCP_PROJECT_ID" `
+  --update-env-vars="BRONZE_EXTRACTION_DATE=2026-06-29,PIPELINE_RUN_ID=manual_20260629,SOURCE_SUBSET=pes_2025" `
+  --wait
+
+gcloud run jobs execute pronabec-stage-reports-job `
+  --region="$CLOUD_RUN_REGION" `
+  --project="$GCP_PROJECT_ID" `
+  --update-env-vars="BRONZE_EXTRACTION_DATE=2026-06-29,PIPELINE_RUN_ID=manual_20260629,SOURCE_SUBSET=beca18_universitarios_2012_2026" `
+  --wait
+```
+
+`SOURCE_SUBSET` selecciona un grupo documental completo; `pes_2025` y `beca18_universitarios_2012_2026` contienen multiples reportes.
+
 ## 6. Validacion Bronze
 
 `bronze_work/` es temporal y no debe ser leido por Dataflow. Solo Bronze final consolidado con `manifest.json` y `_SUCCESS` entra a `validate_bronze_manifests` y luego a Silver.

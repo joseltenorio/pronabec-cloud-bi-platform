@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Modulo para construir el plan de extraccion de PRONABEC API.
 
 Lee discovery.json y genera plan.json con los chunks a extraer.

@@ -35,12 +35,45 @@ Extractor legado de PRONABEC. Se mantiene por compatibilidad y pruebas antiguas,
 ## Jobs MEF, reportes, Gold y calidad
 
 - `mef-extract-job`: ejecuta `pipelines.scrape_mef_budget`.
-- `pronabec-stage-reports-job`: ejecuta el staging de reportes documentales.
+- `pronabec-stage-reports-job`: ejecuta `python -m tools.stage_pronabec_manual_reports --strict --overwrite` para que los imports `pipelines.common.*` funcionen dentro de la imagen.
 - `bronze-manifest-validation-job`: valida manifests y `_SUCCESS` antes de promover Bronze a Silver.
 - `dataflow-pronabec-report-job`: job parametrizable unico para los 23 reportes documentales.
 - `gold-publish-job`: publica vistas Gold.
 - `gold-validate-job`: valida contratos Gold.
 - `quality-checks-job`: ejecuta controles de calidad.
+
+### Runtime MEF
+
+`mef-extract-job` usa Consulta Amigable y queda configurado durante `scripts/deploy_cloud_run_jobs.ps1`. Composer o una ejecucion manual no deben repetir todo el runtime MEF; basta con pasar `BRONZE_EXTRACTION_DATE` y `PIPELINE_RUN_ID`.
+
+El contrato operativo del job cubre el rango historico 2012-2026, la unidad ejecutora PRONABEC y los 10 breakdown slices:
+
+```text
+producto,generica,fuente,rubro,departamento,temporal,producto_temporal,actividad,actividad_temporal,generica_temporal
+```
+
+Con ese runtime se esperan 12 salidas Bronze MEF:
+
+```text
+presupuesto
+presupuesto_hierarchy
+presupuesto_producto
+presupuesto_generica
+presupuesto_fuente
+presupuesto_rubro
+presupuesto_departamento
+presupuesto_temporal
+presupuesto_producto_temporal
+presupuesto_actividad
+presupuesto_actividad_temporal
+presupuesto_generica_temporal
+```
+
+El valor `MEF_BREAKDOWN_SLICES` contiene comas; el deploy usa delimitador alternativo de `gcloud --set-env-vars` para mantenerlo como una unica variable de entorno.
+
+### PRONABEC reports staging
+
+`pronabec-stage-reports-job` es un unico job parametrizable por `SOURCE_SUBSET`. Los subsets operativos son `pes_2025` y `beca18_universitarios_2012_2026`; cada subset puede contener multiples reportes y no representa un unico dataset.
 
 ## Estrategia operativa
 

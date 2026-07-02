@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Módulo para finalizar la extracción de un dataset PRONABEC.
 
 Consolida los chunks intermedios desde bronze_work hacia Bronze final.
