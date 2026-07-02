@@ -346,9 +346,10 @@ def test_dataflow_service_account_is_documented_in_examples():
     assert "setup_file: /app/setup.py" in gcp_example
 
 
-def test_setup_py_packages_pipeline_modules():
-    setup_py = (REPO_ROOT / "setup.py").read_text(encoding="utf-8")
+def test_pyproject_packages_pipeline_modules():
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
 
-    assert "find_packages" in setup_py
-    assert '"pipelines"' in setup_py
-    assert '"pipelines.*"' in setup_py
+    assert '[tool.setuptools.packages.find]' in pyproject
+    assert '"pipelines"' in pyproject
+    assert '"pipelines.common"' in pyproject
+    assert '"pipelines.transforms"' in pyproject

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pronabec-cloud-bi-platform"
+version = "0.1.0"
+description = "PRONABEC Cloud BI Platform pipelines"
+requires-python = ">=3.11"
+
+[tool.setuptools.packages.find]
+include = [
+    "pipelines",
+    "pipelines.common",
+    "pipelines.transforms",
+]
