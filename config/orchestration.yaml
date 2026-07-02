@@ -16,7 +16,6 @@ runtime:
   audit_dataset_var: bq_audit_dataset
 
 jobs:
-  pronabec_extract_job_name_var: pronabec_extract_job_name
   pronabec_discovery_job_name_var: pronabec_discovery_job_name
   pronabec_build_plan_job_name_var: pronabec_build_plan_job_name
   pronabec_run_plan_job_name_var: pronabec_run_plan_job_name

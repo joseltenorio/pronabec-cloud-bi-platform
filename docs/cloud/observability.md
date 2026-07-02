@@ -98,7 +98,11 @@ Cloud Run Jobs emite logs estructurados desde los procesos Python del proyecto. 
 Los jobs relevantes para observabilidad son:
 
 ```text
-pronabec-extract-job
+pronabec-discovery-job
+pronabec-build-plan-job
+pronabec-run-plan-job
+pronabec-extract-chunk-job
+pronabec-finalize-dataset-job
 mef-extract-job
 pronabec-stage-reports-job
 dataflow-pronabec-convocatorias-job

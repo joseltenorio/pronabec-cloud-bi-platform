@@ -37,7 +37,7 @@ Los jobs nuevos de PRONABEC particionado son:
 - `pronabec-extract-chunk-job`
 - `pronabec-finalize-dataset-job`
 
-`pronabec-extract-job` se mantiene solo por compatibilidad y pruebas manuales antiguas.
+`pronabec-extract-chunk-job` se mantiene solo para debug manual o reproceso puntual de chunks aislados. El flujo principal usa `pronabec-run-plan-job`.
 
 ## 4. Composer
 

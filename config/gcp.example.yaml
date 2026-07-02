@@ -31,11 +31,6 @@ cloud_run_jobs:
   image: us-central1-docker.pkg.dev/your-gcp-project-id/pronabec-containers/pronabec-cloud-bi-platform:latest
   service_account: your-cloudrun-sa@your-gcp-project-id.iam.gserviceaccount.com
   jobs:
-    pronabec_extract:
-      name: pronabec-extract-job
-      command:
-        - -m
-        - pipelines.extract_pronabec
     pronabec_discovery:
       name: pronabec-discovery-job
       command:

@@ -83,10 +83,6 @@ SILVER_DATASET = airflow_var_template(resolve_airflow_var_name(ORCHESTRATION_CON
 GOLD_DATASET = airflow_var_template(resolve_airflow_var_name(ORCHESTRATION_CONFIG, "gold_dataset_var"))
 AUDIT_DATASET = airflow_var_template(resolve_airflow_var_name(ORCHESTRATION_CONFIG, "audit_dataset_var"))
 
-PRONABEC_EXTRACT_JOB = airflow_var_template(
-    resolve_airflow_var_name(ORCHESTRATION_CONFIG, "pronabec_extract_job_name_var"),
-    "pronabec-extract-job",
-)
 PRONABEC_DISCOVERY_JOB = airflow_var_template(
     resolve_airflow_var_name(ORCHESTRATION_CONFIG, "pronabec_discovery_job_name_var"),
     "pronabec-discovery-job",

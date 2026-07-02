@@ -137,7 +137,6 @@ bq_bronze_dataset
 bq_silver_dataset
 bq_gold_dataset
 bq_audit_dataset
-pronabec_extract_job_name
 pronabec_discovery_job_name
 pronabec_build_plan_job_name
 pronabec_run_plan_job_name
@@ -152,7 +151,7 @@ gold_validate_job_name
 quality_checks_job_name
 ```
 
-`pronabec-extract-job` permanece registrado por compatibilidad y pruebas manuales antiguas. El DAG principal usa `pronabec-discovery-job`, `pronabec-build-plan-job`, `pronabec-run-plan-job` y `pronabec-finalize-dataset-job`. `pronabec-extract-chunk-job` queda como herramienta manual para debug de chunks aislados.
+El DAG principal usa `pronabec-discovery-job`, `pronabec-build-plan-job`, `pronabec-run-plan-job` y `pronabec-finalize-dataset-job`. `pronabec-extract-chunk-job` queda como herramienta manual para debug de chunks aislados.
 
 ## Debug operativo
 

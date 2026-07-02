@@ -28,10 +28,6 @@ Ejecuta `python -m pipelines.finalize_pronabec_dataset`. Consolida los chunks in
 
 *Nota: Este job está configurado con 2Gi de memoria para evitar eventos de Out-Of-Memory (OOM) al consolidar grandes volúmenes de datos procedentes de chunks de datasets grandes (como `convocatorias_carrera_sede`).*
 
-### `pronabec-extract-job`
-
-Extractor legado de PRONABEC. Se mantiene por compatibilidad y pruebas antiguas, pero no es la ruta principal del flujo particionado.
-
 ## Jobs MEF, reportes, Gold y calidad
 
 - `mef-extract-job`: ejecuta `pipelines.scrape_mef_budget`.

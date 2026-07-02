@@ -22,7 +22,6 @@ def test_selected_pronabec_api_jobs_are_defined():
     content = _read_deploy_script()
 
     required_jobs = [
-        "pronabec-extract-job",
         "pronabec-discovery-job",
         "pronabec-build-plan-job",
         "pronabec-run-plan-job",

@@ -24,7 +24,6 @@ param(
     [string]$DataflowWorkerImageName = $(if ($env:DATAFLOW_WORKER_IMAGE_NAME) { $env:DATAFLOW_WORKER_IMAGE_NAME } else { "pronabec-dataflow-worker" }),
     [string]$DataflowWorkerImageTag = $(if ($env:DATAFLOW_WORKER_IMAGE_TAG) { $env:DATAFLOW_WORKER_IMAGE_TAG } else { "latest" }),
 
-    [string]$PronabecJobName = $(if ($env:PRONABEC_EXTRACT_JOB_NAME) { $env:PRONABEC_EXTRACT_JOB_NAME } else { "pronabec-extract-job" }),
     [string]$MefJobName = $(if ($env:MEF_EXTRACT_JOB_NAME) { $env:MEF_EXTRACT_JOB_NAME } else { "mef-extract-job" }),
     [string]$PronabecReportsStageJobName = $(if ($env:PRONABEC_REPORTS_STAGE_JOB_NAME) { $env:PRONABEC_REPORTS_STAGE_JOB_NAME } else { "pronabec-stage-reports-job" }),
     [string]$BronzeManifestValidationJobName = $(if ($env:BRONZE_MANIFEST_VALIDATION_JOB_NAME) { $env:BRONZE_MANIFEST_VALIDATION_JOB_NAME } else { "bronze-manifest-validation-job" }),
@@ -277,14 +276,6 @@ $DataflowCommonArgs = @(
     "--dlq-output-root",
     "gs://$BucketName/dlq"
 )
-
-Upsert-CloudRunJob `
-    -JobName $PronabecJobName `
-    -Description "ExtracciÃ³n batch PRONABEC hacia Bronze" `
-    -ContainerArgs @(
-        "-m",
-        "pipelines.extract_pronabec"
-    )
 
 Upsert-CloudRunJob `
     -JobName $PronabecDiscoveryJobName `

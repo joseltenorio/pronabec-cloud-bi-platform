@@ -32,7 +32,6 @@ def test_configure_airflow_variables_sets_job_names():
     content = SCRIPT_PATH.read_text(encoding="utf-8")
 
     required_variables = [
-        "pronabec_extract_job_name",
         "pronabec_discovery_job_name",
         "pronabec_build_plan_job_name",
         "pronabec_run_plan_job_name",

@@ -14,7 +14,6 @@ param(
     [string]$GoldDataset = $(if ($env:BQ_GOLD_DATASET) { $env:BQ_GOLD_DATASET } else { "gold" }),
     [string]$AuditDataset = $(if ($env:BQ_AUDIT_DATASET) { $env:BQ_AUDIT_DATASET } else { "audit" }),
 
-    [string]$PronabecExtractJobName = $(if ($env:PRONABEC_EXTRACT_JOB_NAME) { $env:PRONABEC_EXTRACT_JOB_NAME } else { "pronabec-extract-job" }),
     [string]$PronabecDiscoveryJobName = $(if ($env:PRONABEC_DISCOVERY_JOB_NAME) { $env:PRONABEC_DISCOVERY_JOB_NAME } else { "pronabec-discovery-job" }),
     [string]$PronabecBuildPlanJobName = $(if ($env:PRONABEC_BUILD_PLAN_JOB_NAME) { $env:PRONABEC_BUILD_PLAN_JOB_NAME } else { "pronabec-build-plan-job" }),
     [string]$PronabecRunPlanJobName = $(if ($env:PRONABEC_RUN_PLAN_JOB_NAME) { $env:PRONABEC_RUN_PLAN_JOB_NAME } else { "pronabec-run-plan-job" }),
@@ -97,7 +96,6 @@ $Variables = [ordered]@{
     "bq_gold_dataset" = $GoldDataset
     "bq_audit_dataset" = $AuditDataset
 
-    "pronabec_extract_job_name" = $PronabecExtractJobName
     "pronabec_discovery_job_name" = $PronabecDiscoveryJobName
     "pronabec_build_plan_job_name" = $PronabecBuildPlanJobName
     "pronabec_run_plan_job_name" = $PronabecRunPlanJobName
