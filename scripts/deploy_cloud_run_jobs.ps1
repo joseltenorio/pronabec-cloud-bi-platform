@@ -35,6 +35,18 @@ param(
     [string]$PronabecReportsLandingPrefix = $(if ($env:PRONABEC_REPORTS_LANDING_PREFIX) { $env:PRONABEC_REPORTS_LANDING_PREFIX } else { "landing/pronabec_reports" }),
     [string]$PronabecReportsBronzePrefix = $(if ($env:PRONABEC_REPORTS_BRONZE_PREFIX) { $env:PRONABEC_REPORTS_BRONZE_PREFIX } else { "bronze/pronabec_reports" }),
 
+    [string]$MefSourceMode = $env:MEF_SOURCE_MODE,
+    [string]$MefConsultaAmigableBaseUrl = $(if ($env:MEF_CONSULTA_AMIGABLE_BASE_URL) { $env:MEF_CONSULTA_AMIGABLE_BASE_URL } else { "https://apps5.mineco.gob.pe/transparencia/Navegador/" }),
+    [string]$MefStartYear = $env:MEF_START_YEAR,
+    [string]$MefEndYear = $env:MEF_END_YEAR,
+    [string]$MefTextFilter = $env:MEF_TEXT_FILTER,
+    [string]$MefTimeoutSeconds = $(if ($env:MEF_TIMEOUT_SECONDS) { $env:MEF_TIMEOUT_SECONDS } else { "90" }),
+    [string]$MefPronabecEjecutoraCode = $env:MEF_PRONABEC_EXECUTORA_CODE,
+    [string]$MefPronabecEjecutoraName = $(if ($env:MEF_PRONABEC_EXECUTORA_NAME) { $env:MEF_PRONABEC_EXECUTORA_NAME } else { "PROGRAMA NACIONAL DE BECAS Y CREDITO EDUCATIVO" }),
+    [string]$MefIncludeHierarchy = $(if ($env:MEF_INCLUDE_HIERARCHY) { $env:MEF_INCLUDE_HIERARCHY } else { "true" }),
+    [string]$MefIncludeSpendingBreakdowns = $(if ($env:MEF_INCLUDE_SPENDING_BREAKDOWNS) { $env:MEF_INCLUDE_SPENDING_BREAKDOWNS } else { "true" }),
+    [string]$MefBreakdownSlices = $(if ($env:MEF_BREAKDOWN_SLICES) { $env:MEF_BREAKDOWN_SLICES } else { "producto,generica,fuente,rubro,departamento,temporal,producto_temporal,actividad,actividad_temporal,generica_temporal" }),
+
     [string]$DataflowPronabecConvocatoriasJobName = $(if ($env:DATAFLOW_PRONABEC_CONVOCATORIAS_JOB_NAME) { $env:DATAFLOW_PRONABEC_CONVOCATORIAS_JOB_NAME } else { "dataflow-pronabec-convocatorias-job" }),
     [string]$DataflowPronabecUbigeoPostulacionJobName = $(if ($env:DATAFLOW_PRONABEC_UBIGEO_POSTULACION_JOB_NAME) { $env:DATAFLOW_PRONABEC_UBIGEO_POSTULACION_JOB_NAME } else { "dataflow-pronabec-ubigeo-postulacion-job" }),
     [string]$DataflowPronabecBecariosPaisEstudioJobName = $(if ($env:DATAFLOW_PRONABEC_BECARIOS_PAIS_ESTUDIO_JOB_NAME) { $env:DATAFLOW_PRONABEC_BECARIOS_PAIS_ESTUDIO_JOB_NAME } else { "dataflow-pronabec-becarios-pais-estudio-job" }),
@@ -108,6 +120,15 @@ function Join-CloudRunArgs {
     return ($ContainerArgs -join ",")
 }
 
+function Join-CloudRunEnvVars {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$EnvVars
+    )
+
+    return "^@^" + ($EnvVars -join "@")
+}
+
 function Upsert-CloudRunJob {
     param(
         [Parameter(Mandatory = $true)]
@@ -149,7 +170,7 @@ function Upsert-CloudRunJob {
         "LOG_LEVEL=INFO"
     )
 
-    $EnvVars = ($BaseEnvVars + $SetEnvVars) -join ","
+    $EnvVars = Join-CloudRunEnvVars -EnvVars ($BaseEnvVars + $SetEnvVars)
 
     $CommonArgs = @(
         "--project", $ProjectId,
@@ -197,6 +218,11 @@ Assert-RequiredValue -Name "ServiceAccount" -Value $ServiceAccount
 Assert-RequiredValue -Name "BucketName" -Value $BucketName
 Assert-RequiredValue -Name "DataflowTempLocation" -Value $DataflowTempLocation
 Assert-RequiredValue -Name "DataflowStagingLocation" -Value $DataflowStagingLocation
+Assert-RequiredValue -Name "MEF_SOURCE_MODE" -Value $MefSourceMode
+Assert-RequiredValue -Name "MEF_START_YEAR" -Value $MefStartYear
+Assert-RequiredValue -Name "MEF_END_YEAR" -Value $MefEndYear
+Assert-RequiredValue -Name "MEF_TEXT_FILTER" -Value $MefTextFilter
+Assert-RequiredValue -Name "MEF_PRONABEC_EXECUTORA_CODE" -Value $MefPronabecEjecutoraCode
 
 $DataflowCommonArgs = @(
     "-m",
@@ -271,6 +297,19 @@ Upsert-CloudRunJob `
 Upsert-CloudRunJob `
     -JobName $MefJobName `
     -Description "Extracción batch MEF hacia Bronze" `
+    -SetEnvVars @(
+        "MEF_SOURCE_MODE=$MefSourceMode",
+        "MEF_CONSULTA_AMIGABLE_BASE_URL=$MefConsultaAmigableBaseUrl",
+        "MEF_START_YEAR=$MefStartYear",
+        "MEF_END_YEAR=$MefEndYear",
+        "MEF_TEXT_FILTER=$MefTextFilter",
+        "MEF_TIMEOUT_SECONDS=$MefTimeoutSeconds",
+        "MEF_PRONABEC_EXECUTORA_CODE=$MefPronabecEjecutoraCode",
+        "MEF_PRONABEC_EXECUTORA_NAME=$MefPronabecEjecutoraName",
+        "MEF_INCLUDE_HIERARCHY=$MefIncludeHierarchy",
+        "MEF_INCLUDE_SPENDING_BREAKDOWNS=$MefIncludeSpendingBreakdowns",
+        "MEF_BREAKDOWN_SLICES=$MefBreakdownSlices"
+    ) `
     -ContainerArgs @(
         "-m",
         "pipelines.scrape_mef_budget"
@@ -280,7 +319,8 @@ Upsert-CloudRunJob `
     -JobName $PronabecReportsStageJobName `
     -Description "Staging PRONABEC reports desde GCS Landing hacia Bronze" `
     -ContainerArgs @(
-        "tools/stage_pronabec_manual_reports.py",
+        "-m",
+        "tools.stage_pronabec_manual_reports",
         "--strict",
         "--overwrite"
     )

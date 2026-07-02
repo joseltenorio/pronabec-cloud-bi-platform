@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Módulo de Discovery para datasets PRONABEC API.
 
 Determina el estado inicial, tamaño de página efectivo, cantidad de registros
