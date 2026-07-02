@@ -116,7 +116,6 @@ def _base_plan():
 
 @patch("pipelines.run_pronabec_extraction_plan.get_pipeline_settings")
 @patch("pipelines.run_pronabec_extraction_plan.load_yaml_config")
-@patch("pipelines.run_pronabec_extraction_plan.load_orchestration_config")
 @patch("pipelines.run_pronabec_extraction_plan.read_plan_json")
 @patch("pipelines.run_pronabec_extraction_plan.setup_structured_logger")
 @patch("pipelines.run_pronabec_extraction_plan.extract_dataset")
@@ -130,13 +129,11 @@ def test_runner_executes_exact_plan_chunks(
     mock_extract_dataset,
     mock_logger_factory,
     mock_read_plan,
-    mock_load_orch,
     mock_load_yaml,
     mock_settings,
 ):
     mock_settings.return_value = _base_settings()
     mock_load_yaml.return_value = _base_endpoints()
-    mock_load_orch.return_value = {"datasets": {"pronabec_api": {"extraction_policies": []}}}
     mock_read_plan.return_value = _base_plan()
     mock_logger_factory.return_value = MagicMock()
     mock_read_chunk_manifest.return_value = None
@@ -169,7 +166,6 @@ def test_runner_executes_exact_plan_chunks(
 
 @patch("pipelines.run_pronabec_extraction_plan.get_pipeline_settings")
 @patch("pipelines.run_pronabec_extraction_plan.load_yaml_config")
-@patch("pipelines.run_pronabec_extraction_plan.load_orchestration_config")
 @patch("pipelines.run_pronabec_extraction_plan.read_plan_json")
 @patch("pipelines.run_pronabec_extraction_plan.setup_structured_logger")
 @patch("pipelines.run_pronabec_extraction_plan.extract_dataset")
@@ -181,14 +177,12 @@ def test_runner_skips_already_completed_chunks(
     mock_extract_dataset,
     mock_logger_factory,
     mock_read_plan,
-    mock_load_orch,
     mock_load_yaml,
     mock_settings,
 ):
     plan = _base_plan()
     mock_settings.return_value = _base_settings()
     mock_load_yaml.return_value = _base_endpoints()
-    mock_load_orch.return_value = {"datasets": {"pronabec_api": {"extraction_policies": []}}}
     mock_read_plan.return_value = plan
     mock_logger_factory.return_value = MagicMock()
     mock_read_chunk_manifest.side_effect = [
@@ -212,19 +206,16 @@ def test_runner_skips_already_completed_chunks(
 
 @patch("pipelines.run_pronabec_extraction_plan.get_pipeline_settings")
 @patch("pipelines.run_pronabec_extraction_plan.load_yaml_config")
-@patch("pipelines.run_pronabec_extraction_plan.load_orchestration_config")
 @patch("pipelines.run_pronabec_extraction_plan.read_plan_json")
 @patch("pipelines.run_pronabec_extraction_plan.setup_structured_logger")
 def test_runner_fails_when_plan_missing(
     mock_logger_factory,
     mock_read_plan,
-    mock_load_orch,
     mock_load_yaml,
     mock_settings,
 ):
     mock_settings.return_value = _base_settings()
     mock_load_yaml.return_value = _base_endpoints()
-    mock_load_orch.return_value = {"datasets": {"pronabec_api": {"extraction_policies": []}}}
     mock_logger_factory.return_value = MagicMock()
     mock_read_plan.side_effect = FileNotFoundError("No se encontro plan.json")
 
@@ -234,19 +225,16 @@ def test_runner_fails_when_plan_missing(
 
 @patch("pipelines.run_pronabec_extraction_plan.get_pipeline_settings")
 @patch("pipelines.run_pronabec_extraction_plan.load_yaml_config")
-@patch("pipelines.run_pronabec_extraction_plan.load_orchestration_config")
 @patch("pipelines.run_pronabec_extraction_plan.read_plan_json")
 @patch("pipelines.run_pronabec_extraction_plan.setup_structured_logger")
 def test_runner_fails_when_plan_is_not_ready(
     mock_logger_factory,
     mock_read_plan,
-    mock_load_orch,
     mock_load_yaml,
     mock_settings,
 ):
     mock_settings.return_value = _base_settings()
     mock_load_yaml.return_value = _base_endpoints()
-    mock_load_orch.return_value = {"datasets": {"pronabec_api": {"extraction_policies": []}}}
     mock_logger_factory.return_value = MagicMock()
     plan = _base_plan()
     plan["status"] = "DRAFT"
@@ -258,19 +246,16 @@ def test_runner_fails_when_plan_is_not_ready(
 
 @patch("pipelines.run_pronabec_extraction_plan.get_pipeline_settings")
 @patch("pipelines.run_pronabec_extraction_plan.load_yaml_config")
-@patch("pipelines.run_pronabec_extraction_plan.load_orchestration_config")
 @patch("pipelines.run_pronabec_extraction_plan.read_plan_json")
 @patch("pipelines.run_pronabec_extraction_plan.setup_structured_logger")
 def test_runner_fails_when_dataset_filter_matches_no_chunks(
     mock_logger_factory,
     mock_read_plan,
-    mock_load_orch,
     mock_load_yaml,
     mock_settings,
 ):
     mock_settings.return_value = _base_settings()
     mock_load_yaml.return_value = _base_endpoints()
-    mock_load_orch.return_value = {"datasets": {"pronabec_api": {"extraction_policies": []}}}
     mock_logger_factory.return_value = MagicMock()
     mock_read_plan.return_value = _base_plan()
 
