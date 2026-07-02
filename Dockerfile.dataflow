@@ -13,4 +13,4 @@ COPY pipelines ./pipelines
 RUN python -m pip install --upgrade pip setuptools wheel \
     && python -m pip install --no-cache-dir -r requirements-dataflow-worker.txt \
     && python -m pip install --no-cache-dir . \
-    && python -c "import apache_beam; import ftfy; import yaml; import pipelines; import pipelines.common.text_normalization; import pipelines.transforms.pronabec; import pipelines.transforms.pronabec_reports; import pipelines.transforms.mef"
+    && python -c "import apache_beam; import ftfy; import yaml; import pipelines; import pipelines.dataflow_bronze_to_silver; import pipelines.common.bigquery; import pipelines.common.dlq; import pipelines.common.text_normalization; import pipelines.transforms.pronabec; import pipelines.transforms.pronabec_reports; import pipelines.transforms.mef; from apache_beam.io.gcp.bigquery import WriteToBigQuery"

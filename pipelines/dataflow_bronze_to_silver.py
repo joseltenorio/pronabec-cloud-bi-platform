@@ -528,6 +528,7 @@ def build_pipeline_options(
             "service_account_email": args.service_account_email,
             # Usa una imagen worker con dependencias y paquete pipelines instalados.
             "sdk_container_image": args.sdk_container_image,
+            "sdk_location": "container",
             "experiments": ensure_runner_v2_experiment(pipeline_args),
             "save_main_session": True,
         })
