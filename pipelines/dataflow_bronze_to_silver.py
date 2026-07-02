@@ -306,6 +306,12 @@ def parse_arguments(argv: list[str] | None = None) -> tuple[argparse.Namespace, 
         help="Ruta de GCS staging para Dataflow (requerida para DataflowRunner).",
     )
     parser.add_argument(
+        "--service-account-email",
+        required=False,
+        default=None,
+        help="Service account worker dedicada para DataflowRunner.",
+    )
+    parser.add_argument(
         "--pipeline-run-id",
         required=False,
         default=None,
@@ -361,6 +367,7 @@ def resolve_runtime_arguments(args: argparse.Namespace) -> argparse.Namespace:
         "input_path": "INPUT_PATH",
         "output_table": "OUTPUT_TABLE",
         "pipeline_run_id": "PIPELINE_RUN_ID",
+        "service_account_email": "DATAFLOW_SERVICE_ACCOUNT",
     }
 
     for field, env_name in env_defaults.items():
@@ -445,6 +452,11 @@ def validate_arguments(args: argparse.Namespace) -> None:
             missing_cloud_params.append("--temp-location")
         if not args.staging_location:
             missing_cloud_params.append("--staging-location")
+        if not args.service_account_email:
+            raise ValueError(
+                "DataflowRunner requiere DATAFLOW_SERVICE_ACCOUNT o --service-account-email "
+                "para evitar usar la Compute default service account."
+            )
 
         if missing_cloud_params:
             raise ValueError(
@@ -480,6 +492,8 @@ def build_pipeline_options(
         options_dict.update({
             "region": args.region,
             "staging_location": args.staging_location,
+            # Evita que Dataflow use la service account default de Compute.
+            "service_account_email": args.service_account_email,
         })
 
     return PipelineOptions(pipeline_args, **options_dict)

@@ -17,6 +17,7 @@ param(
 
     [string]$DataflowTempLocation = $(if ($env:DATAFLOW_TEMP_LOCATION) { $env:DATAFLOW_TEMP_LOCATION } else { "" }),
     [string]$DataflowStagingLocation = $(if ($env:DATAFLOW_STAGING_LOCATION) { $env:DATAFLOW_STAGING_LOCATION } else { "" }),
+    [string]$DataflowServiceAccount = $env:DATAFLOW_SERVICE_ACCOUNT,
 
     [string]$PronabecJobName = $(if ($env:PRONABEC_EXTRACT_JOB_NAME) { $env:PRONABEC_EXTRACT_JOB_NAME } else { "pronabec-extract-job" }),
     [string]$MefJobName = $(if ($env:MEF_EXTRACT_JOB_NAME) { $env:MEF_EXTRACT_JOB_NAME } else { "mef-extract-job" }),
@@ -160,6 +161,7 @@ function Upsert-CloudRunJob {
         "BQ_LOCATION=$Location",
         "DATAFLOW_TEMP_LOCATION=$DataflowTempLocation",
         "DATAFLOW_STAGING_LOCATION=$DataflowStagingLocation",
+        "DATAFLOW_SERVICE_ACCOUNT=$DataflowServiceAccount",
         "PRONABEC_REPORTS_LANDING_PREFIX=$PronabecReportsLandingPrefix",
         "PRONABEC_REPORTS_BRONZE_PREFIX=$PronabecReportsBronzePrefix",
         "PRONABEC_REQUEST_TIMEOUT_SECONDS=$(if ($env:PRONABEC_REQUEST_TIMEOUT_SECONDS) { $env:PRONABEC_REQUEST_TIMEOUT_SECONDS } else { "180" })",
@@ -218,6 +220,7 @@ Assert-RequiredValue -Name "ServiceAccount" -Value $ServiceAccount
 Assert-RequiredValue -Name "BucketName" -Value $BucketName
 Assert-RequiredValue -Name "DataflowTempLocation" -Value $DataflowTempLocation
 Assert-RequiredValue -Name "DataflowStagingLocation" -Value $DataflowStagingLocation
+Assert-RequiredValue -Name "DATAFLOW_SERVICE_ACCOUNT" -Value $DataflowServiceAccount
 Assert-RequiredValue -Name "MEF_SOURCE_MODE" -Value $MefSourceMode
 Assert-RequiredValue -Name "MEF_START_YEAR" -Value $MefStartYear
 Assert-RequiredValue -Name "MEF_END_YEAR" -Value $MefEndYear
@@ -237,6 +240,8 @@ $DataflowCommonArgs = @(
     $DataflowTempLocation,
     "--staging-location",
     $DataflowStagingLocation,
+    "--service-account-email",
+    $DataflowServiceAccount,
     "--dlq-output-root",
     "gs://$BucketName/dlq"
 )

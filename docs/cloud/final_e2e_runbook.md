@@ -162,13 +162,58 @@ gcloud run jobs execute pronabec-stage-reports-job `
 
 `SOURCE_SUBSET` selecciona un grupo documental completo; `pes_2025` y `beca18_universitarios_2012_2026` contienen multiples reportes.
 
-## 6. Validacion Bronze
+## 6. Service account worker de Dataflow
+
+Los Cloud Run Jobs `dataflow-*` actuan como launchers. Los workers de Dataflow deben usar `DATAFLOW_SERVICE_ACCOUNT`, no la Compute default service account.
+
+Checklist IAM:
+
+```bash
+export DATAFLOW_SERVICE_ACCOUNT="pronabec-dataflow-sa@pronabec-cloud-bi-platform.iam.gserviceaccount.com"
+export CLOUD_RUN_SERVICE_ACCOUNT="pronabec-cloudrun-sa@pronabec-cloud-bi-platform.iam.gserviceaccount.com"
+
+gcloud iam service-accounts add-iam-policy-binding "$DATAFLOW_SERVICE_ACCOUNT" \
+  --project="$GCP_PROJECT_ID" \
+  --member="serviceAccount:$CLOUD_RUN_SERVICE_ACCOUNT" \
+  --role="roles/iam.serviceAccountUser"
+
+gcloud projects add-iam-policy-binding "$GCP_PROJECT_ID" \
+  --member="serviceAccount:$DATAFLOW_SERVICE_ACCOUNT" \
+  --role="roles/dataflow.worker"
+
+gcloud projects add-iam-policy-binding "$GCP_PROJECT_ID" \
+  --member="serviceAccount:$DATAFLOW_SERVICE_ACCOUNT" \
+  --role="roles/bigquery.dataEditor"
+
+gcloud projects add-iam-policy-binding "$GCP_PROJECT_ID" \
+  --member="serviceAccount:$DATAFLOW_SERVICE_ACCOUNT" \
+  --role="roles/bigquery.jobUser"
+
+gcloud projects add-iam-policy-binding "$GCP_PROJECT_ID" \
+  --member="serviceAccount:$DATAFLOW_SERVICE_ACCOUNT" \
+  --role="roles/storage.objectAdmin"
+```
+
+Si el Cloud Run Job usa una service account distinta a `CLOUD_RUN_SERVICE_ACCOUNT`, tambien debe tener `roles/iam.serviceAccountUser` sobre `DATAFLOW_SERVICE_ACCOUNT`.
+
+Diagnostico del launcher:
+
+```bash
+gcloud run jobs describe dataflow-pronabec-becarios-pais-estudio-job \
+  --region="$CLOUD_RUN_REGION" \
+  --project="$GCP_PROJECT_ID" \
+  --format="value(spec.template.spec.template.spec.serviceAccountName)"
+```
+
+El job debe tener `DATAFLOW_SERVICE_ACCOUNT` en sus variables y/o `--service-account-email` en sus argumentos.
+
+## 7. Validacion Bronze
 
 `bronze_work/` es temporal y no debe ser leido por Dataflow. Solo Bronze final consolidado con `manifest.json` y `_SUCCESS` entra a `validate_bronze_manifests` y luego a Silver.
 
 Si se quiere ejecutar un solo dataset por diagnostico, use `SOURCE_DATASET` en el job manual correspondiente. No existe un scope E2E que reduzca la descarga Bronze principal.
 
-## 7. Configuracion manual del DAG
+## 8. Configuracion manual del DAG
 
 Ejemplo de `dag_run.conf`:
 
@@ -194,7 +239,7 @@ Ejemplo de `dag_run.conf`:
 
 `run_pronabec_chunk_extraction` queda como alias de compatibilidad para `run_pronabec_plan_execution`.
 
-## 8. Validacion final
+## 9. Validacion final
 
 Si cambian modulos Python, reconstruya y publique la imagen antes de redeployar los Cloud Run Jobs. Si solo cambian DAG, configuracion o documentacion, suba los artefactos a Composer y actualice las variables Airflow.
 

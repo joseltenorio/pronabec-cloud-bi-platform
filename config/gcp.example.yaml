@@ -12,7 +12,7 @@ locations:
 
 service_accounts:
   cloud_run_jobs: your-cloudrun-sa@your-gcp-project-id.iam.gserviceaccount.com
-  dataflow: your-dataflow-sa@your-gcp-project-id.iam.gserviceaccount.com
+  dataflow: pronabec-dataflow-sa@pronabec-cloud-bi-platform.iam.gserviceaccount.com
   composer: your-composer-sa@your-gcp-project-id.iam.gserviceaccount.com
   cicd: your-cicd-sa@your-gcp-project-id.iam.gserviceaccount.com
 
@@ -145,7 +145,7 @@ dataflow:
   staging_location: gs://your-gcs-bucket-name/dataflow/staging
   max_num_workers: 2
   worker_machine_type: n1-standard-2
-  service_account: your-dataflow-sa@your-gcp-project-id.iam.gserviceaccount.com
+  service_account: pronabec-dataflow-sa@pronabec-cloud-bi-platform.iam.gserviceaccount.com
 
 composer:
   environment_name: project-cloud-bi-composer

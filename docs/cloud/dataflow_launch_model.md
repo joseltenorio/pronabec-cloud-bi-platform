@@ -151,6 +151,7 @@ GCS_BUCKET
 BQ_SILVER_DATASET
 DATAFLOW_TEMP_LOCATION
 DATAFLOW_STAGING_LOCATION
+DATAFLOW_SERVICE_ACCOUNT
 BRONZE_EXTRACTION_DATE
 PIPELINE_RUN_ID
 SOURCE_DATASET
@@ -166,6 +167,7 @@ Argumentos principales:
 --region
 --temp-location
 --staging-location
+--service-account-email
 --source-system
 --source-dataset
 --input-path
@@ -174,6 +176,8 @@ Argumentos principales:
 --dlq-output-root
 --summary-output-path
 ```
+
+`DATAFLOW_SERVICE_ACCOUNT` define la service account worker usada por Dataflow. Los Cloud Run Jobs actuan como launchers y pueden usar una service account distinta; esa service account launcher necesita `roles/iam.serviceAccountUser` sobre `DATAFLOW_SERVICE_ACCOUNT`. Los workers Dataflow deben usar una service account dedicada con permisos Dataflow, GCS y BigQuery, y no la Compute default service account.
 
 ## Rutas operativas
 

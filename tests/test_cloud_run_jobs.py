@@ -6,6 +6,8 @@ import re
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEPLOY_SCRIPT_PATH = REPO_ROOT / "scripts" / "deploy_cloud_run_jobs.ps1"
+ENV_EXAMPLE_PATH = REPO_ROOT / ".env.example"
+GCP_EXAMPLE_PATH = REPO_ROOT / "config" / "gcp.example.yaml"
 
 
 def _read_deploy_script() -> str:
@@ -304,3 +306,30 @@ def test_pronabec_finalize_job_memory_and_cpu():
     ]
     assert '-Memory "2Gi"' in finalize_section
     assert '-Cpu "1"' in finalize_section
+
+
+def test_dataflow_jobs_use_dedicated_worker_service_account():
+    content = _read_deploy_script()
+
+    assert "$DataflowServiceAccount = $env:DATAFLOW_SERVICE_ACCOUNT" in content
+    assert "Assert-RequiredValue -Name \"DATAFLOW_SERVICE_ACCOUNT\"" in content
+    assert "DATAFLOW_SERVICE_ACCOUNT=$DataflowServiceAccount" in content
+    assert "--service-account-email" in content
+    assert "$DataflowServiceAccount" in content
+    assert "1030103187284-compute@developer.gserviceaccount.com" not in content
+    assert "compute@developer.gserviceaccount.com" not in content
+
+
+def test_dataflow_service_account_is_documented_in_examples():
+    env_example = ENV_EXAMPLE_PATH.read_text(encoding="utf-8")
+    gcp_example = GCP_EXAMPLE_PATH.read_text(encoding="utf-8")
+
+    expected_service_account = (
+        "DATAFLOW_SERVICE_ACCOUNT=pronabec-dataflow-sa@"
+        "pronabec-cloud-bi-platform.iam.gserviceaccount.com"
+    )
+
+    assert expected_service_account in env_example
+    assert "DATAFLOW_WORKER_MACHINE_TYPE=n1-standard-2" in env_example
+    assert "DATAFLOW_MAX_NUM_WORKERS=2" in env_example
+    assert "service_account: pronabec-dataflow-sa@pronabec-cloud-bi-platform.iam.gserviceaccount.com" in gcp_example

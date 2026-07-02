@@ -7,6 +7,7 @@ from __future__ import annotations
 import pytest
 
 from pipelines.dataflow_bronze_to_silver import (
+    build_pipeline_options,
     parse_arguments,
     resolve_runtime_arguments,
     validate_arguments,
@@ -47,6 +48,7 @@ def test_dataflow_runner_requires_cloud_config() -> None:
         "--input-format", "csv",
         "--output-table", "test-project:silver.some_table",
         "--runner", "DataflowRunner",
+        "--service-account-email", "test-dataflow-sa@test-project.iam.gserviceaccount.com",
         "--dry-run",
     ]
     
@@ -78,11 +80,64 @@ def test_dataflow_runner_passes_with_full_cloud_config() -> None:
         "--region", "us-central1",
         "--temp-location", "gs://bucket/temp",
         "--staging-location", "gs://bucket/staging",
+        "--service-account-email", "test-dataflow-sa@test-project.iam.gserviceaccount.com",
     ]
     args, _ = parse_arguments(argv)
     
     # Debería validar sin excepciones
     validate_arguments(args)
+
+
+def test_dataflow_runner_requires_service_account_email() -> None:
+    """
+    Valida que DataflowRunner no use implicitamente la service account default de Compute.
+    """
+    argv = [
+        "--source-system", "pronabec",
+        "--source-dataset", "becarios_pais_estudio",
+        "--extraction-date", "2026-07-02",
+        "--input-path", "gs://bucket/bronze/pronabec/becarios_pais_estudio/data.jsonl",
+        "--input-format", "jsonl",
+        "--output-table", "test-project:silver.pronabec_becarios_pais_estudio",
+        "--runner", "DataflowRunner",
+        "--project", "test-project",
+        "--region", "us-central1",
+        "--temp-location", "gs://bucket/temp",
+        "--staging-location", "gs://bucket/staging",
+    ]
+    args, _ = parse_arguments(argv)
+
+    with pytest.raises(ValueError) as excinfo:
+        validate_arguments(args)
+
+    assert "DATAFLOW_SERVICE_ACCOUNT o --service-account-email" in str(excinfo.value)
+
+
+def test_runtime_arguments_resolve_dataflow_service_account(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "DATAFLOW_SERVICE_ACCOUNT",
+        "test-dataflow-sa@test-project.iam.gserviceaccount.com",
+    )
+
+    argv = [
+        "--source-system", "pronabec",
+        "--source-dataset", "becarios_pais_estudio",
+        "--extraction-date", "2026-07-02",
+        "--input-path", "gs://bucket/bronze/pronabec/becarios_pais_estudio/data.jsonl",
+        "--input-format", "jsonl",
+        "--output-table", "test-project:silver.pronabec_becarios_pais_estudio",
+        "--runner", "DataflowRunner",
+        "--project", "test-project",
+        "--region", "us-central1",
+        "--temp-location", "gs://bucket/temp",
+        "--staging-location", "gs://bucket/staging",
+    ]
+    args, _ = parse_arguments(argv)
+
+    resolved = resolve_runtime_arguments(args)
+
+    assert resolved.service_account_email == "test-dataflow-sa@test-project.iam.gserviceaccount.com"
+    validate_arguments(resolved)
 
 
 def test_invalid_input_format_raises_error() -> None:
@@ -131,8 +186,6 @@ def test_build_pipeline_options_propagates_temp_location() -> None:
     """
     Valida que build_pipeline_options propague temp_location en DirectRunner.
     """
-    from pipelines.dataflow_bronze_to_silver import build_pipeline_options
-    
     argv = [
         "--source-system", "pronabec_reports",
         "--source-dataset", "report_beca18_universitarios_universidad_anual",
@@ -149,6 +202,28 @@ def test_build_pipeline_options_propagates_temp_location() -> None:
     # Extraer diccionario de opciones
     opt_dict = options.get_all_options()
     assert opt_dict.get("temp_location") == "gs://test-bucket/temp"
+
+
+def test_build_pipeline_options_propagates_dataflow_service_account() -> None:
+    argv = [
+        "--source-system", "pronabec",
+        "--source-dataset", "becarios_pais_estudio",
+        "--extraction-date", "2026-07-02",
+        "--input-path", "gs://bucket/bronze/pronabec/becarios_pais_estudio/data.jsonl",
+        "--input-format", "jsonl",
+        "--output-table", "test-project:silver.pronabec_becarios_pais_estudio",
+        "--runner", "DataflowRunner",
+        "--project", "test-project",
+        "--region", "us-central1",
+        "--temp-location", "gs://bucket/temp",
+        "--staging-location", "gs://bucket/staging",
+        "--service-account-email", "test-dataflow-sa@test-project.iam.gserviceaccount.com",
+    ]
+    args, pipeline_args = parse_arguments(argv)
+    options = build_pipeline_options(args, pipeline_args)
+
+    opt_dict = options.get_all_options()
+    assert opt_dict.get("service_account_email") == "test-dataflow-sa@test-project.iam.gserviceaccount.com"
 
 
 def test_runtime_arguments_resolve_cloud_run_environment(monkeypatch) -> None:

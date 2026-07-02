@@ -75,6 +75,12 @@ El valor `MEF_BREAKDOWN_SLICES` contiene comas; el deploy usa delimitador altern
 
 `pronabec-stage-reports-job` es un unico job parametrizable por `SOURCE_SUBSET`. Los subsets operativos son `pes_2025` y `beca18_universitarios_2012_2026`; cada subset puede contener multiples reportes y no representa un unico dataset.
 
+### Dataflow launchers
+
+Los jobs `dataflow-*` son launchers: arrancan el pipeline Beam desde Cloud Run, pero los workers de Dataflow deben ejecutar con `DATAFLOW_SERVICE_ACCOUNT`. El deploy inyecta esta variable y tambien pasa `--service-account-email` al modulo `pipelines.dataflow_bronze_to_silver`.
+
+La service account del job Cloud Run necesita `roles/iam.serviceAccountUser` sobre `DATAFLOW_SERVICE_ACCOUNT`. La service account worker de Dataflow necesita permisos para Dataflow, GCS y BigQuery. No se debe depender de la Compute default service account.
+
 ## Estrategia operativa
 
 La extraccion PRONABEC particionada sigue esta secuencia:
