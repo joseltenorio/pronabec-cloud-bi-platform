@@ -113,7 +113,7 @@ def test_mef_breakdown_slices_are_complete_and_safe_as_single_env_var():
 
     assert "MEF_BREAKDOWN_SLICES=$MefBreakdownSlices" in content
     assert "Join-CloudRunEnvVars" in content
-    assert "return \"^@^\" + ($EnvVars -join \"@\")" in content
+    assert "return \"^|^\" + ($EnvVars -join \"|\")" in content
 
 
 def test_bronze_manifest_validation_job_is_defined():

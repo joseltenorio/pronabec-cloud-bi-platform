@@ -127,7 +127,7 @@ function Join-CloudRunEnvVars {
         [string[]]$EnvVars
     )
 
-    return "^@^" + ($EnvVars -join "@")
+    return "^|^" + ($EnvVars -join "|")
 }
 
 function Upsert-CloudRunJob {
