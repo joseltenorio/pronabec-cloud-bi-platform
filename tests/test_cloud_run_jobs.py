@@ -320,6 +320,15 @@ def test_dataflow_jobs_use_dedicated_worker_service_account():
     assert "compute@developer.gserviceaccount.com" not in content
 
 
+def test_dataflow_jobs_package_pipeline_modules_for_workers():
+    content = _read_deploy_script()
+
+    assert "$DataflowSetupFile = $(if ($env:DATAFLOW_SETUP_FILE)" in content
+    assert "DATAFLOW_SETUP_FILE=$DataflowSetupFile" in content
+    assert "--setup-file" in content
+    assert "$DataflowSetupFile" in content
+
+
 def test_dataflow_service_account_is_documented_in_examples():
     env_example = ENV_EXAMPLE_PATH.read_text(encoding="utf-8")
     gcp_example = GCP_EXAMPLE_PATH.read_text(encoding="utf-8")
@@ -332,4 +341,14 @@ def test_dataflow_service_account_is_documented_in_examples():
     assert expected_service_account in env_example
     assert "DATAFLOW_WORKER_MACHINE_TYPE=n1-standard-2" in env_example
     assert "DATAFLOW_MAX_NUM_WORKERS=2" in env_example
+    assert "DATAFLOW_SETUP_FILE=/app/setup.py" in env_example
     assert "service_account: pronabec-dataflow-sa@pronabec-cloud-bi-platform.iam.gserviceaccount.com" in gcp_example
+    assert "setup_file: /app/setup.py" in gcp_example
+
+
+def test_setup_py_packages_pipeline_modules():
+    setup_py = (REPO_ROOT / "setup.py").read_text(encoding="utf-8")
+
+    assert "find_packages" in setup_py
+    assert '"pipelines"' in setup_py
+    assert '"pipelines.*"' in setup_py

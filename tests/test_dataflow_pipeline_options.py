@@ -4,6 +4,8 @@ Pruebas unitarias para validar las opciones y argumentos del pipeline de Dataflo
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from pipelines.dataflow_bronze_to_silver import (
@@ -12,6 +14,9 @@ from pipelines.dataflow_bronze_to_silver import (
     resolve_runtime_arguments,
     validate_arguments,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SETUP_FILE = REPO_ROOT / "setup.py"
 
 
 def test_direct_runner_accepts_minimal_local_config() -> None:
@@ -49,6 +54,7 @@ def test_dataflow_runner_requires_cloud_config() -> None:
         "--output-table", "test-project:silver.some_table",
         "--runner", "DataflowRunner",
         "--service-account-email", "test-dataflow-sa@test-project.iam.gserviceaccount.com",
+        "--setup-file", str(SETUP_FILE),
         "--dry-run",
     ]
     
@@ -81,6 +87,7 @@ def test_dataflow_runner_passes_with_full_cloud_config() -> None:
         "--temp-location", "gs://bucket/temp",
         "--staging-location", "gs://bucket/staging",
         "--service-account-email", "test-dataflow-sa@test-project.iam.gserviceaccount.com",
+        "--setup-file", str(SETUP_FILE),
     ]
     args, _ = parse_arguments(argv)
     
@@ -104,6 +111,7 @@ def test_dataflow_runner_requires_service_account_email() -> None:
         "--region", "us-central1",
         "--temp-location", "gs://bucket/temp",
         "--staging-location", "gs://bucket/staging",
+        "--setup-file", str(SETUP_FILE),
     ]
     args, _ = parse_arguments(argv)
 
@@ -111,6 +119,30 @@ def test_dataflow_runner_requires_service_account_email() -> None:
         validate_arguments(args)
 
     assert "DATAFLOW_SERVICE_ACCOUNT o --service-account-email" in str(excinfo.value)
+
+
+def test_dataflow_runner_requires_existing_setup_file() -> None:
+    argv = [
+        "--source-system", "pronabec",
+        "--source-dataset", "becarios_pais_estudio",
+        "--extraction-date", "2026-07-02",
+        "--input-path", "gs://bucket/bronze/pronabec/becarios_pais_estudio/data.jsonl",
+        "--input-format", "jsonl",
+        "--output-table", "test-project:silver.pronabec_becarios_pais_estudio",
+        "--runner", "DataflowRunner",
+        "--project", "test-project",
+        "--region", "us-central1",
+        "--temp-location", "gs://bucket/temp",
+        "--staging-location", "gs://bucket/staging",
+        "--service-account-email", "test-dataflow-sa@test-project.iam.gserviceaccount.com",
+        "--setup-file", "C:/tmp/no-existe/setup.py",
+    ]
+    args, _ = parse_arguments(argv)
+
+    with pytest.raises(ValueError) as excinfo:
+        validate_arguments(args)
+
+    assert "setup_file valido" in str(excinfo.value)
 
 
 def test_runtime_arguments_resolve_dataflow_service_account(monkeypatch) -> None:
@@ -131,6 +163,7 @@ def test_runtime_arguments_resolve_dataflow_service_account(monkeypatch) -> None
         "--region", "us-central1",
         "--temp-location", "gs://bucket/temp",
         "--staging-location", "gs://bucket/staging",
+        "--setup-file", str(SETUP_FILE),
     ]
     args, _ = parse_arguments(argv)
 
@@ -138,6 +171,25 @@ def test_runtime_arguments_resolve_dataflow_service_account(monkeypatch) -> None
 
     assert resolved.service_account_email == "test-dataflow-sa@test-project.iam.gserviceaccount.com"
     validate_arguments(resolved)
+
+
+def test_runtime_arguments_resolve_dataflow_setup_file(monkeypatch) -> None:
+    monkeypatch.setenv("DATAFLOW_SETUP_FILE", str(SETUP_FILE))
+
+    argv = [
+        "--source-system", "pronabec",
+        "--source-dataset", "becarios_pais_estudio",
+        "--extraction-date", "2026-07-02",
+        "--input-path", "gs://bucket/bronze/pronabec/becarios_pais_estudio/data.jsonl",
+        "--input-format", "jsonl",
+        "--output-table", "test-project:silver.pronabec_becarios_pais_estudio",
+        "--runner", "DirectRunner",
+    ]
+    args, _ = parse_arguments(argv)
+
+    resolved = resolve_runtime_arguments(args)
+
+    assert resolved.setup_file == str(SETUP_FILE)
 
 
 def test_invalid_input_format_raises_error() -> None:
@@ -218,12 +270,23 @@ def test_build_pipeline_options_propagates_dataflow_service_account() -> None:
         "--temp-location", "gs://bucket/temp",
         "--staging-location", "gs://bucket/staging",
         "--service-account-email", "test-dataflow-sa@test-project.iam.gserviceaccount.com",
+        "--setup-file", str(SETUP_FILE),
     ]
     args, pipeline_args = parse_arguments(argv)
     options = build_pipeline_options(args, pipeline_args)
 
     opt_dict = options.get_all_options()
     assert opt_dict.get("service_account_email") == "test-dataflow-sa@test-project.iam.gserviceaccount.com"
+    assert opt_dict.get("setup_file") == str(SETUP_FILE)
+    assert opt_dict.get("save_main_session") is True
+
+
+def test_setup_py_packages_pipelines_package() -> None:
+    setup_py = SETUP_FILE.read_text(encoding="utf-8")
+
+    assert "find_packages" in setup_py
+    assert '"pipelines"' in setup_py
+    assert '"pipelines.*"' in setup_py
 
 
 def test_runtime_arguments_resolve_cloud_run_environment(monkeypatch) -> None:

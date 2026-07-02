@@ -18,6 +18,7 @@ param(
     [string]$DataflowTempLocation = $(if ($env:DATAFLOW_TEMP_LOCATION) { $env:DATAFLOW_TEMP_LOCATION } else { "" }),
     [string]$DataflowStagingLocation = $(if ($env:DATAFLOW_STAGING_LOCATION) { $env:DATAFLOW_STAGING_LOCATION } else { "" }),
     [string]$DataflowServiceAccount = $env:DATAFLOW_SERVICE_ACCOUNT,
+    [string]$DataflowSetupFile = $(if ($env:DATAFLOW_SETUP_FILE) { $env:DATAFLOW_SETUP_FILE } else { "/app/setup.py" }),
 
     [string]$PronabecJobName = $(if ($env:PRONABEC_EXTRACT_JOB_NAME) { $env:PRONABEC_EXTRACT_JOB_NAME } else { "pronabec-extract-job" }),
     [string]$MefJobName = $(if ($env:MEF_EXTRACT_JOB_NAME) { $env:MEF_EXTRACT_JOB_NAME } else { "mef-extract-job" }),
@@ -162,6 +163,7 @@ function Upsert-CloudRunJob {
         "DATAFLOW_TEMP_LOCATION=$DataflowTempLocation",
         "DATAFLOW_STAGING_LOCATION=$DataflowStagingLocation",
         "DATAFLOW_SERVICE_ACCOUNT=$DataflowServiceAccount",
+        "DATAFLOW_SETUP_FILE=$DataflowSetupFile",
         "PRONABEC_REPORTS_LANDING_PREFIX=$PronabecReportsLandingPrefix",
         "PRONABEC_REPORTS_BRONZE_PREFIX=$PronabecReportsBronzePrefix",
         "PRONABEC_REQUEST_TIMEOUT_SECONDS=$(if ($env:PRONABEC_REQUEST_TIMEOUT_SECONDS) { $env:PRONABEC_REQUEST_TIMEOUT_SECONDS } else { "180" })",
@@ -242,6 +244,8 @@ $DataflowCommonArgs = @(
     $DataflowStagingLocation,
     "--service-account-email",
     $DataflowServiceAccount,
+    "--setup-file",
+    $DataflowSetupFile,
     "--dlq-output-root",
     "gs://$BucketName/dlq"
 )

@@ -312,6 +312,12 @@ def parse_arguments(argv: list[str] | None = None) -> tuple[argparse.Namespace, 
         help="Service account worker dedicada para DataflowRunner.",
     )
     parser.add_argument(
+        "--setup-file",
+        required=False,
+        default=None,
+        help="Archivo setup.py para empaquetar modulos del proyecto en DataflowRunner.",
+    )
+    parser.add_argument(
         "--pipeline-run-id",
         required=False,
         default=None,
@@ -368,6 +374,7 @@ def resolve_runtime_arguments(args: argparse.Namespace) -> argparse.Namespace:
         "output_table": "OUTPUT_TABLE",
         "pipeline_run_id": "PIPELINE_RUN_ID",
         "service_account_email": "DATAFLOW_SERVICE_ACCOUNT",
+        "setup_file": "DATAFLOW_SETUP_FILE",
     }
 
     for field, env_name in env_defaults.items():
@@ -384,11 +391,17 @@ def resolve_runtime_arguments(args: argparse.Namespace) -> argparse.Namespace:
         "output_table",
         "pipeline_run_id",
         "summary_output_path",
+        "setup_file",
     ]
     for field in expandable_fields:
         value = getattr(args, field, None)
         if isinstance(value, str):
             setattr(args, field, expand_env_placeholders(value))
+
+    if args.runner == "DataflowRunner" and not args.setup_file:
+        default_setup_file = "/app/setup.py"
+        if os.path.exists(default_setup_file):
+            args.setup_file = default_setup_file
 
     return args
 
@@ -457,6 +470,11 @@ def validate_arguments(args: argparse.Namespace) -> None:
                 "DataflowRunner requiere DATAFLOW_SERVICE_ACCOUNT o --service-account-email "
                 "para evitar usar la Compute default service account."
             )
+        if not args.setup_file or not os.path.isfile(args.setup_file):
+            raise ValueError(
+                "DataflowRunner requiere setup_file valido para empaquetar el paquete "
+                "pipelines en workers."
+            )
 
         if missing_cloud_params:
             raise ValueError(
@@ -494,6 +512,9 @@ def build_pipeline_options(
             "staging_location": args.staging_location,
             # Evita que Dataflow use la service account default de Compute.
             "service_account_email": args.service_account_email,
+            # Empaqueta el modulo pipelines para que los workers de Dataflow lo puedan importar.
+            "setup_file": args.setup_file,
+            "save_main_session": True,
         })
 
     return PipelineOptions(pipeline_args, **options_dict)

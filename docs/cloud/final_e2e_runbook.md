@@ -207,13 +207,40 @@ gcloud run jobs describe dataflow-pronabec-becarios-pais-estudio-job \
 
 El job debe tener `DATAFLOW_SERVICE_ACCOUNT` en sus variables y/o `--service-account-email` en sus argumentos.
 
-## 7. Validacion Bronze
+## 7. Empaquetado para workers Dataflow
+
+Los workers de Dataflow no heredan automaticamente el codigo `/app` del launcher Cloud Run. Para que puedan importar `pipelines`, los jobs Dataflow deben usar:
+
+```text
+DATAFLOW_SETUP_FILE=/app/setup.py
+--setup-file /app/setup.py
+```
+
+Despues de agregar o cambiar `setup.py`, reconstruya la imagen antes de redeployar:
+
+```bash
+gcloud builds submit \
+  --tag "$CLOUD_RUN_IMAGE" \
+  --project "$GCP_PROJECT_ID"
+```
+
+Troubleshooting:
+
+```text
+ModuleNotFoundError: No module named 'pipelines'
+```
+
+Causa: los workers no recibieron el paquete del proyecto.
+
+Solucion: verificar que el job tenga `--setup-file /app/setup.py`, `DATAFLOW_SETUP_FILE=/app/setup.py` y que la imagen haya sido reconstruida con `setup.py`.
+
+## 8. Validacion Bronze
 
 `bronze_work/` es temporal y no debe ser leido por Dataflow. Solo Bronze final consolidado con `manifest.json` y `_SUCCESS` entra a `validate_bronze_manifests` y luego a Silver.
 
 Si se quiere ejecutar un solo dataset por diagnostico, use `SOURCE_DATASET` en el job manual correspondiente. No existe un scope E2E que reduzca la descarga Bronze principal.
 
-## 8. Configuracion manual del DAG
+## 9. Configuracion manual del DAG
 
 Ejemplo de `dag_run.conf`:
 
@@ -239,7 +266,7 @@ Ejemplo de `dag_run.conf`:
 
 `run_pronabec_chunk_extraction` queda como alias de compatibilidad para `run_pronabec_plan_execution`.
 
-## 9. Validacion final
+## 10. Validacion final
 
 Si cambian modulos Python, reconstruya y publique la imagen antes de redeployar los Cloud Run Jobs. Si solo cambian DAG, configuracion o documentacion, suba los artefactos a Composer y actualice las variables Airflow.
 

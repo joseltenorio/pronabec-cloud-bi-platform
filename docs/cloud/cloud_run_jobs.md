@@ -81,6 +81,10 @@ Los jobs `dataflow-*` son launchers: arrancan el pipeline Beam desde Cloud Run, 
 
 La service account del job Cloud Run necesita `roles/iam.serviceAccountUser` sobre `DATAFLOW_SERVICE_ACCOUNT`. La service account worker de Dataflow necesita permisos para Dataflow, GCS y BigQuery. No se debe depender de la Compute default service account.
 
+Los workers de Dataflow no heredan automaticamente el codigo `/app` del launcher. Por eso los jobs Dataflow pasan `DATAFLOW_SETUP_FILE=/app/setup.py` y `--setup-file /app/setup.py`, lo que empaqueta `pipelines`, `pipelines.common` y `pipelines.transforms` para los workers.
+
+Si aparece `ModuleNotFoundError: No module named 'pipelines'`, reconstruya la imagen con `setup.py` incluido y verifique que el job tenga `DATAFLOW_SETUP_FILE` y `--setup-file`.
+
 ## Estrategia operativa
 
 La extraccion PRONABEC particionada sigue esta secuencia:

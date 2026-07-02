@@ -146,6 +146,7 @@ dataflow:
   max_num_workers: 2
   worker_machine_type: n1-standard-2
   service_account: pronabec-dataflow-sa@pronabec-cloud-bi-platform.iam.gserviceaccount.com
+  setup_file: /app/setup.py
 
 composer:
   environment_name: project-cloud-bi-composer
