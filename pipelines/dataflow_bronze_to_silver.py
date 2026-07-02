@@ -26,6 +26,11 @@ from pipelines.transforms.pronabec import transform_pronabec_record
 logger = setup_structured_logger("dataflow_bronze_to_silver", level="INFO")
 
 ENV_PLACEHOLDER_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+PRONABEC_REPORTS_INVALID_CONFIG_MESSAGE = (
+    "Invalid PRONABEC reports Dataflow launch configuration: "
+    "SOURCE_DATASET, INPUT_PATH and OUTPUT_TABLE must be provided with real values. "
+    "Refusing to launch Dataflow with placeholder values."
+)
 
 
 class ReadCsvDoFn(beam.DoFn):
@@ -425,6 +430,8 @@ def validate_arguments(args: argparse.Namespace) -> None:
             f"Formato de entrada inválido: {args.input_format}. Debe ser 'csv' o 'jsonl'."
         )
 
+    validate_pronabec_reports_launch_configuration(args)
+
     if not args.dry_run:
         if not args.output_table:
             raise ValueError(
@@ -476,6 +483,45 @@ def validate_arguments(args: argparse.Namespace) -> None:
                 "Los siguientes argumentos son requeridos para DataflowRunner: "
                 f"{', '.join(missing_cloud_params)}."
             )
+
+
+def validate_pronabec_reports_launch_configuration(args: argparse.Namespace) -> None:
+    """Fail fast when the parameterized PRONABEC reports launcher is unbound."""
+    if (
+        getattr(args, "source_system", None) != "pronabec_reports"
+        or getattr(args, "runner", None) != "DataflowRunner"
+    ):
+        return
+
+    source_dataset = getattr(args, "source_dataset", None)
+    input_path = getattr(args, "input_path", None)
+    output_table = getattr(args, "output_table", None)
+
+    values = (source_dataset, input_path, output_table)
+    if any(value is None or str(value).strip() == "" for value in values):
+        raise ValueError(PRONABEC_REPORTS_INVALID_CONFIG_MESSAGE)
+
+    source_dataset = str(source_dataset).strip()
+    input_path = str(input_path).strip()
+    output_table = str(output_table).strip()
+
+    if (
+        source_dataset == "placeholder_dataset"
+        or "placeholder_path" in input_path
+        or "placeholder_table" in output_table
+        or not input_path.startswith("gs://")
+    ):
+        raise ValueError(PRONABEC_REPORTS_INVALID_CONFIG_MESSAGE)
+
+    try:
+        build_bigquery_write_config(
+            output_table,
+            write_disposition=getattr(args, "write_disposition", None),
+            create_disposition=getattr(args, "create_disposition", None),
+            custom_gcs_temp_location=getattr(args, "temp_location", None),
+        )
+    except ValueError as exc:
+        raise ValueError(PRONABEC_REPORTS_INVALID_CONFIG_MESSAGE) from exc
 
 
 def ensure_runner_v2_experiment(pipeline_args: list[str]) -> list[str]:

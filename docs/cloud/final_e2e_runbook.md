@@ -162,6 +162,26 @@ gcloud run jobs execute pronabec-stage-reports-job `
 
 `SOURCE_SUBSET` selecciona un grupo documental completo; `pes_2025` y `beca18_universitarios_2012_2026` contienen multiples reportes.
 
+### PRONABEC reports Dataflow sin Composer
+
+`dataflow-pronabec-report-job` es un unico launcher parametrizable. No representa un dataset fijo y no debe ejecutarse sin `SOURCE_DATASET`, `INPUT_PATH` y `OUTPUT_TABLE` reales. Los valores `placeholder_dataset`, `placeholder_path` y `placeholder_table` existen solo como sentinel de deploy para evitar crear 23 Cloud Run Jobs.
+
+Para ejecutar todos los reportes documentales desde Cloud Shell sin Composer:
+
+```bash
+export GCP_PROJECT_ID="<project>"
+export GCS_BUCKET_NAME="<bucket>"
+export BQ_SILVER_DATASET="silver"
+export CLOUD_RUN_REGION="<region>"
+export DATAFLOW_SDK_CONTAINER_IMAGE="<region>-docker.pkg.dev/<project>/<repo>/pronabec-dataflow-worker:latest"
+export BRONZE_EXTRACTION_DATE="2026-06-29"
+export PIPELINE_RUN_ID="manual_20260629"
+
+scripts/run_pronabec_reports_dataflow.sh
+```
+
+El script lista `gs://${GCS_BUCKET_NAME}/bronze/pronabec_reports/`, verifica `data.csv` por reporte y ejecuta `dataflow-pronabec-report-job` con overrides por dataset. Composer, cuando se use para reports, debe pasar esos mismos parametros por cada reporte. Si aparece `placeholder_path`, la causa es una ejecucion mal parametrizada del launcher, no un problema del worker Dataflow.
+
 ## 6. Service account worker de Dataflow
 
 Los Cloud Run Jobs `dataflow-*` actuan como launchers. Los workers de Dataflow deben usar `DATAFLOW_SERVICE_ACCOUNT`, no la Compute default service account.

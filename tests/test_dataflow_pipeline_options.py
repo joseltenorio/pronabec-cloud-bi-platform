@@ -27,7 +27,12 @@ def test_direct_runner_accepts_minimal_local_config() -> None:
         "--source-system", "pronabec_reports",
         "--source-dataset", "report_beca18_universitarios_universidad_anual",
         "--extraction-date", "2026-06-15",
-        "--input-path", "tmp/data.csv",
+        "--input-path",
+        (
+            "gs://bucket/bronze/pronabec_reports/"
+            "report_beca18_universitarios_universidad_anual/"
+            "extraction_date=2026-06-15/data.csv"
+        ),
         "--input-format", "csv",
         "--output-table", "test-project:silver.some_table",
         "--runner", "DirectRunner",
@@ -49,7 +54,12 @@ def test_dataflow_runner_requires_cloud_config() -> None:
         "--source-system", "pronabec_reports",
         "--source-dataset", "report_beca18_universitarios_universidad_anual",
         "--extraction-date", "2026-06-15",
-        "--input-path", "tmp/data.csv",
+        "--input-path",
+        (
+            "gs://bucket/bronze/pronabec_reports/"
+            "report_beca18_universitarios_universidad_anual/"
+            "extraction_date=2026-06-15/data.csv"
+        ),
         "--input-format", "csv",
         "--output-table", "test-project:silver.some_table",
         "--runner", "DataflowRunner",

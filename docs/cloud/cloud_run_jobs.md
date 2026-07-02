@@ -71,6 +71,24 @@ El valor `MEF_BREAKDOWN_SLICES` contiene comas; el deploy usa delimitador altern
 
 `pronabec-stage-reports-job` es un unico job parametrizable por `SOURCE_SUBSET`. Los subsets operativos son `pes_2025` y `beca18_universitarios_2012_2026`; cada subset puede contener multiples reportes y no representa un unico dataset.
 
+### PRONABEC reports Dataflow
+
+`dataflow-pronabec-report-job` es un unico launcher parametrizable para reportes documentales PRONABEC. No representa un unico dataset fijo y no se deben crear jobs por reporte.
+
+El deploy registra sentinels:
+
+```text
+SOURCE_DATASET=placeholder_dataset
+INPUT_PATH=gs://<bucket>/placeholder_path
+OUTPUT_TABLE=<project>:<silver>.placeholder_table
+```
+
+Estos placeholders solo documentan que el job debe ser sobreescrito en runtime. En ejecucion `DataflowRunner`, el pipeline rechaza la ejecucion antes de construir Dataflow cuando `source_system=pronabec_reports` llega sin `SOURCE_DATASET`, `INPUT_PATH` u `OUTPUT_TABLE` reales, cuando algun valor contiene placeholders, cuando `INPUT_PATH` no empieza con `gs://`, o cuando `OUTPUT_TABLE` no cumple `project:dataset.table`.
+
+Para ejecucion manual sin Composer use `scripts/run_pronabec_reports_dataflow.sh`. El script ejecuta el mismo Cloud Run Job una vez por reporte encontrado en `gs://<bucket>/bronze/pronabec_reports/` y pasa `SOURCE_DATASET`, `INPUT_PATH`, `OUTPUT_TABLE`, `BRONZE_EXTRACTION_DATE`, `PIPELINE_RUN_ID` y `DATAFLOW_SDK_CONTAINER_IMAGE`.
+
+Composer debe aplicar el mismo contrato: una ejecucion de `dataflow-pronabec-report-job` por reporte, siempre con parametros reales. El error `placeholder_path` indica una ejecucion mal parametrizada del launcher, no una falla del worker Dataflow.
+
 ### Dataflow launchers
 
 Los jobs `dataflow-*` son launchers: arrancan el pipeline Beam desde Cloud Run, pero los workers de Dataflow deben ejecutar con `DATAFLOW_SERVICE_ACCOUNT`. El deploy inyecta esta variable y tambien pasa `--service-account-email` al modulo `pipelines.dataflow_bronze_to_silver`.

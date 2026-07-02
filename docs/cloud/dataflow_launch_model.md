@@ -120,6 +120,18 @@ INPUT_PATH
 OUTPUT_TABLE
 ```
 
+El deploy mantiene valores sentinel para registrar el job como plantilla parametrizable:
+
+```text
+SOURCE_DATASET=placeholder_dataset
+INPUT_PATH=gs://<bucket>/placeholder_path
+OUTPUT_TABLE=<project>:<silver>.placeholder_table
+```
+
+Estos valores existen solo como sentinel de despliegue. No son valores ejecutables. En ejecucion `DataflowRunner`, el launcher `pipelines/dataflow_bronze_to_silver.py` rechaza `source_system=pronabec_reports` antes de construir el pipeline si `SOURCE_DATASET`, `INPUT_PATH` u `OUTPUT_TABLE` faltan, si contienen placeholders, si `INPUT_PATH` no empieza con `gs://`, o si `OUTPUT_TABLE` no cumple `project:dataset.table`.
+
+Si aparece un error relacionado con `placeholder_path`, la ejecucion fue lanzada sin parametros reales. No indica un problema del worker de Dataflow ni del archivo Bronze; indica una ejecucion mal parametrizada del Cloud Run Job.
+
 Entrada Bronze esperada:
 
 ```text
@@ -136,8 +148,17 @@ Ejemplo:
 
 ```text
 SOURCE_DATASET=report_beca18_universitarios_universidad_anual
+INPUT_PATH=gs://<bucket>/bronze/pronabec_reports/report_beca18_universitarios_universidad_anual/extraction_date=<fecha>/data.csv
 OUTPUT_TABLE=<project>:silver.pronabec_report_beca18_universitarios_universidad_anual
 ```
+
+Para ejecucion manual sin Composer, use:
+
+```bash
+scripts/run_pronabec_reports_dataflow.sh
+```
+
+Ese script lista `gs://<bucket>/bronze/pronabec_reports/`, verifica cada `data.csv` con `gsutil -q stat`, ejecuta `dataflow-pronabec-report-job` una vez por reporte existente y pasa los mismos parametros que Composer debe propagar por reporte.
 
 ## Parámetros cloud
 
