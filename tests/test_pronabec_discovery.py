@@ -2,12 +2,14 @@
 """Pruebas unitarias para discover_pronabec.py."""
 
 import json
+from copy import deepcopy
 import pytest
 import requests
 from unittest.mock import MagicMock, patch
 
 from pipelines.common.config import ConfigError, load_yaml_config
-from pipelines.discover_pronabec import run_discovery
+from pipelines.common.orchestration_config import get_pronabec_dataset_policies
+from pipelines.discover_pronabec import discover_dataset, run_discovery
 
 
 @pytest.fixture
@@ -48,6 +50,12 @@ def mock_orchestration():
         "gold": {"sql_template": "...", "validation_queries": [{"name": "q", "query": "..."}]},
         "datasets": {
             "pronabec_api": {
+                "discovery": {
+                    "page_size_validation_mode": "full_pages",
+                    "page_size_candidates": [5000, 3000, 2000, 1000, 500, 100],
+                    "max_validation_pages": 1000,
+                    "stop_on_first_stable_page_size": True,
+                },
                 "extraction_policies": [
                     {
                         "source_dataset": "becarios_pais_estudio",
@@ -141,6 +149,7 @@ def test_bronze_only_dataset_failure_aborts_discovery(
         data = json.load(f)
     assert data["status"] == "FAILED"
     assert data["datasets"][0]["status"] == "FAILED"
+    assert data["datasets"][0]["validation_status"] == "FAILED"
     assert "error" in data["datasets"][0]
 
 
@@ -179,3 +188,140 @@ def test_discovery_includes_bronze_only_datasets_when_bronze_enabled(
     assert data["datasets"][1]["bronze_enabled"] is True
     assert data["datasets"][1]["silver_enabled"] is False
     assert data["datasets"][1]["required_for_e2e"] is False
+
+
+def _retry_settings() -> dict:
+    return {
+        "timeout": 30,
+        "max_retries": 1,
+        "backoff_base_seconds": 0,
+        "backoff_max_seconds": 0,
+    }
+
+
+def _payload(total_records: int, total_pages: int, rows: int = 1) -> dict:
+    return {
+        "records": total_records,
+        "total": total_pages,
+        "rows": [{"id": index} for index in range(rows)],
+    }
+
+
+@patch("pipelines.discover_pronabec.fetch_pronabec_page")
+def test_discovery_rejects_candidate_when_later_page_fails(
+    mock_fetch,
+    mock_orchestration,
+):
+    orchestration = deepcopy(mock_orchestration)
+    raw_policy = orchestration["datasets"]["pronabec_api"]["extraction_policies"][0]
+    raw_policy["recommended_page_size"] = 5000
+    raw_policy["fallback_page_sizes"] = [3000, 2000, 1000, 500, 100]
+    policy = get_pronabec_dataset_policies(orchestration)[0]
+    endpoint = {"name": "becarios_pais_estudio", "path": "/becarios-pais"}
+
+    def fake_fetch(**kwargs):
+        rows = kwargs["rows"]
+        page = kwargs["page"]
+        if rows == 5000:
+            if page == 6:
+                raise requests.exceptions.HTTPError(
+                    "HTTP 500",
+                    response=MagicMock(status_code=500),
+                )
+            return _payload(total_records=30000, total_pages=6, rows=1)
+        if rows == 3000:
+            return _payload(total_records=12000, total_pages=4, rows=1)
+        raise AssertionError(f"unexpected rows={rows}")
+
+    mock_fetch.side_effect = fake_fetch
+
+    result = discover_dataset(
+        endpoint=endpoint,
+        policy=policy,
+        orchestration_config=orchestration,
+        base_url="https://fake.url",
+        retry_settings=_retry_settings(),
+        logger=MagicMock(),
+    )
+
+    assert result["effective_page_size"] == 3000
+    assert result["validation_status"] == "SUCCESS"
+    assert result["page_size_validation_mode"] == "full_pages"
+    assert result["validated_pages"] == 4
+    assert result["rejected_page_sizes"][0]["page_size"] == 5000
+    assert result["rejected_page_sizes"][0]["failed_page"] == 6
+    assert result["rejected_page_sizes"][0]["status_code"] == 500
+
+
+@patch("pipelines.discover_pronabec.fetch_pronabec_page")
+def test_discovery_validates_all_pages_before_accepting_page_size(
+    mock_fetch,
+    mock_orchestration,
+):
+    orchestration = deepcopy(mock_orchestration)
+    raw_policy = orchestration["datasets"]["pronabec_api"]["extraction_policies"][0]
+    raw_policy["recommended_page_size"] = 5000
+    raw_policy["fallback_page_sizes"] = [3000, 2000, 1000, 500, 100]
+    policy = get_pronabec_dataset_policies(orchestration)[0]
+    endpoint = {"name": "becarios_pais_estudio", "path": "/becarios-pais"}
+    pages_seen: list[int] = []
+
+    def fake_fetch(**kwargs):
+        assert kwargs["rows"] == 5000
+        pages_seen.append(kwargs["page"])
+        return _payload(total_records=25000, total_pages=5, rows=1)
+
+    mock_fetch.side_effect = fake_fetch
+
+    result = discover_dataset(
+        endpoint=endpoint,
+        policy=policy,
+        orchestration_config=orchestration,
+        base_url="https://fake.url",
+        retry_settings=_retry_settings(),
+        logger=MagicMock(),
+    )
+
+    assert pages_seen == [1, 2, 3, 4, 5]
+    assert result["effective_page_size"] == 5000
+    assert result["validated_pages"] == 5
+
+
+@patch("pipelines.discover_pronabec.fetch_pronabec_page")
+def test_discovery_fails_dataset_when_all_page_sizes_fail(
+    mock_fetch,
+    mock_orchestration,
+    mock_pipeline_settings,
+    mock_endpoints,
+    tmp_path,
+):
+    mock_orch = deepcopy(mock_orchestration)
+    policy = mock_orch["datasets"]["pronabec_api"]["extraction_policies"][0]
+    policy["bronze_enabled"] = True
+    policy["extraction_enabled"] = True
+
+    mock_fetch.side_effect = requests.exceptions.HTTPError(
+        "HTTP 500",
+        response=MagicMock(status_code=500),
+    )
+
+    with patch("pipelines.discover_pronabec.get_pipeline_settings", return_value=mock_pipeline_settings), \
+        patch("pipelines.discover_pronabec.load_yaml_config", return_value=mock_endpoints), \
+        patch("pipelines.discover_pronabec.load_orchestration_config", return_value=mock_orch):
+        args = DummyArgs(
+            dry_run=True,
+            output_dir=str(tmp_path),
+            source_dataset="becarios_pais_estudio",
+        )
+        with pytest.raises(SystemExit):
+            run_discovery(args)
+
+    discovery_file = tmp_path / "bronze_work" / "pronabec" / "_plans" / "extraction_date=2026-06-29" / "run_id=test-run" / "discovery.json"
+    with open(discovery_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    dataset = data["datasets"][0]
+    assert data["status"] == "FAILED"
+    assert dataset["status"] == "FAILED"
+    assert dataset["validation_status"] == "FAILED"
+    assert dataset["rejected_page_sizes"]

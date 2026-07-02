@@ -54,6 +54,14 @@ def base_discovery():
     }
 
 
+def stable_discovery_fields(total_pages: int) -> dict:
+    return {
+        "page_size_validation_mode": "full_pages",
+        "validation_status": "SUCCESS",
+        "validated_pages": total_pages,
+    }
+
+
 def test_chunk_division_rules(base_discovery, base_orchestration):
     # 1. total_pages=80 y chunk_size_pages=10 genera 8 chunks
     disc = dict(base_discovery)
@@ -70,6 +78,7 @@ def test_chunk_division_rules(base_discovery, base_orchestration):
             "total_records": 80000,
             "total_pages": 80,
             "status": "SUCCESS",
+            **stable_discovery_fields(80),
         }
     ]
     plan = build_plan(disc, base_orchestration, None)
@@ -97,6 +106,7 @@ def test_single_mode_chunk_ranges(base_discovery, base_orchestration):
             "total_records": 11000,
             "total_pages": 11,
             "status": "SUCCESS",
+            **stable_discovery_fields(11),
         }
     ]
     plan = build_plan(disc, base_orchestration, None)
@@ -106,6 +116,7 @@ def test_single_mode_chunk_ranges(base_discovery, base_orchestration):
 
     # 3. total_pages=15 y extraction_mode=single genera 1 chunk de 1 a 15
     disc["datasets"][0]["total_pages"] = 15
+    disc["datasets"][0]["validated_pages"] = 15
     plan = build_plan(disc, base_orchestration, None)
     assert len(plan["chunks"]) == 1
     assert plan["chunks"][0]["page_start"] == 1
@@ -113,6 +124,7 @@ def test_single_mode_chunk_ranges(base_discovery, base_orchestration):
 
     # 4. total_pages=9 y extraction_mode=single genera 1 chunk de 1 a 9
     disc["datasets"][0]["total_pages"] = 9
+    disc["datasets"][0]["validated_pages"] = 9
     plan = build_plan(disc, base_orchestration, None)
     assert len(plan["chunks"]) == 1
     assert plan["chunks"][0]["page_start"] == 1
@@ -135,6 +147,7 @@ def test_total_pages_zero_handling(base_discovery, base_orchestration):
             "total_records": 0,
             "total_pages": 0,
             "status": "SUCCESS",
+            **stable_discovery_fields(0),
         }
     ]
     plan = build_plan(disc, base_orchestration, None)
@@ -158,6 +171,7 @@ def test_parameter_propagation(base_discovery, base_orchestration):
             "total_records": 1500,
             "total_pages": 3,
             "status": "SUCCESS",
+            **stable_discovery_fields(3),
         }
     ]
     plan = build_plan(disc, base_orchestration, None)
@@ -210,6 +224,7 @@ def test_chunk_id_determinism_and_gaps(base_discovery, base_orchestration):
             "total_records": 3500,
             "total_pages": 25,
             "status": "SUCCESS",
+            **stable_discovery_fields(25),
         }
     ]
     

@@ -12,11 +12,13 @@ from pipelines.common.orchestration_config import (
     build_gcs_uri,
     get_chunked_pronabec_datasets,
     get_enabled_pronabec_datasets,
+    get_pronabec_discovery_config,
     get_pronabec_dataset_policies,
     get_required_pronabec_datasets,
     load_endpoints_config,
     load_orchestration_config,
     resolve_airflow_var_name,
+    resolve_pronabec_page_size_candidates,
     resolve_pronabec_report_datasets,
     resolve_pronabec_report_groups,
     validate_orchestration_config,
@@ -307,6 +309,41 @@ def test_pronabec_page_size_policy_values_are_calibrated() -> None:
     assert policies["ubigeo_postulacion"].recommended_page_size == 2000
     assert policies["becarios_provincia"].recommended_page_size == 500
     assert policies["becarios_provincia"].allow_record_count_mismatch is True
+
+
+def test_pronabec_discovery_config_is_loaded_from_manifest() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+    discovery_config = get_pronabec_discovery_config(config)
+
+    assert discovery_config.page_size_validation_mode == "full_pages"
+    assert discovery_config.page_size_candidates == [5000, 3000, 2000, 1000, 500, 100]
+    assert discovery_config.max_validation_pages == 1000
+    assert discovery_config.stop_on_first_stable_page_size is True
+
+
+def test_pronabec_discovery_rejects_invalid_page_size_candidates() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+    config["datasets"]["pronabec_api"]["discovery"]["page_size_candidates"] = [100, 500]
+
+    with pytest.raises(ConfigError, match="page_size_candidates.*ordenado"):
+        get_pronabec_discovery_config(config)
+
+
+def test_pronabec_discovery_candidate_order_starts_with_dataset_page_size() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+    policies = {
+        policy.source_dataset: policy
+        for policy in get_pronabec_dataset_policies(config)
+    }
+
+    assert resolve_pronabec_page_size_candidates(
+        config,
+        policies["colegios_habiles"],
+    )[:3] == [5000, 3000, 2000]
+    assert resolve_pronabec_page_size_candidates(
+        config,
+        policies["becarios_pais_estudio"],
+    )[:4] == [10000, 5000, 3000, 2000]
 
 
 def test_pronabec_policy_requires_positive_recommended_page_size() -> None:

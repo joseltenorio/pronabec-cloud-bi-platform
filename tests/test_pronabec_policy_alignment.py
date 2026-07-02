@@ -29,6 +29,9 @@ def _base_discovery(dataset_name: str, extraction_mode: str, effective_page_size
                 "effective_page_size": effective_page_size,
                 "total_records": total_records,
                 "total_pages": total_pages,
+                "page_size_validation_mode": "full_pages",
+                "validation_status": "SUCCESS",
+                "validated_pages": total_pages,
                 "status": "SUCCESS",
             }
         ],
