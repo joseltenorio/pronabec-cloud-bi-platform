@@ -269,7 +269,7 @@ Ejemplo de `dag_run.conf`:
 
 ## 10. Validacion final
 
-Si cambian modulos Python, reconstruya y publique la imagen antes de redeployar los Cloud Run Jobs. Si solo cambian DAG, configuracion o documentacion, suba los artefactos a Composer y actualice las variables Airflow.
+Si cambian modulos Python usados por launchers, reconstruya la imagen launcher. Si cambian transforms, dependencias o packaging de Dataflow, reconstruya la imagen worker. Si solo cambian DAG, configuracion o documentacion, suba los artefactos a Composer y actualice las variables Airflow.
 
 Para ventanas de prueba controladas, Composer puede eliminarse y recrearse con los comandos oficiales del proyecto:
 

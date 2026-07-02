@@ -96,8 +96,8 @@ pronabec-finalize-dataset-job
 
 `required_for_e2e` no recorta la descarga Bronze. Si se necesita una ejecucion acotada para debug o pruebas manuales, use `SOURCE_DATASET` en discovery, run-plan o extract-chunk segun corresponda.
 
-## Imagen y despliegue
+## Imagenes y despliegue
 
-La plataforma usa una imagen Docker comun para todos los jobs. El deploy script registra o actualiza los jobs con la misma imagen, service account, bucket y variables base, variando solo el modulo Python o los argumentos del contenedor.
+La plataforma usa una imagen launcher para Cloud Run Jobs y una imagen worker dedicada para Dataflow. El deploy script registra o actualiza los jobs con la imagen launcher, service account, bucket y variables base, variando el modulo Python o los argumentos del contenedor.
 
-Si cambian modulos Python, reconstruya y publique la imagen antes de redeployar los Cloud Run Jobs. Si solo cambian DAG, configuracion o documentos, basta con subir los artefactos de Composer y actualizar variables.
+Si cambian modulos Python usados por launchers, reconstruya la imagen launcher antes de redeployar Cloud Run Jobs. Si cambian transforms, dependencias o packaging de Dataflow, reconstruya la imagen worker y luego redeploye Cloud Run Jobs para propagar `DATAFLOW_SDK_CONTAINER_IMAGE`. Si solo cambian DAG, configuracion o documentos, basta con subir los artefactos de Composer y actualizar variables.
