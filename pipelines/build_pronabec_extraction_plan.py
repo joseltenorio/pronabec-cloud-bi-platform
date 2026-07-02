@@ -19,6 +19,7 @@ from pipelines.common.config import ConfigError, get_pipeline_settings, load_yam
 from pipelines.common.gcs import read_gcs_bytes, upload_json
 from pipelines.common.logging import log_event, setup_structured_logger
 from pipelines.common.orchestration_config import (
+    get_pronabec_discovery_config,
     get_pronabec_dataset_policies,
     load_orchestration_config,
 )
@@ -70,6 +71,7 @@ def build_plan(
     source_dataset_filter: str | None,
 ) -> dict[str, Any]:
     """Genera el plan de extraccion basandose en discovery.json y orchestration policies."""
+    discovery_config = get_pronabec_discovery_config(orchestration_config)
     policies = {
         p.source_dataset: p
         for p in get_pronabec_dataset_policies(orchestration_config)
@@ -93,9 +95,14 @@ def build_plan(
         required_for_e2e = bool(ds_discovered.get("required_for_e2e", False))
         if not bronze_enabled and not source_dataset_filter:
             continue
-        if bronze_enabled and ds_discovered.get("status") != "SUCCESS":
-            bronze_failures.append(dataset_name)
-            continue
+        if bronze_enabled:
+            failure_reason = _validate_stable_discovery_dataset(
+                ds_discovered,
+                expected_validation_mode=discovery_config.page_size_validation_mode,
+            )
+            if failure_reason:
+                bronze_failures.append(f"{dataset_name} ({failure_reason})")
+                continue
 
         policy = policies.get(dataset_name)
         if not policy:
@@ -173,6 +180,9 @@ def build_plan(
             "effective_page_size": effective_page_size,
             "total_records": total_records,
             "total_pages": total_pages,
+            "page_size_validation_mode": ds_discovered.get("page_size_validation_mode"),
+            "validation_status": ds_discovered.get("validation_status"),
+            "validated_pages": ds_discovered.get("validated_pages"),
             "chunk_size_pages": chunk_size_pages,
             "max_parallel_chunks": max_parallel_chunks,
             "expected_chunks": expected_chunks,
@@ -196,6 +206,34 @@ def build_plan(
         "datasets": datasets_plans,
         "chunks": chunks_plans,
     }
+
+
+def _validate_stable_discovery_dataset(
+    ds_discovered: dict[str, Any],
+    *,
+    expected_validation_mode: str,
+) -> str | None:
+    """Devuelve razon de rechazo si discovery no calibro todas las paginas."""
+    if ds_discovered.get("status") != "SUCCESS":
+        return "status != SUCCESS"
+    if ds_discovered.get("validation_status") != "SUCCESS":
+        return "validation_status != SUCCESS"
+    if ds_discovered.get("page_size_validation_mode") != expected_validation_mode:
+        return "page_size_validation_mode != full_pages"
+
+    effective_page_size = ds_discovered.get("effective_page_size")
+    if not isinstance(effective_page_size, int) or effective_page_size <= 0:
+        return "effective_page_size invalido"
+
+    total_pages = ds_discovered.get("total_pages")
+    if not isinstance(total_pages, int) or total_pages < 0:
+        return "total_pages invalido"
+
+    validated_pages = ds_discovered.get("validated_pages")
+    if not isinstance(validated_pages, int) or validated_pages < total_pages:
+        return "validated_pages insuficiente"
+
+    return None
 
 
 def run_build_plan(args: argparse.Namespace) -> None:
