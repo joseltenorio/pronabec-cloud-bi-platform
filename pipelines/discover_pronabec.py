@@ -42,6 +42,9 @@ from pipelines.extract_pronabec import (
 )
 
 
+DISCOVERY_PROGRESS_LOG_INTERVAL_PAGES = 10
+
+
 def _extract_pronabec_pagination(payload: dict[str, Any]) -> tuple[int, int]:
     if "rows" not in payload or not isinstance(payload.get("rows"), list):
         raise ConfigError("La respuesta PRONABEC no contiene rows validos")
@@ -89,6 +92,35 @@ def _extract_rejected_page_sizes(exc: Exception) -> list[dict[str, Any]]:
     if isinstance(exc, DiscoveryPageSizeCalibrationError):
         return exc.rejected_page_sizes
     return []
+
+
+def _log_discovery_validation_progress(
+    logger,
+    *,
+    dataset_name: str,
+    candidate_page_size: int,
+    current_page: int,
+    total_pages: int,
+    validated_pages: int,
+    start_time: float,
+) -> None:
+    if total_pages <= 0:
+        progress_percent = 100.0
+    else:
+        progress_percent = round((validated_pages / total_pages) * 100, 2)
+
+    log_event(
+        logger,
+        "INFO",
+        "discovery_page_validation_progress",
+        dataset=dataset_name,
+        candidate_page_size=candidate_page_size,
+        current_page=current_page,
+        total_pages=total_pages,
+        validated_pages=validated_pages,
+        progress_percent=progress_percent,
+        elapsed_seconds=round(time.time() - start_time, 2),
+    )
 
 
 def discover_dataset(
@@ -146,6 +178,16 @@ def discover_dataset(
                 )
 
             validated_pages = 1 if total_pages > 0 else 0
+            if total_pages <= 1:
+                _log_discovery_validation_progress(
+                    logger,
+                    dataset_name=dataset_name,
+                    candidate_page_size=page_size,
+                    current_page=1 if total_pages == 1 else 0,
+                    total_pages=total_pages,
+                    validated_pages=validated_pages,
+                    start_time=start_time,
+                )
             for page in range(2, total_pages + 1):
                 try:
                     page_payload = fetch_pronabec_page(
@@ -162,6 +204,19 @@ def discover_dataset(
                     )
                     _extract_pronabec_pagination(page_payload)
                     validated_pages += 1
+                    if (
+                        page % DISCOVERY_PROGRESS_LOG_INTERVAL_PAGES == 0
+                        or page == total_pages
+                    ):
+                        _log_discovery_validation_progress(
+                            logger,
+                            dataset_name=dataset_name,
+                            candidate_page_size=page_size,
+                            current_page=page,
+                            total_pages=total_pages,
+                            validated_pages=validated_pages,
+                            start_time=start_time,
+                        )
                 except Exception as exc:
                     rejected = _build_rejected_page_size(
                         page_size=page_size,

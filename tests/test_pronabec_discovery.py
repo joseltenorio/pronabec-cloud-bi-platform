@@ -287,6 +287,44 @@ def test_discovery_validates_all_pages_before_accepting_page_size(
     assert result["validated_pages"] == 5
 
 
+@patch("pipelines.discover_pronabec.log_event")
+@patch("pipelines.discover_pronabec.fetch_pronabec_page")
+def test_discovery_logs_page_validation_progress(
+    mock_fetch,
+    mock_log_event,
+    mock_orchestration,
+):
+    orchestration = deepcopy(mock_orchestration)
+    raw_policy = orchestration["datasets"]["pronabec_api"]["extraction_policies"][0]
+    raw_policy["recommended_page_size"] = 5000
+    raw_policy["fallback_page_sizes"] = [3000, 2000, 1000, 500, 100]
+    policy = get_pronabec_dataset_policies(orchestration)[0]
+    endpoint = {"name": "becarios_pais_estudio", "path": "/becarios-pais"}
+
+    mock_fetch.return_value = _payload(total_records=125000, total_pages=25, rows=1)
+
+    discover_dataset(
+        endpoint=endpoint,
+        policy=policy,
+        orchestration_config=orchestration,
+        base_url="https://fake.url",
+        retry_settings=_retry_settings(),
+        logger=MagicMock(),
+    )
+
+    progress_calls = [
+        call
+        for call in mock_log_event.call_args_list
+        if call.args[2] == "discovery_page_validation_progress"
+    ]
+
+    assert [call.kwargs["current_page"] for call in progress_calls] == [10, 20, 25]
+    assert all(call.kwargs["dataset"] == "becarios_pais_estudio" for call in progress_calls)
+    assert all(call.kwargs["candidate_page_size"] == 5000 for call in progress_calls)
+    assert all(call.kwargs["total_pages"] == 25 for call in progress_calls)
+    assert progress_calls[-1].kwargs["progress_percent"] == 100.0
+
+
 @patch("pipelines.discover_pronabec.fetch_pronabec_page")
 def test_discovery_fails_dataset_when_all_page_sizes_fail(
     mock_fetch,
