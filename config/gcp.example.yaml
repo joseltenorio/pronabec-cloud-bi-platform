@@ -22,6 +22,9 @@ artifact_registry:
   image_name: pronabec-cloud-bi-platform
   image_tag: latest
   image_uri: us-central1-docker.pkg.dev/your-gcp-project-id/pronabec-containers/pronabec-cloud-bi-platform:latest
+  dataflow_worker_image_name: pronabec-dataflow-worker
+  dataflow_worker_image_tag: latest
+  dataflow_worker_image_uri: us-central1-docker.pkg.dev/your-gcp-project-id/pronabec-containers/pronabec-dataflow-worker:latest
 
 cloud_run_jobs:
   region: us-central1
@@ -146,7 +149,7 @@ dataflow:
   max_num_workers: 2
   worker_machine_type: n1-standard-2
   service_account: pronabec-dataflow-sa@pronabec-cloud-bi-platform.iam.gserviceaccount.com
-  setup_file: /app/setup.py
+  sdk_container_image: us-central1-docker.pkg.dev/your-gcp-project-id/pronabec-containers/pronabec-dataflow-worker:latest
 
 composer:
   environment_name: project-cloud-bi-composer

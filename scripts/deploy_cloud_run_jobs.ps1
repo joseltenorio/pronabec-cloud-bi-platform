@@ -1,4 +1,4 @@
-# scripts/deploy_cloud_run_jobs.ps1
+﻿# scripts/deploy_cloud_run_jobs.ps1
 
 [CmdletBinding()]
 param(
@@ -18,7 +18,11 @@ param(
     [string]$DataflowTempLocation = $(if ($env:DATAFLOW_TEMP_LOCATION) { $env:DATAFLOW_TEMP_LOCATION } else { "" }),
     [string]$DataflowStagingLocation = $(if ($env:DATAFLOW_STAGING_LOCATION) { $env:DATAFLOW_STAGING_LOCATION } else { "" }),
     [string]$DataflowServiceAccount = $env:DATAFLOW_SERVICE_ACCOUNT,
-    [string]$DataflowSetupFile = $(if ($env:DATAFLOW_SETUP_FILE) { $env:DATAFLOW_SETUP_FILE } else { "/app/setup.py" }),
+    [string]$DataflowSdkContainerImage = $env:DATAFLOW_SDK_CONTAINER_IMAGE,
+    [string]$ArtifactRegion = $(if ($env:ARTIFACT_REGISTRY_REGION) { $env:ARTIFACT_REGISTRY_REGION } elseif ($env:ARTIFACT_REGISTRY_LOCATION) { $env:ARTIFACT_REGISTRY_LOCATION } else { $env:GCP_REGION }),
+    [string]$ArtifactRepository = $(if ($env:ARTIFACT_REGISTRY_REPOSITORY) { $env:ARTIFACT_REGISTRY_REPOSITORY } else { "pronabec-containers" }),
+    [string]$DataflowWorkerImageName = $(if ($env:DATAFLOW_WORKER_IMAGE_NAME) { $env:DATAFLOW_WORKER_IMAGE_NAME } else { "pronabec-dataflow-worker" }),
+    [string]$DataflowWorkerImageTag = $(if ($env:DATAFLOW_WORKER_IMAGE_TAG) { $env:DATAFLOW_WORKER_IMAGE_TAG } else { "latest" }),
 
     [string]$PronabecJobName = $(if ($env:PRONABEC_EXTRACT_JOB_NAME) { $env:PRONABEC_EXTRACT_JOB_NAME } else { "pronabec-extract-job" }),
     [string]$MefJobName = $(if ($env:MEF_EXTRACT_JOB_NAME) { $env:MEF_EXTRACT_JOB_NAME } else { "mef-extract-job" }),
@@ -78,7 +82,7 @@ function Assert-RequiredValue {
     )
 
     if ([string]::IsNullOrWhiteSpace($Value)) {
-        throw "Falta configurar $Name. Define el parámetro correspondiente o la variable de entorno asociada."
+        throw "Falta configurar $Name. Define el parÃ¡metro correspondiente o la variable de entorno asociada."
     }
 }
 
@@ -94,7 +98,7 @@ function Invoke-GCloud {
     & $Command
 
     if ($LASTEXITCODE -ne 0) {
-        throw "Falló el paso '$StepName' con código de salida $LASTEXITCODE."
+        throw "FallÃ³ el paso '$StepName' con cÃ³digo de salida $LASTEXITCODE."
     }
 }
 
@@ -131,6 +135,24 @@ function Join-CloudRunEnvVars {
     return "^|^" + ($EnvVars -join "|")
 }
 
+function Resolve-DataflowSdkContainerImage {
+    if (-not [string]::IsNullOrWhiteSpace($DataflowSdkContainerImage)) {
+        return $DataflowSdkContainerImage
+    }
+
+    if (
+        [string]::IsNullOrWhiteSpace($ArtifactRegion) -or
+        [string]::IsNullOrWhiteSpace($ProjectId) -or
+        [string]::IsNullOrWhiteSpace($ArtifactRepository) -or
+        [string]::IsNullOrWhiteSpace($DataflowWorkerImageName) -or
+        [string]::IsNullOrWhiteSpace($DataflowWorkerImageTag)
+    ) {
+        throw "Falta configurar DATAFLOW_SDK_CONTAINER_IMAGE o las variables ARTIFACT_REGISTRY_REGION, GCP_PROJECT_ID, ARTIFACT_REGISTRY_REPOSITORY, DATAFLOW_WORKER_IMAGE_NAME y DATAFLOW_WORKER_IMAGE_TAG."
+    }
+
+    return "$ArtifactRegion-docker.pkg.dev/$ProjectId/$ArtifactRepository/$DataflowWorkerImageName`:$DataflowWorkerImageTag"
+}
+
 function Upsert-CloudRunJob {
     param(
         [Parameter(Mandatory = $true)]
@@ -160,10 +182,6 @@ function Upsert-CloudRunJob {
         "BQ_GOLD_DATASET=$GoldDataset",
         "BQ_AUDIT_DATASET=$AuditDataset",
         "BQ_LOCATION=$Location",
-        "DATAFLOW_TEMP_LOCATION=$DataflowTempLocation",
-        "DATAFLOW_STAGING_LOCATION=$DataflowStagingLocation",
-        "DATAFLOW_SERVICE_ACCOUNT=$DataflowServiceAccount",
-        "DATAFLOW_SETUP_FILE=$DataflowSetupFile",
         "PRONABEC_REPORTS_LANDING_PREFIX=$PronabecReportsLandingPrefix",
         "PRONABEC_REPORTS_BRONZE_PREFIX=$PronabecReportsBronzePrefix",
         "PRONABEC_REQUEST_TIMEOUT_SECONDS=$(if ($env:PRONABEC_REQUEST_TIMEOUT_SECONDS) { $env:PRONABEC_REQUEST_TIMEOUT_SECONDS } else { "180" })",
@@ -229,6 +247,16 @@ Assert-RequiredValue -Name "MEF_END_YEAR" -Value $MefEndYear
 Assert-RequiredValue -Name "MEF_TEXT_FILTER" -Value $MefTextFilter
 Assert-RequiredValue -Name "MEF_PRONABEC_EXECUTORA_CODE" -Value $MefPronabecEjecutoraCode
 
+$ResolvedDataflowSdkContainerImage = Resolve-DataflowSdkContainerImage
+Assert-RequiredValue -Name "DATAFLOW_SDK_CONTAINER_IMAGE" -Value $ResolvedDataflowSdkContainerImage
+
+$DataflowEnvVars = @(
+    "DATAFLOW_TEMP_LOCATION=$DataflowTempLocation",
+    "DATAFLOW_STAGING_LOCATION=$DataflowStagingLocation",
+    "DATAFLOW_SERVICE_ACCOUNT=$DataflowServiceAccount",
+    "DATAFLOW_SDK_CONTAINER_IMAGE=$ResolvedDataflowSdkContainerImage"
+)
+
 $DataflowCommonArgs = @(
     "-m",
     "pipelines.dataflow_bronze_to_silver",
@@ -244,15 +272,15 @@ $DataflowCommonArgs = @(
     $DataflowStagingLocation,
     "--service-account-email",
     $DataflowServiceAccount,
-    "--setup-file",
-    $DataflowSetupFile,
+    "--sdk-container-image",
+    $ResolvedDataflowSdkContainerImage,
     "--dlq-output-root",
     "gs://$BucketName/dlq"
 )
 
 Upsert-CloudRunJob `
     -JobName $PronabecJobName `
-    -Description "Extracción batch PRONABEC hacia Bronze" `
+    -Description "ExtracciÃ³n batch PRONABEC hacia Bronze" `
     -ContainerArgs @(
         "-m",
         "pipelines.extract_pronabec"
@@ -305,7 +333,7 @@ Upsert-CloudRunJob `
 
 Upsert-CloudRunJob `
     -JobName $MefJobName `
-    -Description "Extracción batch MEF hacia Bronze" `
+    -Description "ExtracciÃ³n batch MEF hacia Bronze" `
     -SetEnvVars @(
         "MEF_SOURCE_MODE=$MefSourceMode",
         "MEF_CONSULTA_AMIGABLE_BASE_URL=$MefConsultaAmigableBaseUrl",
@@ -362,6 +390,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowPronabecConvocatoriasJobName `
     -Description "Lanzador Dataflow PRONABEC convocatorias Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
+    -SetEnvVars $DataflowEnvVars `
     -ContainerArgs @(
         $DataflowCommonArgs +
         @(
@@ -382,8 +411,9 @@ Upsert-CloudRunJob `
 
 Upsert-CloudRunJob `
     -JobName $DataflowPronabecUbigeoPostulacionJobName `
-    -Description "Lanzador Dataflow PRONABEC ubigeo postulación Bronze a Silver" `
+    -Description "Lanzador Dataflow PRONABEC ubigeo postulaciÃ³n Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
+    -SetEnvVars $DataflowEnvVars `
     -ContainerArgs @(
         $DataflowCommonArgs +
         @(
@@ -404,8 +434,9 @@ Upsert-CloudRunJob `
 
 Upsert-CloudRunJob `
     -JobName $DataflowPronabecBecariosPaisEstudioJobName `
-    -Description "Lanzador Dataflow PRONABEC becarios país estudio Bronze a Silver" `
+    -Description "Lanzador Dataflow PRONABEC becarios paÃ­s estudio Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
+    -SetEnvVars $DataflowEnvVars `
     -ContainerArgs @(
         $DataflowCommonArgs +
         @(
@@ -426,8 +457,9 @@ Upsert-CloudRunJob `
 
 Upsert-CloudRunJob `
     -JobName $DataflowPronabecColegiosHabilesJobName `
-    -Description "Lanzador Dataflow PRONABEC colegios hábiles Bronze a Silver" `
+    -Description "Lanzador Dataflow PRONABEC colegios hÃ¡biles Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
+    -SetEnvVars $DataflowEnvVars `
     -ContainerArgs @(
         $DataflowCommonArgs +
         @(
@@ -450,6 +482,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowPronabecBecariosProvinciaJobName `
     -Description "Lanzador Dataflow PRONABEC becarios provincia Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
+    -SetEnvVars $DataflowEnvVars `
     -ContainerArgs @(
         $DataflowCommonArgs +
         @(
@@ -472,6 +505,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowMefPresupuestoJobName `
     -Description "Lanzador Dataflow MEF presupuesto Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
+    -SetEnvVars $DataflowEnvVars `
     -ContainerArgs @(
         $DataflowCommonArgs +
         @(
@@ -494,6 +528,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowMefPresupuestoTemporalJobName `
     -Description "Lanzador Dataflow MEF presupuesto temporal Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
+    -SetEnvVars $DataflowEnvVars `
     -ContainerArgs @(
         $DataflowCommonArgs +
         @(
@@ -516,6 +551,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowMefProductoJobName `
     -Description "Lanzador Dataflow MEF producto Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
+    -SetEnvVars $DataflowEnvVars `
     -ContainerArgs @(
         $DataflowCommonArgs +
         @(
@@ -538,6 +574,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowMefProductoTemporalJobName `
     -Description "Lanzador Dataflow MEF producto temporal Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
+    -SetEnvVars $DataflowEnvVars `
     -ContainerArgs @(
         $DataflowCommonArgs +
         @(
@@ -560,6 +597,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowMefActividadJobName `
     -Description "Lanzador Dataflow MEF actividad Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
+    -SetEnvVars $DataflowEnvVars `
     -ContainerArgs @(
         $DataflowCommonArgs +
         @(
@@ -582,6 +620,7 @@ Upsert-CloudRunJob `
     -JobName $DataflowMefActividadTemporalJobName `
     -Description "Lanzador Dataflow MEF actividad temporal Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
+    -SetEnvVars $DataflowEnvVars `
     -ContainerArgs @(
         $DataflowCommonArgs +
         @(
@@ -602,8 +641,9 @@ Upsert-CloudRunJob `
 
 Upsert-CloudRunJob `
     -JobName $DataflowMefGenericaJobName `
-    -Description "Lanzador Dataflow MEF genérica Bronze a Silver" `
+    -Description "Lanzador Dataflow MEF genÃ©rica Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
+    -SetEnvVars $DataflowEnvVars `
     -ContainerArgs @(
         $DataflowCommonArgs +
         @(
@@ -624,8 +664,9 @@ Upsert-CloudRunJob `
 
 Upsert-CloudRunJob `
     -JobName $DataflowMefGenericaTemporalJobName `
-    -Description "Lanzador Dataflow MEF genérica temporal Bronze a Silver" `
+    -Description "Lanzador Dataflow MEF genÃ©rica temporal Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
+    -SetEnvVars $DataflowEnvVars `
     -ContainerArgs @(
         $DataflowCommonArgs +
         @(
@@ -646,8 +687,9 @@ Upsert-CloudRunJob `
 
 Upsert-CloudRunJob `
     -JobName $DataflowMefHierarchyJobName `
-    -Description "Lanzador Dataflow MEF jerarquía Bronze a Silver" `
+    -Description "Lanzador Dataflow MEF jerarquÃ­a Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
+    -SetEnvVars $DataflowEnvVars `
     -ContainerArgs @(
         $DataflowCommonArgs +
         @(
@@ -671,9 +713,12 @@ Upsert-CloudRunJob `
     -Description "Lanzador Dataflow parametrizable para PRONABEC reports Bronze a Silver" `
     -TaskTimeoutSeconds 7200 `
     -SetEnvVars @(
+        $DataflowEnvVars +
+        @(
         "SOURCE_DATASET=placeholder_dataset",
         "INPUT_PATH=gs://$BucketName/placeholder_path",
         "OUTPUT_TABLE=$ProjectId`:$SilverDataset.placeholder_table"
+        )
     ) `
     -ContainerArgs @(
         $DataflowCommonArgs +
@@ -695,10 +740,12 @@ Upsert-CloudRunJob `
 
 Upsert-CloudRunJob `
     -JobName $QualityJobName `
-    -Description "Ejecución batch de controles de calidad BigQuery" `
+    -Description "EjecuciÃ³n batch de controles de calidad BigQuery" `
     -ContainerArgs @(
         "-m",
         "pipelines.quality_checks"
     )
 
 Write-Host "Cloud Run Jobs configurados correctamente."
+
+

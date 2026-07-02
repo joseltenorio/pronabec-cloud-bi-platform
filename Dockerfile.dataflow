@@ -1,0 +1,17 @@
+FROM apache/beam_python3.11_sdk:2.74.0
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+COPY requirements.txt .
+COPY pyproject.toml .
+COPY README.md .
+COPY config ./config
+COPY pipelines ./pipelines
+
+RUN python -m pip install --upgrade pip \
+    && python -m pip install --no-cache-dir -r requirements.txt \
+    && python -m pip install --no-cache-dir . \
+    && python -c "import apache_beam; import ftfy; import pandas; import pyarrow; import yaml; import pipelines; import pipelines.common.text_normalization; import pipelines.transforms.pronabec; import pipelines.transforms.pronabec_reports; import pipelines.transforms.mef"

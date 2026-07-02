@@ -323,10 +323,33 @@ def test_dataflow_jobs_use_dedicated_worker_service_account():
 def test_dataflow_jobs_package_pipeline_modules_for_workers():
     content = _read_deploy_script()
 
-    assert "$DataflowSetupFile = $(if ($env:DATAFLOW_SETUP_FILE)" in content
-    assert "DATAFLOW_SETUP_FILE=$DataflowSetupFile" in content
-    assert "--setup-file" in content
-    assert "$DataflowSetupFile" in content
+    assert "$DataflowSdkContainerImage = $env:DATAFLOW_SDK_CONTAINER_IMAGE" in content
+    assert "Resolve-DataflowSdkContainerImage" in content
+    assert "DATAFLOW_SDK_CONTAINER_IMAGE=$ResolvedDataflowSdkContainerImage" in content
+    assert "--sdk-container-image" in content
+    assert "$ResolvedDataflowSdkContainerImage" in content
+    assert "DATAFLOW_SETUP_FILE" not in content
+    assert "--setup-file" not in content
+    assert "DATAFLOW_REQUIREMENTS_FILE" not in content
+    assert "--requirements-file" not in content
+
+
+def test_non_dataflow_jobs_do_not_receive_sdk_container_arg():
+    content = _read_deploy_script()
+
+    non_dataflow_sections = [
+        content[content.index("-JobName $PronabecDiscoveryJobName"):content.index("-JobName $PronabecBuildPlanJobName")],
+        content[content.index("-JobName $PronabecBuildPlanJobName"):content.index("-JobName $PronabecRunPlanJobName")],
+        content[content.index("-JobName $PronabecRunPlanJobName"):content.index("-JobName $PronabecExtractChunkJobName")],
+        content[content.index("-JobName $PronabecExtractChunkJobName"):content.index("-JobName $PronabecFinalizeDatasetJobName")],
+        content[content.index("-JobName $PronabecFinalizeDatasetJobName"):content.index("-JobName $MefJobName")],
+        content[content.index("-JobName $MefJobName"):content.index("-JobName $PronabecReportsStageJobName")],
+        content[content.index("-JobName $GoldPublishJobName"):content.index("-JobName $GoldValidateJobName")],
+        content[content.index("-JobName $GoldValidateJobName"):content.index("-JobName $DataflowPronabecConvocatoriasJobName")],
+    ]
+
+    for section in non_dataflow_sections:
+        assert "--sdk-container-image" not in section
 
 
 def test_dataflow_service_account_is_documented_in_examples():
@@ -341,9 +364,11 @@ def test_dataflow_service_account_is_documented_in_examples():
     assert expected_service_account in env_example
     assert "DATAFLOW_WORKER_MACHINE_TYPE=n1-standard-2" in env_example
     assert "DATAFLOW_MAX_NUM_WORKERS=2" in env_example
-    assert "DATAFLOW_SETUP_FILE=/app/setup.py" in env_example
+    assert "DATAFLOW_SDK_CONTAINER_IMAGE=us-central1-docker.pkg.dev/your-gcp-project-id/pronabec-containers/pronabec-dataflow-worker:latest" in env_example
+    assert "DATAFLOW_WORKER_IMAGE_NAME=pronabec-dataflow-worker" in env_example
+    assert "DATAFLOW_WORKER_IMAGE_TAG=latest" in env_example
     assert "service_account: pronabec-dataflow-sa@pronabec-cloud-bi-platform.iam.gserviceaccount.com" in gcp_example
-    assert "setup_file: /app/setup.py" in gcp_example
+    assert "sdk_container_image: us-central1-docker.pkg.dev/your-gcp-project-id/pronabec-containers/pronabec-dataflow-worker:latest" in gcp_example
 
 
 def test_pyproject_packages_pipeline_modules():

@@ -38,6 +38,7 @@ data/
 
 # Temporary files
 build/generated/
+*.egg-info/
 .generated/
 tmp/
 temp/
