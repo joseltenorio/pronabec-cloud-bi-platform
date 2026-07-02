@@ -25,13 +25,15 @@ from pipelines.common.gcs import upload_json
 from pipelines.common.logging import log_event, setup_structured_logger
 from pipelines.common.orchestration_config import (
     get_bronze_enabled_pronabec_datasets,
+    get_pronabec_discovery_config,
     get_pronabec_dataset_policies,
     load_orchestration_config,
+    resolve_pronabec_discovery_validation_mode,
+    resolve_pronabec_page_size_candidates,
 )
 from pipelines.extract_pronabec import (
     build_pronabec_data_url,
     fetch_pronabec_page,
-    is_http_500_pronabec_error,
     resolve_extraction_date,
     resolve_pipeline_run_id,
     resolve_retry_settings,
@@ -40,33 +42,86 @@ from pipelines.extract_pronabec import (
 )
 
 
+def _extract_pronabec_pagination(payload: dict[str, Any]) -> tuple[int, int]:
+    if "rows" not in payload or not isinstance(payload.get("rows"), list):
+        raise ConfigError("La respuesta PRONABEC no contiene rows validos")
+
+    records_value = payload.get("records", payload.get("total_records"))
+    pages_value = payload.get("total", payload.get("total_pages"))
+    if records_value is None:
+        raise ConfigError("La respuesta PRONABEC no contiene records o total_records")
+    if pages_value is None:
+        raise ConfigError("La respuesta PRONABEC no contiene total o total_pages")
+
+    return int(records_value), int(pages_value)
+
+
+def _extract_status_code(exc: Exception) -> int | None:
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    return status_code if isinstance(status_code, int) else None
+
+
+def _build_rejected_page_size(
+    *,
+    page_size: int,
+    failed_page: int,
+    exc: Exception,
+) -> dict[str, Any]:
+    return {
+        "page_size": page_size,
+        "failed_page": failed_page,
+        "status_code": _extract_status_code(exc),
+        "error_type": type(exc).__name__,
+        "error_message": str(exc)[:500],
+    }
+
+
+class DiscoveryPageSizeCalibrationError(ConfigError):
+    def __init__(self, dataset_name: str, rejected_page_sizes: list[dict[str, Any]]):
+        super().__init__(
+            f"No se encontro page_size estable para {dataset_name}: {rejected_page_sizes}"
+        )
+        self.rejected_page_sizes = rejected_page_sizes
+
+
+def _extract_rejected_page_sizes(exc: Exception) -> list[dict[str, Any]]:
+    if isinstance(exc, DiscoveryPageSizeCalibrationError):
+        return exc.rejected_page_sizes
+    return []
+
+
 def discover_dataset(
     endpoint: dict[str, Any],
     policy: Any,
+    orchestration_config: dict[str, Any],
     base_url: str,
     retry_settings: dict[str, Any],
     logger,
 ) -> dict[str, Any]:
-    """Realiza el descubrimiento de un dataset PRONABEC determinando effective_page_size,
-
-    total_records, total_pages y actual_records_returned.
-    """
+    """Discover stable page size metadata for one PRONABEC dataset."""
     dataset_name = endpoint["name"]
     endpoint_path = endpoint["path"]
     url = build_pronabec_data_url(base_url, endpoint_path)
 
     recommended_page_size = policy.recommended_page_size
     fallback_page_sizes = policy.fallback_page_sizes
-    page_sizes = [recommended_page_size]
-    for size in fallback_page_sizes:
-        if size not in page_sizes:
-            page_sizes.append(size)
+    page_sizes = resolve_pronabec_page_size_candidates(orchestration_config, policy)
+    validation_mode = resolve_pronabec_discovery_validation_mode(orchestration_config, policy)
+    discovery_config = get_pronabec_discovery_config(orchestration_config)
 
     session = requests.Session()
-    failures: list[str] = []
+    rejected_page_sizes: list[dict[str, Any]] = []
 
-    for index, page_size in enumerate(page_sizes):
+    for page_size in page_sizes:
         start_time = time.time()
+        log_event(
+            logger,
+            "INFO",
+            "discovery_page_size_candidate_started",
+            dataset=dataset_name,
+            candidate_page_size=page_size,
+        )
         try:
             payload = fetch_pronabec_page(
                 session=session,
@@ -80,26 +135,64 @@ def discover_dataset(
                 dataset_name=dataset_name,
                 logger=logger,
             )
-            elapsed = time.time() - start_time
-
-            if index > 0:
-                log_event(
-                    logger,
-                    "WARNING",
-                    "Usando fallback page_size en Discovery PRONABEC",
-                    dataset=dataset_name,
-                    requested_page_size=recommended_page_size,
-                    effective_page_size=page_size,
-                )
-
-            total_records = int(payload.get("records") or 0)
-            total_pages = int(payload.get("total") or 1)
+            total_records, total_pages = _extract_pronabec_pagination(payload)
             actual_records_returned = len(payload.get("rows", []))
 
-            # Asegurar consistencia de páginas si total viene vacío
             if total_records > 0 and total_pages <= 0:
                 total_pages = math.ceil(total_records / page_size)
+            if total_pages > discovery_config.max_validation_pages:
+                raise ConfigError(
+                    f"total_pages={total_pages} excede max_validation_pages={discovery_config.max_validation_pages}"
+                )
 
+            validated_pages = 1 if total_pages > 0 else 0
+            for page in range(2, total_pages + 1):
+                try:
+                    page_payload = fetch_pronabec_page(
+                        session=session,
+                        url=url,
+                        page=page,
+                        rows=page_size,
+                        timeout=retry_settings["timeout"],
+                        max_retries=retry_settings["max_retries"],
+                        backoff_base_seconds=retry_settings["backoff_base_seconds"],
+                        backoff_max_seconds=retry_settings["backoff_max_seconds"],
+                        dataset_name=dataset_name,
+                        logger=logger,
+                    )
+                    _extract_pronabec_pagination(page_payload)
+                    validated_pages += 1
+                except Exception as exc:
+                    rejected = _build_rejected_page_size(
+                        page_size=page_size,
+                        failed_page=page,
+                        exc=exc,
+                    )
+                    rejected_page_sizes.append(rejected)
+                    log_event(
+                        logger,
+                        "WARNING",
+                        "discovery_page_validation_failed",
+                        dataset=dataset_name,
+                        candidate_page_size=page_size,
+                        page=page,
+                        status_code=rejected["status_code"],
+                        error_type=rejected["error_type"],
+                        error_message=rejected["error_message"],
+                    )
+                    raise
+
+            elapsed = time.time() - start_time
+            log_event(
+                logger,
+                "INFO",
+                "discovery_page_size_accepted",
+                dataset=dataset_name,
+                effective_page_size=page_size,
+                total_pages=total_pages,
+                total_records=total_records,
+                validated_pages=validated_pages,
+            )
             return {
                 "source_dataset": dataset_name,
                 "extraction_enabled": policy.extraction_enabled,
@@ -113,34 +206,41 @@ def discover_dataset(
                 "total_records": total_records,
                 "total_pages": total_pages,
                 "actual_records_returned": actual_records_returned,
+                "page_size_validation_mode": validation_mode,
+                "validation_status": "SUCCESS",
+                "validated_pages": validated_pages,
+                "rejected_page_sizes": rejected_page_sizes,
                 "status": "SUCCESS",
                 "elapsed_seconds": round(elapsed, 2),
             }
 
         except Exception as exc:
-            elapsed = time.time() - start_time
-            is_500 = False
-            if isinstance(exc, requests.exceptions.HTTPError):
-                is_500 = exc.response is not None and exc.response.status_code == 500
-            elif is_http_500_pronabec_error(exc):
-                is_500 = True
-
-            if not is_500:
-                # Errores que no son HTTP 500 no pasan por fallback de page size
-                raise exc
-            failures.append(f"page_size={page_size}: {exc}")
+            if not rejected_page_sizes or rejected_page_sizes[-1].get("page_size") != page_size:
+                rejected_page_sizes.append(
+                    _build_rejected_page_size(
+                        page_size=page_size,
+                        failed_page=1,
+                        exc=exc,
+                    )
+                )
+            rejected = rejected_page_sizes[-1]
             log_event(
                 logger,
                 "WARNING",
-                "Fallo HTTP 500 probando page_size en Discovery PRONABEC",
+                "discovery_page_size_rejected",
                 dataset=dataset_name,
-                page_size=page_size,
-                error_message=str(exc),
+                candidate_page_size=page_size,
+                failed_page=rejected["failed_page"],
             )
 
-    raise ConfigError(
-        f"Todos los page_size fallaron con HTTP 500 para {dataset_name}: {'; '.join(failures)}"
+    log_event(
+        logger,
+        "ERROR",
+        "discovery_dataset_failed",
+        dataset=dataset_name,
+        rejected_page_sizes_count=len(rejected_page_sizes),
     )
+    raise DiscoveryPageSizeCalibrationError(dataset_name, rejected_page_sizes)
 
 
 def run_discovery(args: argparse.Namespace) -> None:
@@ -247,6 +347,7 @@ def run_discovery(args: argparse.Namespace) -> None:
             res = discover_dataset(
                 endpoint=endpoint,
                 policy=policy,
+                orchestration_config=orchestration_config,
                 base_url=base_url,
                 retry_settings=retry_settings,
                 logger=logger,
@@ -270,6 +371,12 @@ def run_discovery(args: argparse.Namespace) -> None:
                 "extraction_mode": policy.extraction_mode,
                 "recommended_page_size": policy.recommended_page_size,
                 "fallback_page_sizes": policy.fallback_page_sizes,
+                "validation_status": "FAILED",
+                "page_size_validation_mode": resolve_pronabec_discovery_validation_mode(
+                    orchestration_config,
+                    policy,
+                ),
+                "rejected_page_sizes": _extract_rejected_page_sizes(exc),
                 "status": "FAILED",
                 "error": str(exc),
             }
@@ -331,6 +438,18 @@ def run_discovery(args: argparse.Namespace) -> None:
             object_path=object_path,
             status=discovery_status,
         )
+
+    success_count = sum(1 for result in dataset_results if result.get("status") == "SUCCESS")
+    failed_count = sum(1 for result in dataset_results if result.get("status") == "FAILED")
+    log_event(
+        logger,
+        "INFO",
+        "discovery_completed",
+        total_datasets=len(dataset_results),
+        success_count=success_count,
+        failed_count=failed_count,
+        status=discovery_status,
+    )
 
     if discovery_status == "FAILED":
         sys.exit("Discovery falló por error crítico en dataset requerido o configurado para fallar.")

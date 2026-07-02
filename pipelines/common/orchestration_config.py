@@ -12,6 +12,8 @@ from pipelines.common.gcs import build_gs_uri
 DEFAULT_ORCHESTRATION_CONFIG_PATH = Path("config/orchestration.yaml")
 DEFAULT_ENDPOINTS_CONFIG_PATH = Path("config/endpoints.yaml")
 PRONABEC_EXTRACTION_MODES = {"single", "chunked"}
+PRONABEC_DISCOVERY_VALIDATION_MODES = {"full_pages"}
+DEFAULT_PRONABEC_PAGE_SIZE_CANDIDATES = [5000, 3000, 2000, 1000, 500, 100]
 
 
 @dataclass(frozen=True)
@@ -28,7 +30,17 @@ class DatasetExtractionPolicy:
     fallback_page_sizes: list[int]
     max_page_size_tested_ok: int | None
     page_size_policy: str
+    page_size_candidates: list[int] | None = None
+    discovery_validation_mode: str | None = None
     allow_record_count_mismatch: bool = False
+
+
+@dataclass(frozen=True)
+class PronabecDiscoveryConfig:
+    page_size_validation_mode: str
+    page_size_candidates: list[int]
+    max_validation_pages: int
+    stop_on_first_stable_page_size: bool
 
 
 def load_orchestration_config(path: str | Path = DEFAULT_ORCHESTRATION_CONFIG_PATH) -> dict[str, Any]:
@@ -99,6 +111,68 @@ def get_pronabec_dataset_policies(config: dict[str, Any]) -> list[DatasetExtract
         raise ConfigError("datasets.pronabec_api.extraction_policies debe ser una lista")
 
     return [_build_pronabec_dataset_policy(item) for item in policies]
+
+
+def get_pronabec_discovery_config(config: dict[str, Any]) -> PronabecDiscoveryConfig:
+    """Return PRONABEC discovery calibration settings."""
+    pronabec_api = config.get("datasets", {}).get("pronabec_api", {})
+    discovery = pronabec_api.get("discovery", {})
+    if discovery is None:
+        discovery = {}
+    if not isinstance(discovery, dict):
+        raise ConfigError("datasets.pronabec_api.discovery debe ser un objeto")
+
+    mode = discovery.get("page_size_validation_mode", "full_pages")
+    if mode not in PRONABEC_DISCOVERY_VALIDATION_MODES:
+        raise ConfigError(
+            f"page_size_validation_mode invalido para PRONABEC discovery: {mode}"
+        )
+
+    candidates = discovery.get("page_size_candidates", DEFAULT_PRONABEC_PAGE_SIZE_CANDIDATES)
+    candidates = _validate_positive_int_list(
+        candidates,
+        "datasets.pronabec_api.discovery.page_size_candidates",
+        require_descending=True,
+    )
+
+    max_validation_pages = discovery.get("max_validation_pages", 1000)
+    if not isinstance(max_validation_pages, int) or max_validation_pages <= 0:
+        raise ConfigError("max_validation_pages debe ser entero positivo para PRONABEC discovery")
+
+    stop_on_first_stable_page_size = discovery.get("stop_on_first_stable_page_size", True)
+    if not isinstance(stop_on_first_stable_page_size, bool):
+        raise ConfigError("stop_on_first_stable_page_size debe ser boolean para PRONABEC discovery")
+
+    return PronabecDiscoveryConfig(
+        page_size_validation_mode=mode,
+        page_size_candidates=candidates,
+        max_validation_pages=max_validation_pages,
+        stop_on_first_stable_page_size=stop_on_first_stable_page_size,
+    )
+
+
+def resolve_pronabec_page_size_candidates(
+    config: dict[str, Any],
+    policy: DatasetExtractionPolicy,
+) -> list[int]:
+    """Resolve ordered page-size candidates for a dataset."""
+    discovery_config = get_pronabec_discovery_config(config)
+    candidates: list[int] = [policy.recommended_page_size]
+    if policy.page_size_candidates:
+        candidates.extend(policy.page_size_candidates)
+    candidates.extend(discovery_config.page_size_candidates)
+    candidates.extend(policy.fallback_page_sizes)
+    return _dedupe_positive_ints(candidates)
+
+
+def resolve_pronabec_discovery_validation_mode(
+    config: dict[str, Any],
+    policy: DatasetExtractionPolicy,
+) -> str:
+    """Resolve page-size validation mode for a dataset."""
+    if policy.discovery_validation_mode:
+        return policy.discovery_validation_mode
+    return get_pronabec_discovery_config(config).page_size_validation_mode
 
 
 def get_enabled_pronabec_datasets(config: dict[str, Any]) -> list[str]:
@@ -257,19 +331,11 @@ def _build_pronabec_dataset_policy(item: Any) -> DatasetExtractionPolicy:
             f"recommended_page_size debe ser entero positivo para {source_dataset}"
         )
 
-    fallback_page_sizes = item.get("fallback_page_sizes")
-    if not isinstance(fallback_page_sizes, list) or not fallback_page_sizes:
-        raise ConfigError(
-            f"fallback_page_sizes debe ser una lista no vacia para {source_dataset}"
-        )
-    if not all(isinstance(value, int) and value > 0 for value in fallback_page_sizes):
-        raise ConfigError(
-            f"fallback_page_sizes debe contener enteros positivos para {source_dataset}"
-        )
-    if fallback_page_sizes != sorted(fallback_page_sizes, reverse=True):
-        raise ConfigError(
-            f"fallback_page_sizes debe estar ordenado de mayor a menor para {source_dataset}"
-        )
+    fallback_page_sizes = _validate_positive_int_list(
+        item.get("fallback_page_sizes"),
+        "fallback_page_sizes",
+        require_descending=True,
+    )
     if any(value > recommended_page_size for value in fallback_page_sizes):
         raise ConfigError(
             f"fallback_page_sizes no puede contener valores mayores que recommended_page_size para {source_dataset}"
@@ -289,6 +355,21 @@ def _build_pronabec_dataset_policy(item: Any) -> DatasetExtractionPolicy:
     page_size_policy = item.get("page_size_policy")
     if not isinstance(page_size_policy, str) or not page_size_policy.strip():
         raise ConfigError(f"page_size_policy debe ser string no vacio para {source_dataset}")
+
+    page_size_candidates = None
+    if "page_size_candidates" in item and item.get("page_size_candidates") is not None:
+        page_size_candidates = _validate_positive_int_list(
+            item.get("page_size_candidates"),
+            f"page_size_candidates para {source_dataset}",
+            require_descending=True,
+        )
+
+    discovery_validation_mode = item.get("discovery_validation_mode")
+    if discovery_validation_mode is not None:
+        if discovery_validation_mode not in PRONABEC_DISCOVERY_VALIDATION_MODES:
+            raise ConfigError(
+                f"discovery_validation_mode invalido para {source_dataset}: {discovery_validation_mode}"
+            )
 
     allow_record_count_mismatch = _require_optional_bool(
         item,
@@ -310,6 +391,8 @@ def _build_pronabec_dataset_policy(item: Any) -> DatasetExtractionPolicy:
         fallback_page_sizes=fallback_page_sizes,
         max_page_size_tested_ok=max_page_size_tested_ok,
         page_size_policy=page_size_policy.strip(),
+        page_size_candidates=page_size_candidates,
+        discovery_validation_mode=discovery_validation_mode,
         allow_record_count_mismatch=allow_record_count_mismatch,
     )
 
@@ -333,6 +416,31 @@ def _require_optional_bool(
     if not isinstance(value, bool):
         raise ConfigError(f"{key} debe ser boolean para {source_dataset}")
     return value
+
+
+def _validate_positive_int_list(
+    value: Any,
+    field_name: str,
+    *,
+    require_descending: bool,
+) -> list[int]:
+    if not isinstance(value, list) or not value:
+        raise ConfigError(f"{field_name} debe ser una lista no vacia")
+    if not all(isinstance(item, int) and item > 0 for item in value):
+        raise ConfigError(f"{field_name} debe contener enteros positivos")
+    if require_descending and value != sorted(value, reverse=True):
+        raise ConfigError(f"{field_name} debe estar ordenado de mayor a menor")
+    return list(value)
+
+
+def _dedupe_positive_ints(values: Iterable[int]) -> list[int]:
+    seen: set[int] = set()
+    deduped: list[int] = []
+    for value in values:
+        if isinstance(value, int) and value > 0 and value not in seen:
+            deduped.append(value)
+            seen.add(value)
+    return deduped
 
 
 def _validate_pronabec_reports_config(config: dict[str, Any]) -> None:

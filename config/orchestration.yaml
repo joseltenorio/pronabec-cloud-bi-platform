@@ -36,6 +36,11 @@ datasets:
     source_system: pronabec
     bronze_path_template: "bronze/pronabec/{dataset}/extraction_date={extraction_date}/data.jsonl"
     silver_table_template: "{project_id}:{silver_dataset}.pronabec_{dataset}"
+    discovery:
+      page_size_validation_mode: full_pages
+      page_size_candidates: [5000, 3000, 2000, 1000, 500, 100]
+      max_validation_pages: 1000
+      stop_on_first_stable_page_size: true
     extraction_policies:
       - source_dataset: perdida_becas
         extraction_enabled: true
