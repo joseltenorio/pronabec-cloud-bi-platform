@@ -637,3 +637,127 @@ def test_finalizer_writes_bronze_only_manifest_flags(
     assert manifest["required_for_e2e"] is False
     assert manifest["bronze_only"] is True
     assert success["bronze_only"] is True
+
+
+def test_finalizer_structural_no_chunk_contents():
+    code_path = Path(__file__).resolve().parents[1] / "pipelines" / "finalize_pronabec_dataset.py"
+    code = code_path.read_text(encoding="utf-8")
+    assert "chunk_contents" not in code, "Debe evitarse el uso de la variable chunk_contents para no acumular chunks en memoria."
+    # Check that join on chunk_contents is not used
+    assert "".join(["final_content", "=", '"".join']) not in code.replace(" ", "")
+
+
+@patch("pipelines.finalize_pronabec_dataset.get_pipeline_settings")
+@patch("pipelines.finalize_pronabec_dataset.load_orchestration_config")
+def test_finalizer_handles_missing_trailing_newline_and_ordering(
+    mock_load_orch, mock_settings,
+    mock_pipeline_settings, mock_orchestration, tmp_path
+):
+    mock_settings.return_value = mock_pipeline_settings
+    mock_load_orch.return_value = mock_orchestration
+
+    chunks_list = [
+        {"chunk_id": "c1", "source_dataset": "dataset_chunked", "page_start": 1, "page_end": 10, "effective_page_size": 1000, "required_for_e2e": True, "output_mode": "chunk"},
+        {"chunk_id": "c2", "source_dataset": "dataset_chunked", "page_start": 11, "page_end": 20, "effective_page_size": 1000, "required_for_e2e": True, "output_mode": "chunk"}
+    ]
+    create_mock_plan(tmp_path, "dataset_chunked", 2, 200, 20, 10, chunks_list)
+    create_mock_chunk(tmp_path, "dataset_chunked", "c1", 1, 10, 100, data_content='{"id": 1}')
+    create_mock_chunk(tmp_path, "dataset_chunked", "c2", 11, 20, 100, data_content='{"id": 2}\n')
+
+    args = DummyArgs(dry_run=True, output_dir=str(tmp_path), source_dataset="dataset_chunked")
+    run_finalize(args)
+
+    final_dir = tmp_path / "bronze" / "pronabec" / "dataset_chunked" / "extraction_date=2026-06-29"
+    final_data_p = final_dir / "data.jsonl"
+    final_manifest_p = final_dir / "manifest.json"
+
+    assert final_data_p.exists()
+    with open(final_data_p, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    lines = content.splitlines(keepends=True)
+    assert len(lines) == 2
+    assert lines[0] == '{"id": 1}\n'
+    assert lines[1] == '{"id": 2}\n'
+
+    with open(final_manifest_p, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+    assert manifest["records_written"] == 200
+    assert manifest["expected_chunks"] == 2
+    assert manifest["completed_chunks"] == 2
+
+
+@patch("pipelines.finalize_pronabec_dataset.get_pipeline_settings")
+@patch("pipelines.finalize_pronabec_dataset.load_orchestration_config")
+@patch("pipelines.finalize_pronabec_dataset.read_plan_json")
+@patch("pipelines.finalize_pronabec_dataset.read_gcs_bytes")
+@patch("pipelines.finalize_pronabec_dataset.upload_file")
+@patch("pipelines.finalize_pronabec_dataset.upload_json")
+def test_finalize_gcs_paths_and_uploads(
+    mock_upload_json,
+    mock_upload_file,
+    mock_read_gcs_bytes,
+    mock_read_plan,
+    mock_load_orch,
+    mock_settings,
+    mock_pipeline_settings,
+    mock_orchestration,
+):
+    mock_settings.return_value = mock_pipeline_settings
+    mock_load_orch.return_value = mock_orchestration
+
+    mock_read_plan.return_value = {
+        "source_system": "pronabec",
+        "extraction_date": "2026-06-29",
+        "pipeline_run_id": "test-run",
+        "source_snapshot_observed_at": "2026-06-29T20:30:00Z",
+        "status": "READY",
+        "datasets": [
+            {
+                "source_dataset": "dataset_chunked",
+                "extraction_mode": "chunked",
+                "effective_page_size": 1000,
+                "total_records": 100,
+                "total_pages": 10,
+                "chunk_size_pages": 10,
+                "max_parallel_chunks": 1,
+                "expected_chunks": 1,
+            }
+        ],
+        "chunks": [
+            {"chunk_id": "c1", "source_dataset": "dataset_chunked", "page_start": 1, "page_end": 10, "effective_page_size": 1000, "required_for_e2e": True, "output_mode": "chunk"}
+        ],
+    }
+
+    def mock_read_gcs(uri):
+        if "chunk_manifest.json" in uri:
+            manifest = {
+                "status": "SUCCESS",
+                "extraction_date": "2026-06-29",
+                "pipeline_run_id": "test-run",
+                "effective_page_size": 1000,
+                "records_written": 100,
+                "started_at": "2026-06-29T20:30:00Z",
+                "finished_at": "2026-06-29T20:35:00Z",
+            }
+            return json.dumps(manifest).encode("utf-8")
+        elif "data.jsonl" in uri:
+            return b'{"id": 1}\n'
+        raise FileNotFoundError(uri)
+
+    mock_read_gcs_bytes.side_effect = mock_read_gcs
+
+    args = DummyArgs(dry_run=False, bucket="test-bucket", source_dataset="dataset_chunked")
+    run_finalize(args)
+
+    mock_upload_file.assert_called_once()
+    call_kwargs = mock_upload_file.call_args.kwargs
+    assert call_kwargs["bucket_name"] == "test-bucket"
+    assert call_kwargs["object_path"] == "bronze/pronabec/dataset_chunked/extraction_date=2026-06-29/data.jsonl"
+
+    assert mock_upload_json.call_count == 2
+    manifest_calls = [call.kwargs for call in mock_upload_json.call_args_list]
+    paths = [c["object_path"] for c in manifest_calls]
+    assert "bronze/pronabec/dataset_chunked/extraction_date=2026-06-29/manifest.json" in paths
+    assert "bronze/pronabec/dataset_chunked/extraction_date=2026-06-29/_SUCCESS" in paths
+

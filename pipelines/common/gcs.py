@@ -360,3 +360,34 @@ def upload_csv(
         return build_gs_uri(bucket_name, object_path)
     finally:
         temp_path.unlink(missing_ok=True)
+
+
+def upload_file(
+    bucket_name: str,
+    object_path: str,
+    local_path: str | Path,
+    content_type: str = "application/octet-stream",
+    client: storage.Client | None = None,
+) -> str:
+    """
+    Sube un archivo local a Cloud Storage.
+
+    Args:
+        bucket_name: Nombre del bucket.
+        object_path: Ruta destino dentro del bucket.
+        local_path: Ruta al archivo local.
+        content_type: MIME type del archivo.
+        client: Cliente opcional de Cloud Storage.
+
+    Returns:
+        URI gs:// del objeto escrito.
+    """
+    storage_client = client or get_storage_client()
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(object_path)
+    blob.upload_from_filename(
+        str(local_path),
+        content_type=content_type,
+    )
+    return build_gs_uri(bucket_name, object_path)
+

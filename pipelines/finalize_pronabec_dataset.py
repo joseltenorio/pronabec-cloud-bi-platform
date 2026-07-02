@@ -20,6 +20,7 @@ from pipelines.common.gcs import (
     read_gcs_bytes,
     upload_json,
     upload_text,
+    upload_file,
 )
 from pipelines.common.logging import log_event, setup_structured_logger
 from pipelines.common.orchestration_config import (
@@ -185,7 +186,6 @@ def run_finalize(args: argparse.Namespace) -> None:
 
     # 4. Validar chunks existentes en bronze_work y recopilar manifests
     chunk_manifests: list[dict[str, Any]] = []
-    chunk_contents: list[str] = []
     effective_page_sizes: set[int] = set()
 
     # Validar duplicados de chunks en el plan
@@ -196,8 +196,8 @@ def run_finalize(args: argparse.Namespace) -> None:
             raise ConfigError(f"Rango de páginas duplicado en el plan: {r}")
         seen_ranges.add(r)
 
-    # Ordenar chunks del plan por page_start para garantizar orden de consolidación
-    sorted_plan_chunks = sorted(plan_chunks, key=lambda c: c["page_start"])
+    # Ordenar chunks del plan por page_start y chunk_id (desempate)
+    sorted_plan_chunks = sorted(plan_chunks, key=lambda c: (c["page_start"], c.get("chunk_id", "")))
 
     # Validar gaps
     for idx in range(len(sorted_plan_chunks) - 1):
@@ -207,241 +207,279 @@ def run_finalize(args: argparse.Namespace) -> None:
                 f"fin={sorted_plan_chunks[idx]['page_end']}, inicio={sorted_plan_chunks[idx + 1]['page_start']}"
             )
 
-    for chunk in sorted_plan_chunks:
-        page_start = chunk["page_start"]
-        page_end = chunk["page_end"]
-
-        # Construir rutas del chunk intermedio
-        chunk_base = build_pronabec_chunk_base_path(
-            dataset_name=source_dataset,
-            extraction_date=extraction_date,
-            pipeline_run_id=run_id,
-            page_start=page_start,
-            page_end=page_end,
-        )
-
-        manifest_rel_path = f"{chunk_base}/chunk_manifest.json"
-        data_rel_path = f"{chunk_base}/data.jsonl"
-
-        # Leer manifest del chunk
-        if args.dry_run:
-            manifest_p = Path(args.output_dir) / manifest_rel_path
-            data_p = Path(args.output_dir) / data_rel_path
-
-            if not manifest_p.exists():
-                raise FileNotFoundError(f"Falta manifest de chunk en: {manifest_p}")
-            with open(manifest_p, "r", encoding="utf-8") as f:
-                c_manifest = json.load(f)
-
-            # Para dataset vacío total_pages=0, data.jsonl podría no existir o estar vacío
-            if total_pages_observed > 0:
-                if not data_p.exists():
-                    raise FileNotFoundError(f"Falta archivo de datos de chunk en: {data_p}")
-                with open(data_p, "r", encoding="utf-8") as f:
-                    c_content = f.read()
-            else:
-                c_content = ""
-        else:
-            manifest_uri = f"gs://{bucket_name}/{manifest_rel_path}"
-            data_uri = f"gs://{bucket_name}/{data_rel_path}"
-
-            try:
-                m_bytes = read_gcs_bytes(manifest_uri)
-                c_manifest = json.loads(m_bytes.decode("utf-8"))
-            except Exception as exc:
-                raise FileNotFoundError(f"Falta o no se puede leer manifest de GCS en {manifest_uri}: {exc}")
-
-            if total_pages_observed > 0:
-                try:
-                    d_bytes = read_gcs_bytes(data_uri)
-                    c_content = d_bytes.decode("utf-8")
-                except Exception as exc:
-                    raise FileNotFoundError(f"Falta o no se puede leer datos de GCS en {data_uri}: {exc}")
-            else:
-                c_content = ""
-
-        # Validaciones de consistencia del manifest del chunk
-        if c_manifest.get("status") != "SUCCESS":
-            raise ConfigError(f"El chunk {chunk['chunk_id']} falló durante la extracción.")
-
-        if c_manifest.get("extraction_date") != extraction_date:
-            raise ConfigError(
-                f"La fecha de extracción del chunk ({c_manifest.get('extraction_date')}) "
-                f"no coincide con la esperada ({extraction_date})"
-            )
-
-        if c_manifest.get("pipeline_run_id") != run_id:
-            raise ConfigError(
-                f"El pipeline_run_id del chunk ({c_manifest.get('pipeline_run_id')}) "
-                f"no coincide con el esperado ({run_id})"
-            )
-
-        effective_page_sizes.add(c_manifest["effective_page_size"])
-        chunk_manifests.append(c_manifest)
-        chunk_contents.append(c_content)
-
-    # 5. Validar consistencia de effective_page_size entre todos los chunks
-    if len(effective_page_sizes) > 1:
-        raise ConfigError(
-            f"Diferentes effective_page_size detectados para el mismo dataset: {effective_page_sizes}"
-        )
-
-    effective_page_size = list(effective_page_sizes)[0]
-
-    # 6. Sumar registros escritos de los manifests
-    records_written = sum(m["records_written"] for m in chunk_manifests)
-
-    # 7. Validar contra el total de registros observados si el plan cubre el dataset completo
-    covers_full_dataset = check_covers_full_dataset(plan_chunks, total_pages_observed)
-
-    if covers_full_dataset:
-        policies = {
-            p.source_dataset: p
-            for p in get_pronabec_dataset_policies(orchestration_config)
-        }
-        policy = policies.get(source_dataset)
-        allow_mismatch = False
-        if policy:
-            allow_mismatch = getattr(policy, "allow_record_count_mismatch", False)
-
-        if records_written != total_records_observed and not allow_mismatch:
-            raise ConfigError(
-                f"Discrepancia en cantidad de registros: records_written={records_written} "
-                f"difiere de total_records_observed={total_records_observed} en {source_dataset}."
-            )
-
-    # 8. Concatenar y consolidar data.jsonl
-    final_content = "".join(chunk_contents)
-    # Asegurar salto de línea final si hay contenido y no termina en salto
-    if final_content and not final_content.endswith("\n"):
-        final_content += "\n"
-
-    # Determinar rutas finales
+    # Determinar rutas y preparar el archivo local
     final_dir_rel = f"bronze/pronabec/{source_dataset}/extraction_date={extraction_date}"
     final_data_rel = f"{final_dir_rel}/data.jsonl"
     final_manifest_rel = f"{final_dir_rel}/manifest.json"
     final_success_rel = f"{final_dir_rel}/_SUCCESS"
 
-    # 9. Generar timestamps de manifest analizando chunks
-    started_at_str = min(m["started_at"] for m in chunk_manifests)
-    finished_at_str = max(m["finished_at"] for m in chunk_manifests)
-
-    # Crear lista de sumario de manifests
-    chunk_summaries = [
-        {
-            "chunk_id": chunk["chunk_id"],
-            "page_start": chunk["page_start"],
-            "page_end": chunk["page_end"],
-            "records_written": m["records_written"],
-        }
-        for chunk, m in zip(sorted_plan_chunks, chunk_manifests)
-    ]
-
-    final_manifest = {
-        "source_system": "pronabec",
-        "scope": plan_dict.get("scope", "e2e"),
-        "source_dataset": source_dataset,
-        "bronze_enabled": bronze_enabled,
-        "silver_enabled": silver_enabled,
-        "required_for_e2e": required_for_e2e,
-        "bronze_only": bronze_enabled and not silver_enabled,
-        "extraction_date": extraction_date,
-        "pipeline_run_id": run_id,
-        "source_snapshot_observed_at": plan_dict["source_snapshot_observed_at"],
-        "status": "SUCCESS",
-        "expected_chunks": expected_chunks,
-        "completed_chunks": len(chunk_manifests),
-        "effective_page_size": effective_page_size,
-        "total_records_observed": total_records_observed,
-        "total_pages_observed": total_pages_observed,
-        "records_written": records_written,
-        "started_at": started_at_str,
-        "finished_at": finished_at_str,
-        "chunk_manifests": chunk_summaries,
-    }
-
-    final_success_marker = {
-        "source_system": "pronabec",
-        "scope": plan_dict.get("scope", "e2e"),
-        "source_dataset": source_dataset,
-        "bronze_enabled": bronze_enabled,
-        "silver_enabled": silver_enabled,
-        "required_for_e2e": required_for_e2e,
-        "bronze_only": bronze_enabled and not silver_enabled,
-        "extraction_date": extraction_date,
-        "pipeline_run_id": run_id,
-        "status": "SUCCESS",
-        "created_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-    }
-
-    # Escribir outputs finales
     if args.dry_run:
         final_dir = Path(args.output_dir) / final_dir_rel
         final_dir.mkdir(parents=True, exist_ok=True)
-
-        final_data_p = final_dir / "data.jsonl"
-        final_manifest_p = final_dir / "manifest.json"
-        final_success_p = final_dir / "_SUCCESS"
-
-        with open(final_data_p, "w", encoding="utf-8") as f:
-            f.write(final_content)
-
-        with open(final_manifest_p, "w", encoding="utf-8") as f:
-            json.dump(final_manifest, f, ensure_ascii=False, indent=2)
-
-        with open(final_success_p, "w", encoding="utf-8") as f:
-            json.dump(final_success_marker, f, ensure_ascii=False, indent=2)
-
-        log_event(
-            logger,
-            "INFO",
-            "Dataset finalizado y consolidado localmente (dry-run)",
-            data_path=str(final_data_p),
-            manifest_path=str(final_manifest_p),
-            success_path=str(final_success_p),
-        )
-        output_uri = str(final_data_p)
+        temp_local_file = final_dir / "data.jsonl"
     else:
-        # GCS writing
-        upload_text(
-            bucket_name=bucket_name,
-            object_path=final_data_rel,
-            content=final_content,
-            content_type="application/x-ndjson",
-        )
-        upload_json(
-            bucket_name=bucket_name,
-            object_path=final_manifest_rel,
-            payload=final_manifest,
-        )
-        upload_json(
-            bucket_name=bucket_name,
-            object_path=final_success_rel,
-            payload=final_success_marker,
-        )
+        tmp_dir = Path("/tmp")
+        try:
+            tmp_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            import tempfile
+            tmp_dir = Path(tempfile.gettempdir())
+        temp_local_file = tmp_dir / f"pronabec_finalize_{source_dataset}_{extraction_date}_{run_id}.jsonl"
+
+    has_written_content = False
+
+    try:
+        with open(temp_local_file, "w", encoding="utf-8") as out_f:
+            for chunk in sorted_plan_chunks:
+                page_start = chunk["page_start"]
+                page_end = chunk["page_end"]
+
+                # Construir rutas del chunk intermedio
+                chunk_base = build_pronabec_chunk_base_path(
+                    dataset_name=source_dataset,
+                    extraction_date=extraction_date,
+                    pipeline_run_id=run_id,
+                    page_start=page_start,
+                    page_end=page_end,
+                )
+
+                manifest_rel_path = f"{chunk_base}/chunk_manifest.json"
+                data_rel_path = f"{chunk_base}/data.jsonl"
+
+                # Leer manifest del chunk
+                if args.dry_run:
+                    manifest_p = Path(args.output_dir) / manifest_rel_path
+                    data_p = Path(args.output_dir) / data_rel_path
+
+                    if not manifest_p.exists():
+                        raise FileNotFoundError(f"Falta manifest de chunk en: {manifest_p}")
+                    with open(manifest_p, "r", encoding="utf-8") as f:
+                        c_manifest = json.load(f)
+
+                    # Para dataset vacío total_pages=0, data.jsonl podría no existir o estar vacío
+                    if total_pages_observed > 0:
+                        if not data_p.exists():
+                            raise FileNotFoundError(f"Falta archivo de datos de chunk en: {data_p}")
+                        with open(data_p, "r", encoding="utf-8") as f:
+                            c_content = f.read()
+                    else:
+                        c_content = ""
+                else:
+                    manifest_uri = f"gs://{bucket_name}/{manifest_rel_path}"
+                    data_uri = f"gs://{bucket_name}/{data_rel_path}"
+
+                    try:
+                        m_bytes = read_gcs_bytes(manifest_uri)
+                        c_manifest = json.loads(m_bytes.decode("utf-8"))
+                    except Exception as exc:
+                        raise FileNotFoundError(f"Falta o no se puede leer manifest de GCS en {manifest_uri}: {exc}")
+
+                    if total_pages_observed > 0:
+                        try:
+                            d_bytes = read_gcs_bytes(data_uri)
+                            c_content = d_bytes.decode("utf-8")
+                        except Exception as exc:
+                            raise FileNotFoundError(f"Falta o no se puede leer datos de GCS en {data_uri}: {exc}")
+                    else:
+                        c_content = ""
+
+                # Validaciones de consistencia del manifest del chunk
+                if c_manifest.get("status") != "SUCCESS":
+                    raise ConfigError(f"El chunk {chunk['chunk_id']} falló durante la extracción.")
+
+                if c_manifest.get("extraction_date") != extraction_date:
+                    raise ConfigError(
+                        f"La fecha de extracción del chunk ({c_manifest.get('extraction_date')}) "
+                        f"no coincide con la esperada ({extraction_date})"
+                    )
+
+                if c_manifest.get("pipeline_run_id") != run_id:
+                    raise ConfigError(
+                        f"El pipeline_run_id del chunk ({c_manifest.get('pipeline_run_id')}) "
+                        f"no coincide con el esperado ({run_id})"
+                    )
+
+                effective_page_sizes.add(c_manifest["effective_page_size"])
+                chunk_manifests.append(c_manifest)
+
+                # Escribir chunk content directamente
+                if c_content:
+                    out_f.write(c_content)
+                    has_written_content = True
+                    # Si el chunk no termina con un salto de línea, agregarlo para no fusionar líneas
+                    if not c_content.endswith("\n"):
+                        out_f.write("\n")
+
+                # Loggear consolidación del chunk
+                log_event(
+                    logger,
+                    "INFO",
+                    "finalize_chunk_consolidated",
+                    source_dataset=source_dataset,
+                    chunk_id=chunk["chunk_id"],
+                    page_start=page_start,
+                    page_end=page_end,
+                    records_written=c_manifest["records_written"],
+                )
+
+        # 5. Validar consistencia de effective_page_size entre todos los chunks
+        if len(effective_page_sizes) > 1:
+            raise ConfigError(
+                f"Diferentes effective_page_size detectados para el mismo dataset: {effective_page_sizes}"
+            )
+
+        effective_page_size = list(effective_page_sizes)[0]
+
+        # 6. Sumar registros escritos de los manifests
+        records_written = sum(m["records_written"] for m in chunk_manifests)
+
+        # 7. Validar contra el total de registros observados si el plan cubre el dataset completo
+        covers_full_dataset = check_covers_full_dataset(plan_chunks, total_pages_observed)
+
+        if covers_full_dataset:
+            policies = {
+                p.source_dataset: p
+                for p in get_pronabec_dataset_policies(orchestration_config)
+            }
+            policy = policies.get(source_dataset)
+            allow_mismatch = False
+            if policy:
+                allow_mismatch = getattr(policy, "allow_record_count_mismatch", False)
+
+            if records_written != total_records_observed and not allow_mismatch:
+                raise ConfigError(
+                    f"Discrepancia en cantidad de registros: records_written={records_written} "
+                    f"difiere de total_records_observed={total_records_observed} en {source_dataset}."
+                )
+
+        # 9. Generar timestamps de manifest analizando chunks
+        started_at_str = min(m["started_at"] for m in chunk_manifests)
+        finished_at_str = max(m["finished_at"] for m in chunk_manifests)
+
+        # Crear lista de sumario de manifests
+        chunk_summaries = [
+            {
+                "chunk_id": chunk["chunk_id"],
+                "page_start": chunk["page_start"],
+                "page_end": chunk["page_end"],
+                "records_written": m["records_written"],
+            }
+            for chunk, m in zip(sorted_plan_chunks, chunk_manifests)
+        ]
+
+        final_manifest = {
+            "source_system": "pronabec",
+            "scope": plan_dict.get("scope", "e2e"),
+            "source_dataset": source_dataset,
+            "bronze_enabled": bronze_enabled,
+            "silver_enabled": silver_enabled,
+            "required_for_e2e": required_for_e2e,
+            "bronze_only": bronze_enabled and not silver_enabled,
+            "extraction_date": extraction_date,
+            "pipeline_run_id": run_id,
+            "source_snapshot_observed_at": plan_dict["source_snapshot_observed_at"],
+            "status": "SUCCESS",
+            "expected_chunks": expected_chunks,
+            "completed_chunks": len(chunk_manifests),
+            "effective_page_size": effective_page_size,
+            "total_records_observed": total_records_observed,
+            "total_pages_observed": total_pages_observed,
+            "records_written": records_written,
+            "started_at": started_at_str,
+            "finished_at": finished_at_str,
+            "chunk_manifests": chunk_summaries,
+        }
+
+        final_success_marker = {
+            "source_system": "pronabec",
+            "scope": plan_dict.get("scope", "e2e"),
+            "source_dataset": source_dataset,
+            "bronze_enabled": bronze_enabled,
+            "silver_enabled": silver_enabled,
+            "required_for_e2e": required_for_e2e,
+            "bronze_only": bronze_enabled and not silver_enabled,
+            "extraction_date": extraction_date,
+            "pipeline_run_id": run_id,
+            "status": "SUCCESS",
+            "created_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        }
+
+        if args.dry_run:
+            final_dir = Path(args.output_dir) / final_dir_rel
+            final_dir.mkdir(parents=True, exist_ok=True)
+
+            final_manifest_p = final_dir / "manifest.json"
+            final_success_p = final_dir / "_SUCCESS"
+
+            with open(final_manifest_p, "w", encoding="utf-8") as f:
+                json.dump(final_manifest, f, ensure_ascii=False, indent=2)
+
+            with open(final_success_p, "w", encoding="utf-8") as f:
+                json.dump(final_success_marker, f, ensure_ascii=False, indent=2)
+
+            log_event(
+                logger,
+                "INFO",
+                "Dataset finalizado y consolidado localmente (dry-run)",
+                data_path=str(temp_local_file),
+                manifest_path=str(final_manifest_p),
+                success_path=str(final_success_p),
+            )
+            output_uri = str(temp_local_file)
+        else:
+            # GCS writing
+            upload_file(
+                bucket_name=bucket_name,
+                object_path=final_data_rel,
+                local_path=temp_local_file,
+                content_type="application/x-ndjson",
+            )
+            upload_json(
+                bucket_name=bucket_name,
+                object_path=final_manifest_rel,
+                payload=final_manifest,
+            )
+            upload_json(
+                bucket_name=bucket_name,
+                object_path=final_success_rel,
+                payload=final_success_marker,
+            )
+            log_event(
+                logger,
+                "INFO",
+                "Dataset finalizado y consolidado en GCS",
+                bucket=bucket_name,
+                data_path=final_data_rel,
+                manifest_path=final_manifest_rel,
+                success_path=final_success_rel,
+            )
+            output_uri = f"gs://{bucket_name}/{final_data_rel}"
+
         log_event(
             logger,
             "INFO",
-            "Dataset finalizado y consolidado en GCS",
-            bucket=bucket_name,
-            data_path=final_data_rel,
-            manifest_path=final_manifest_rel,
-            success_path=final_success_rel,
+            "finalize_dataset_completed",
+            source_dataset=source_dataset,
+            dataset=source_dataset,
+            extraction_date=extraction_date,
+            pipeline_run_id=run_id,
+            records_written=records_written,
+            chunks_read=len(chunk_manifests),
+            output_uri=output_uri,
         )
-        output_uri = f"gs://{bucket_name}/{final_data_rel}"
-
-    log_event(
-        logger,
-        "INFO",
-        "finalize_dataset_completed",
-        source_dataset=source_dataset,
-        dataset=source_dataset,
-        extraction_date=extraction_date,
-        pipeline_run_id=run_id,
-        records_written=records_written,
-        chunks_read=len(chunk_manifests),
-        output_uri=output_uri,
-    )
+    finally:
+        # En dry-run NO eliminar el archivo local ya que es el output esperado final
+        if not args.dry_run and 'temp_local_file' in locals() and temp_local_file.exists():
+            try:
+                temp_local_file.unlink()
+            except Exception as exc:
+                log_event(
+                    logger,
+                    "WARNING",
+                    "No se pudo eliminar el archivo temporal",
+                    temp_file=str(temp_local_file),
+                    error=str(exc),
+                )
 
 
 def parse_args() -> argparse.Namespace:
