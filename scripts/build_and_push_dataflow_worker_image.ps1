@@ -64,7 +64,10 @@ Write-Host $DataflowWorkerImage
 Invoke-NativeCommand `
     -StepName "Construyendo y publicando imagen worker Dataflow con Cloud Build..." `
     -Command {
-        gcloud builds submit --tag $DataflowWorkerImage --file Dockerfile.dataflow .
+        gcloud builds submit `
+            --config cloudbuild.dataflow.yaml `
+            --substitutions "_DATAFLOW_WORKER_IMAGE=$DataflowWorkerImage" `
+            .
     }
 
 Write-Host "Imagen worker Dataflow publicada correctamente:"

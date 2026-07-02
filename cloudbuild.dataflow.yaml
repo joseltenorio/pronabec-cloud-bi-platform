@@ -1,0 +1,12 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - Dockerfile.dataflow
+      - -t
+      - ${_DATAFLOW_WORKER_IMAGE}
+      - .
+
+images:
+  - ${_DATAFLOW_WORKER_IMAGE}
