@@ -152,7 +152,7 @@ BQ_SILVER_DATASET
 DATAFLOW_TEMP_LOCATION
 DATAFLOW_STAGING_LOCATION
 DATAFLOW_SERVICE_ACCOUNT
-DATAFLOW_SETUP_FILE
+DATAFLOW_SDK_CONTAINER_IMAGE
 BRONZE_EXTRACTION_DATE
 PIPELINE_RUN_ID
 SOURCE_DATASET
@@ -169,7 +169,7 @@ Argumentos principales:
 --temp-location
 --staging-location
 --service-account-email
---setup-file
+--sdk-container-image
 --source-system
 --source-dataset
 --input-path
@@ -181,21 +181,22 @@ Argumentos principales:
 
 `DATAFLOW_SERVICE_ACCOUNT` define la service account worker usada por Dataflow. Los Cloud Run Jobs actuan como launchers y pueden usar una service account distinta; esa service account launcher necesita `roles/iam.serviceAccountUser` sobre `DATAFLOW_SERVICE_ACCOUNT`. Los workers Dataflow deben usar una service account dedicada con permisos Dataflow, GCS y BigQuery, y no la Compute default service account.
 
-`DATAFLOW_SETUP_FILE=/app/setup.py` empaqueta el paquete `pipelines` para los workers. Los workers de Dataflow no heredan automaticamente el filesystem `/app` del launcher Cloud Run; por eso los jobs Dataflow pasan `--setup-file /app/setup.py`.
+`DATAFLOW_SDK_CONTAINER_IMAGE` apunta a la imagen worker dedicada. Esta imagen instala `requirements.txt` e instala el paquete `pipelines` mediante `pip install .` y `pyproject.toml`. Los workers de Dataflow no heredan automaticamente el filesystem ni las dependencias del launcher Cloud Run; por eso los jobs Dataflow pasan `--sdk-container-image`.
 
-### Troubleshooting de empaquetado
+### Troubleshooting de imagen worker
 
 Si el job falla con:
 
 ```text
-ModuleNotFoundError: No module named 'pipelines'
+ModuleNotFoundError: No module named 'ftfy'
 ```
 
 verifique que:
 
-- La imagen fue reconstruida despues de agregar `setup.py`.
-- El Cloud Run Job tiene `DATAFLOW_SETUP_FILE=/app/setup.py`.
-- Los argumentos del job incluyen `--setup-file /app/setup.py`.
+- El Cloud Run Job tiene `DATAFLOW_SDK_CONTAINER_IMAGE`.
+- Los argumentos del job incluyen `--sdk-container-image`.
+- La imagen worker existe en Artifact Registry.
+- La imagen worker fue reconstruida despues de cambiar `requirements.txt`, `pyproject.toml` o `pipelines/`.
 
 ## Rutas operativas
 

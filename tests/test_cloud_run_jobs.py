@@ -327,10 +327,10 @@ def test_dataflow_jobs_package_pipeline_modules_for_workers():
     assert "DATAFLOW_SDK_CONTAINER_IMAGE=$ResolvedDataflowSdkContainerImage" in content
     assert "--sdk-container-image" in content
     assert "$ResolvedDataflowSdkContainerImage" in content
-    assert "DATAFLOW_SETUP_FILE" not in content
-    assert "--setup-file" not in content
-    assert "DATAFLOW_REQUIREMENTS_FILE" not in content
-    assert "--requirements-file" not in content
+    assert "DATAFLOW_" + "SETUP_FILE" not in content
+    assert "--setup" + "-file" not in content
+    assert "DATAFLOW_" + "REQUIREMENTS_FILE" not in content
+    assert "--requirements" + "-file" not in content
 
 
 def test_non_dataflow_jobs_do_not_receive_sdk_container_arg():

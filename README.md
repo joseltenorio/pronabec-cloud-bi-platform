@@ -199,7 +199,7 @@ Documentación técnica relacionada:
 
 El repositorio incluye scripts para publicar la imagen batch en Artifact Registry y registrar Cloud Run Jobs asociados a discovery PRONABEC, construcción de plan, extracción particionada PRONABEC, finalización de datasets PRONABEC, extracción MEF, staging de reportes documentales, validación de manifests Bronze (`bronze-manifest-validation-job`), publicación Gold, validación Gold y ejecución de controles de calidad.
 
-Los jobs utilizan una imagen común y comandos diferenciados por módulo Python, manteniendo separación entre runtime, configuración y lógica de procesamiento.
+Los jobs utilizan una imagen launcher comun y comandos diferenciados por modulo Python, manteniendo separacion entre runtime, configuracion y logica de procesamiento.
 
 La imagen Docker del proyecto contiene los módulos necesarios para ejecutar procesos Python relacionados con:
 
@@ -220,7 +220,12 @@ Documentación técnica relacionada:
 
 La transformación Bronze a Silver se ejecuta mediante Apache Beam/Dataflow. Para mantener Composer como orquestador y no como runtime de procesamiento, el proyecto utiliza Cloud Run Jobs lanzadores que ejecutan el pipeline `pipelines.dataflow_bronze_to_silver` con `DataflowRunner`.
 
-Este modelo permite coordinar extracción, transformación y calidad desde Composer, manteniendo la ejecución distribuida en Dataflow y la lógica del proyecto empaquetada en la imagen batch.
+Este modelo usa dos imagenes separadas:
+
+- imagen launcher Cloud Run: ejecuta los jobs batch y lanza Dataflow;
+- imagen worker Dataflow: se define en `Dockerfile.dataflow`, instala `requirements.txt`, instala el paquete `pipelines` mediante `pyproject.toml` y se pasa con `DATAFLOW_SDK_CONTAINER_IMAGE` / `--sdk-container-image`.
+
+Para cambios Python que afecten launchers, reconstruya la imagen launcher. Para cambios en transforms, dependencias o packaging de Dataflow, reconstruya la imagen worker. Para cambios solo de DAG, configuracion o documentacion, no reconstruya imagen salvo que aplique.
 
 Documentación técnica relacionada:
 
@@ -290,6 +295,8 @@ pronabec-cloud-bi-platform/
 ├── tests/
 ├── tools/
 ├── Dockerfile
+├── Dockerfile.dataflow
+├── pyproject.toml
 ├── requirements.txt
 ├── requirements-dev.txt
 └── README.md

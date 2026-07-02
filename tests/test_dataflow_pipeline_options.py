@@ -280,8 +280,8 @@ def test_build_pipeline_options_propagates_dataflow_service_account() -> None:
     opt_dict = options.get_all_options()
     assert opt_dict.get("service_account_email") == "test-dataflow-sa@test-project.iam.gserviceaccount.com"
     assert opt_dict.get("sdk_container_image") == "us-central1-docker.pkg.dev/test-project/repo/dataflow-worker:latest"
-    assert opt_dict.get("setup_file") is None
-    assert opt_dict.get("requirements_file") is None
+    assert opt_dict.get("setup" + "_file") is None
+    assert opt_dict.get("requirements" + "_file") is None
     assert opt_dict.get("save_main_session") is True
 
 

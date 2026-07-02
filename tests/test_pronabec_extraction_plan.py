@@ -3,7 +3,7 @@
 
 import json
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from pipelines.build_pronabec_extraction_plan import build_plan, run_build_plan
 from pipelines.common.config import ConfigError

@@ -5,7 +5,7 @@ import json
 import pytest
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from pipelines.finalize_pronabec_dataset import parse_args, run_finalize
 from pipelines.common.config import ConfigError

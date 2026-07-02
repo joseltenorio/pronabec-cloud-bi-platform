@@ -207,32 +207,33 @@ gcloud run jobs describe dataflow-pronabec-becarios-pais-estudio-job \
 
 El job debe tener `DATAFLOW_SERVICE_ACCOUNT` en sus variables y/o `--service-account-email` en sus argumentos.
 
-## 7. Empaquetado para workers Dataflow
+## 7. Imagen worker Dataflow
 
-Los workers de Dataflow no heredan automaticamente el codigo `/app` del launcher Cloud Run. Para que puedan importar `pipelines`, los jobs Dataflow deben usar:
+Los workers de Dataflow no heredan automaticamente el codigo ni las dependencias del launcher Cloud Run. Para que puedan importar `pipelines` y dependencias como `ftfy`, los jobs Dataflow deben usar una imagen worker dedicada:
 
 ```text
-DATAFLOW_SETUP_FILE=/app/setup.py
---setup-file /app/setup.py
+DATAFLOW_SDK_CONTAINER_IMAGE=us-central1-docker.pkg.dev/<project>/<repository>/pronabec-dataflow-worker:<tag>
+--sdk-container-image us-central1-docker.pkg.dev/<project>/<repository>/pronabec-dataflow-worker:<tag>
 ```
 
-Despues de agregar o cambiar `setup.py`, reconstruya la imagen antes de redeployar:
+`Dockerfile.dataflow` se basa en una imagen oficial Apache Beam SDK Python, instala `requirements.txt` e instala el proyecto con `pip install .` usando `pyproject.toml`.
 
-```bash
-gcloud builds submit \
-  --tag "$CLOUD_RUN_IMAGE" \
-  --project "$GCP_PROJECT_ID"
+Despues de cambiar transforms, dependencias o packaging de Dataflow, reconstruya la imagen worker antes de redeployar:
+
+```powershell
+.\scripts\build_and_push_dataflow_worker_image.ps1
+.\scripts\deploy_cloud_run_jobs.ps1
 ```
 
 Troubleshooting:
 
 ```text
-ModuleNotFoundError: No module named 'pipelines'
+ModuleNotFoundError: No module named 'ftfy'
 ```
 
-Causa: los workers no recibieron el paquete del proyecto.
+Causa: el worker de Dataflow no esta usando la imagen worker correcta o la imagen no tiene `requirements.txt` instalado.
 
-Solucion: verificar que el job tenga `--setup-file /app/setup.py`, `DATAFLOW_SETUP_FILE=/app/setup.py` y que la imagen haya sido reconstruida con `setup.py`.
+Solucion: verificar `DATAFLOW_SDK_CONTAINER_IMAGE` en el Cloud Run Job, revisar `--sdk-container-image` en los argumentos del launcher, confirmar la imagen en Artifact Registry, reconstruir la imagen worker y redeployar Cloud Run Jobs.
 
 ## 8. Validacion Bronze
 

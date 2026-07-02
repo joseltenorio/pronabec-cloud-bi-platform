@@ -8,19 +8,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from pipelines.build_pronabec_extraction_plan import read_discovery_json
-from pipelines.common.audit import generate_run_id
 from pipelines.common.config import ConfigError, get_pipeline_settings, load_yaml_config
 from pipelines.common.gcs import read_gcs_bytes
 from pipelines.common.logging import log_event, setup_structured_logger
-from pipelines.common.orchestration_config import load_orchestration_config
 from pipelines.extract_pronabec import (
     build_pronabec_chunk_base_path,
     extract_dataset,
     resolve_extraction_date,
     resolve_pipeline_run_id,
-    resolve_page_size_fallbacks,
-    resolve_requested_page_size,
     resolve_retry_settings,
     resolve_source_dataset,
     write_chunk_dataset_to_gcs,
@@ -200,7 +195,6 @@ def _execute_chunk(
 def run_extraction_plan(args: argparse.Namespace) -> dict[str, Any]:
     pipeline_settings = get_pipeline_settings(args.pipeline_config)
     endpoints_config = load_yaml_config(args.endpoints_config)
-    orchestration_config = load_orchestration_config(args.orchestration_config)
 
     retry_settings = resolve_retry_settings(
         timeout=args.timeout,

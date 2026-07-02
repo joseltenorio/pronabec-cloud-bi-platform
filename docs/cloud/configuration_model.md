@@ -97,6 +97,9 @@ Las variables Dataflow definen runner, rutas temporales, staging, service accoun
 - `DATAFLOW_TEMP_LOCATION`;
 - `DATAFLOW_STAGING_LOCATION`;
 - `DATAFLOW_SERVICE_ACCOUNT`;
+- `DATAFLOW_SDK_CONTAINER_IMAGE`;
+- `DATAFLOW_WORKER_IMAGE_NAME`;
+- `DATAFLOW_WORKER_IMAGE_TAG`;
 - `DATAFLOW_WORKER_MACHINE_TYPE`;
 - `DATAFLOW_MAX_NUM_WORKERS`.
 
@@ -112,12 +115,14 @@ La imagen se publica en Artifact Registry y se reutiliza para ejecutar procesos 
 
 ### Artifact Registry
 
-Artifact Registry almacena la imagen de ejecución del proyecto. Las variables asociadas son:
+Artifact Registry almacena la imagen launcher de Cloud Run y la imagen worker de Dataflow. Las variables asociadas son:
 
 - `ARTIFACT_REGISTRY_LOCATION`;
 - `ARTIFACT_REGISTRY_REPOSITORY`;
 - `ARTIFACT_IMAGE_NAME`;
-- `ARTIFACT_IMAGE_TAG`.
+- `ARTIFACT_IMAGE_TAG`;
+- `DATAFLOW_WORKER_IMAGE_NAME`;
+- `DATAFLOW_WORKER_IMAGE_TAG`.
 
 ### Composer
 
@@ -143,7 +148,9 @@ Los procesos de extracción utilizan configuración versionada para identificar 
 
 ### Dataflow
 
-El pipeline Bronze a Silver utiliza parámetros de runner, región, rutas temporales, staging, tabla destino, DLQ y resumen de procesamiento. La configuración cloud permite mantener consistencia entre ejecución local controlada y ejecución sobre infraestructura administrada.
+El pipeline Bronze a Silver utiliza parametros de runner, region, rutas temporales, staging, tabla destino, DLQ, resumen de procesamiento y `DATAFLOW_SDK_CONTAINER_IMAGE`. La configuracion cloud permite mantener consistencia entre ejecucion local controlada y ejecucion sobre infraestructura administrada.
+
+En DataflowRunner, `DATAFLOW_SDK_CONTAINER_IMAGE` es obligatorio. La imagen worker se construye con `Dockerfile.dataflow`, instala `requirements.txt` e instala el paquete `pipelines` mediante `pip install .` y `pyproject.toml`.
 
 ### BigQuery
 
@@ -163,7 +170,7 @@ Cloud Storage funciona como data lake y espacio operativo para el procesamiento 
 
 ### Cloud Run Jobs
 
-Cloud Run Jobs utiliza la imagen versionada del proyecto y ejecuta comandos Python específicos por responsabilidad batch. El modelo de configuración mantiene nombres de jobs, imagen, región y service account separados de la lógica de negocio.
+Cloud Run Jobs utiliza la imagen launcher versionada del proyecto y ejecuta comandos Python especificos por responsabilidad batch. Los jobs `dataflow-*` son launchers y pasan `--sdk-container-image` para que los workers usen la imagen dedicada de Dataflow. El modelo de configuracion mantiene nombres de jobs, imagen, region y service account separados de la logica de negocio.
 
 ### Composer
 

@@ -8,7 +8,7 @@ from datetime import date
 from typing import Any
 
 from pipelines.common.config import ConfigError, get_pipeline_settings, load_yaml_config
-from pipelines.common.gcs import build_gs_uri, parse_gs_uri, read_gcs_bytes
+from pipelines.common.gcs import build_gs_uri, read_gcs_bytes
 from pipelines.common.logging import log_event, setup_structured_logger
 from pipelines.common.orchestration_config import (
     get_bronze_enabled_pronabec_datasets,

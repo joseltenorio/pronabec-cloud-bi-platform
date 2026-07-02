@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from pipelines.common.audit import generate_run_id
-from pipelines.common.config import ConfigError, get_pipeline_settings, load_yaml_config
+from pipelines.common.config import ConfigError, get_pipeline_settings
 from pipelines.common.gcs import read_gcs_bytes, upload_json
 from pipelines.common.logging import log_event, setup_structured_logger
 from pipelines.common.orchestration_config import (
