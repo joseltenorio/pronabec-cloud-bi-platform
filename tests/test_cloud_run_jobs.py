@@ -163,6 +163,18 @@ def test_pronabec_chunked_job_modules_are_correct():
     assert "pipelines.finalize_pronabec_dataset" in content
 
 
+def test_pronabec_finalize_job_does_not_hardcode_source_dataset():
+    content = _read_deploy_script()
+    finalize_section = content[
+        content.index("-JobName $PronabecFinalizeDatasetJobName"):
+        content.index("-JobName $MefJobName")
+    ]
+
+    assert "pipelines.finalize_pronabec_dataset" in finalize_section
+    assert "SOURCE_DATASET=" not in finalize_section
+    assert "--source-dataset" not in finalize_section
+
+
 def test_pronabec_plan_runner_job_does_not_hardcode_chunk_ranges():
     content = _read_deploy_script()
 

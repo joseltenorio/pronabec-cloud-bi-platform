@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from pipelines.common.audit import generate_run_id
 from pipelines.common.config import ConfigError, get_pipeline_settings, load_yaml_config
 from pipelines.common.gcs import (
     read_gcs_bytes,
@@ -97,13 +98,18 @@ def run_finalize(args: argparse.Namespace) -> None:
 
     source_dataset = resolve_source_dataset(
         cli_value=args.source_dataset,
-        legacy_value=None,
+        legacy_value=args.dataset,
     )
 
     if not source_dataset:
-        raise ConfigError("El parámetro --source-dataset es obligatorio para el finalizer.")
+        raise ConfigError("Missing required configuration: --source-dataset or SOURCE_DATASET")
 
-    bucket_name = args.bucket or pipeline_settings["bucket_name"]
+    bucket_name = (
+        args.bucket
+        or os.getenv("GCS_BUCKET_NAME")
+        or os.getenv("GCS_BUCKET")
+        or pipeline_settings["bucket_name"]
+    )
 
     if not args.dry_run and not bucket_name:
         raise ConfigError(
@@ -119,6 +125,17 @@ def run_finalize(args: argparse.Namespace) -> None:
     pipeline_run_id = resolve_pipeline_run_id(args.pipeline_run_id, args.run_id)
     run_id = pipeline_run_id or generate_run_id("pronabec_finalize")
 
+    log_event(
+        logger,
+        "INFO",
+        "finalize_dataset_started",
+        source_dataset=source_dataset,
+        dataset=source_dataset,
+        extraction_date=extraction_date,
+        pipeline_run_id=run_id,
+        bucket=bucket_name,
+        dry_run=args.dry_run,
+    )
     log_event(
         logger,
         "INFO",
@@ -383,6 +400,7 @@ def run_finalize(args: argparse.Namespace) -> None:
             manifest_path=str(final_manifest_p),
             success_path=str(final_success_p),
         )
+        output_uri = str(final_data_p)
     else:
         # GCS writing
         upload_text(
@@ -410,6 +428,20 @@ def run_finalize(args: argparse.Namespace) -> None:
             manifest_path=final_manifest_rel,
             success_path=final_success_rel,
         )
+        output_uri = f"gs://{bucket_name}/{final_data_rel}"
+
+    log_event(
+        logger,
+        "INFO",
+        "finalize_dataset_completed",
+        source_dataset=source_dataset,
+        dataset=source_dataset,
+        extraction_date=extraction_date,
+        pipeline_run_id=run_id,
+        records_written=records_written,
+        chunks_read=len(chunk_manifests),
+        output_uri=output_uri,
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -434,8 +466,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--source-dataset",
-        required=True,
-        help="Dataset específico a finalizar (obligatorio).",
+        help="Dataset específico a finalizar. Si se omite, usa SOURCE_DATASET.",
     )
     parser.add_argument(
         "--dataset",
@@ -473,7 +504,10 @@ def parse_args() -> argparse.Namespace:
         help="Directorio local para salidas dry-run.",
     )
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    if not resolve_source_dataset(args.source_dataset, args.dataset):
+        parser.error("Missing required configuration: --source-dataset or SOURCE_DATASET")
+    return args
 
 
 def main() -> None:

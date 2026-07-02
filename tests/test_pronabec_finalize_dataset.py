@@ -3,10 +3,11 @@
 
 import json
 import pytest
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from pipelines.finalize_pronabec_dataset import run_finalize
+from pipelines.finalize_pronabec_dataset import parse_args, run_finalize
 from pipelines.common.config import ConfigError
 
 
@@ -88,6 +89,38 @@ class DummyArgs:
             setattr(self, k, v)
 
 
+def test_parse_args_resolves_source_dataset_from_env(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["finalize_pronabec_dataset.py"])
+    monkeypatch.setenv("SOURCE_DATASET", "dataset_from_env")
+
+    args = parse_args()
+
+    assert args.source_dataset is None
+
+
+def test_parse_args_cli_source_dataset_has_priority_over_env(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["finalize_pronabec_dataset.py", "--source-dataset", "dataset_from_cli"],
+    )
+    monkeypatch.setenv("SOURCE_DATASET", "dataset_from_env")
+
+    args = parse_args()
+
+    assert args.source_dataset == "dataset_from_cli"
+
+
+def test_parse_args_fails_without_source_dataset_or_env(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["finalize_pronabec_dataset.py"])
+    monkeypatch.delenv("SOURCE_DATASET", raising=False)
+
+    with pytest.raises(SystemExit):
+        parse_args()
+
+    assert "Missing required configuration: --source-dataset or SOURCE_DATASET" in capsys.readouterr().err
+
+
 def create_mock_plan(tmp_path, dataset_name, expected_chunks, total_records, total_pages, chunk_size, chunks_list):
     plan_dir = tmp_path / "bronze_work" / "pronabec" / "_plans" / "extraction_date=2026-06-29" / "run_id=test-run"
     plan_dir.mkdir(parents=True, exist_ok=True)
@@ -144,6 +177,110 @@ def create_mock_chunk(tmp_path, dataset_name, chunk_id, page_start, page_end, re
     if data_content is not None:
         with open(chunk_dir / "data.jsonl", "w", encoding="utf-8") as f:
             f.write(data_content)
+
+
+@patch("pipelines.finalize_pronabec_dataset.read_plan_json")
+@patch("pipelines.finalize_pronabec_dataset.get_pipeline_settings")
+@patch("pipelines.finalize_pronabec_dataset.load_orchestration_config")
+def test_finalizer_resolves_runtime_values_from_env(
+    mock_load_orch,
+    mock_settings,
+    mock_read_plan,
+    mock_pipeline_settings,
+    mock_orchestration,
+    monkeypatch,
+):
+    mock_settings.return_value = {**mock_pipeline_settings, "bucket_name": None}
+    mock_load_orch.return_value = mock_orchestration
+    mock_read_plan.side_effect = RuntimeError("stop after config resolution")
+    monkeypatch.setenv("SOURCE_DATASET", "dataset_chunked")
+    monkeypatch.setenv("GCS_BUCKET_NAME", "bucket-from-env")
+    monkeypatch.setenv("BRONZE_EXTRACTION_DATE", "2026-06-29")
+    monkeypatch.setenv("PIPELINE_RUN_ID", "test-run")
+
+    args = DummyArgs(
+        dry_run=False,
+        source_dataset=None,
+        bucket=None,
+        extraction_date=None,
+        pipeline_run_id=None,
+        run_id=None,
+    )
+    with pytest.raises(RuntimeError, match="stop after config resolution"):
+        run_finalize(args)
+
+    assert mock_read_plan.call_args.kwargs["bucket_name"] == "bucket-from-env"
+    assert mock_read_plan.call_args.kwargs["extraction_date"] == "2026-06-29"
+    assert mock_read_plan.call_args.kwargs["run_id"] == "test-run"
+
+
+@patch("pipelines.finalize_pronabec_dataset.read_plan_json")
+@patch("pipelines.finalize_pronabec_dataset.get_pipeline_settings")
+@patch("pipelines.finalize_pronabec_dataset.load_orchestration_config")
+def test_finalizer_cli_values_override_env(
+    mock_load_orch,
+    mock_settings,
+    mock_read_plan,
+    mock_pipeline_settings,
+    mock_orchestration,
+    monkeypatch,
+):
+    mock_settings.return_value = {**mock_pipeline_settings, "bucket_name": None}
+    mock_load_orch.return_value = mock_orchestration
+    mock_read_plan.side_effect = RuntimeError("stop after config resolution")
+    monkeypatch.setenv("SOURCE_DATASET", "dataset_from_env")
+    monkeypatch.setenv("GCS_BUCKET_NAME", "bucket-from-env")
+    monkeypatch.setenv("BRONZE_EXTRACTION_DATE", "2026-06-28")
+    monkeypatch.setenv("PIPELINE_RUN_ID", "run-from-env")
+
+    args = DummyArgs(
+        dry_run=False,
+        source_dataset="dataset_chunked",
+        bucket="bucket-from-cli",
+        extraction_date="2026-06-29",
+        pipeline_run_id="run-from-cli",
+        run_id=None,
+    )
+    with pytest.raises(RuntimeError, match="stop after config resolution"):
+        run_finalize(args)
+
+    assert mock_read_plan.call_args.kwargs["bucket_name"] == "bucket-from-cli"
+    assert mock_read_plan.call_args.kwargs["extraction_date"] == "2026-06-29"
+    assert mock_read_plan.call_args.kwargs["run_id"] == "run-from-cli"
+
+
+@patch("pipelines.finalize_pronabec_dataset.read_plan_json")
+@patch("pipelines.finalize_pronabec_dataset.get_pipeline_settings")
+@patch("pipelines.finalize_pronabec_dataset.load_orchestration_config")
+def test_finalizer_resolves_bucket_from_legacy_gcs_bucket_env(
+    mock_load_orch,
+    mock_settings,
+    mock_read_plan,
+    mock_pipeline_settings,
+    mock_orchestration,
+    monkeypatch,
+):
+    mock_settings.return_value = {**mock_pipeline_settings, "bucket_name": None}
+    mock_load_orch.return_value = mock_orchestration
+    mock_read_plan.side_effect = RuntimeError("stop after config resolution")
+    monkeypatch.setenv("SOURCE_DATASET", "dataset_chunked")
+    monkeypatch.delenv("GCS_BUCKET_NAME", raising=False)
+    monkeypatch.setenv("GCS_BUCKET", "legacy-bucket")
+    monkeypatch.setenv("BRONZE_EXTRACTION_DATE", "2026-06-29")
+    monkeypatch.setenv("PIPELINE_RUN_ID", "test-run")
+
+    args = DummyArgs(
+        dry_run=False,
+        source_dataset=None,
+        bucket=None,
+        extraction_date=None,
+        pipeline_run_id=None,
+        run_id=None,
+    )
+    with pytest.raises(RuntimeError, match="stop after config resolution"):
+        run_finalize(args)
+
+    assert mock_read_plan.call_args.kwargs["bucket_name"] == "legacy-bucket"
 
 
 @patch("pipelines.finalize_pronabec_dataset.get_pipeline_settings")
