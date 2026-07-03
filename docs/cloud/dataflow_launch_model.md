@@ -104,6 +104,8 @@ Entrada Bronze esperada:
 bronze/mef/<slice>/extraction_date=<fecha>/year=*/data.csv
 ```
 
+El wildcard `year=*/data.csv` es parte del contrato operativo MEF. El launcher expande el patron con Apache Beam `FileSystems.match` antes de construir el pipeline, ordena los archivos encontrados y entrega al lector solo paths reales como `year=2012/data.csv`. Si el patron no encuentra archivos, la ejecucion falla con `ValueError` claro antes de crear el job Dataflow. No se debe reemplazar el wildcard por un año fijo ni crear jobs por año.
+
 ### Familia PRONABEC Reports
 
 Los reportes documentales PRONABEC se transforman mediante un único Cloud Run Job parametrizable:
