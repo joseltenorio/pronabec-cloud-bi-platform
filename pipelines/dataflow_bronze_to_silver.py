@@ -26,6 +26,7 @@ from pipelines.transforms.pronabec import transform_pronabec_record
 logger = setup_structured_logger("dataflow_bronze_to_silver", level="INFO")
 
 ENV_PLACEHOLDER_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+INPUT_PATH_WILDCARD_CHARS = ("*", "?", "[", "]")
 PRONABEC_REPORTS_INVALID_CONFIG_MESSAGE = (
     "Invalid PRONABEC reports Dataflow launch configuration: "
     "SOURCE_DATASET, INPUT_PATH and OUTPUT_TABLE must be provided with real values. "
@@ -368,6 +369,29 @@ def expand_env_placeholders(value: str | None) -> str | None:
         return env_value
 
     return ENV_PLACEHOLDER_PATTERN.sub(replace, value)
+
+
+def has_input_path_wildcard(input_path: str) -> bool:
+    """Return True when the path contains Beam-supported glob wildcard syntax."""
+    return any(char in input_path for char in INPUT_PATH_WILDCARD_CHARS)
+
+
+def expand_input_paths(input_path: str) -> list[str]:
+    """Expand a concrete input path or Beam filesystem glob into real paths."""
+    if not has_input_path_wildcard(input_path):
+        return [input_path]
+
+    from apache_beam.io.filesystems import FileSystems
+
+    matches = FileSystems.match([input_path])
+    expanded_paths = sorted(
+        metadata.path
+        for match_result in matches
+        for metadata in match_result.metadata_list
+    )
+    if not expanded_paths:
+        raise ValueError(f"Input path pattern did not match any files: {input_path}")
+    return expanded_paths
 
 
 def resolve_runtime_arguments(args: argparse.Namespace) -> argparse.Namespace:
@@ -726,6 +750,7 @@ def run(argv: list[str] | None = None) -> None:
     try:
         # Validar argumentos de entrada
         validate_arguments(args)
+        input_paths = expand_input_paths(args.input_path)
 
         pipeline_options = build_pipeline_options(args, pipeline_args)
 
@@ -745,14 +770,14 @@ def run(argv: list[str] | None = None) -> None:
         if args.input_format == "csv":
             parsed_records = (
                 p
-                | "Start CSV Read" >> beam.Create([args.input_path])
+                | "Start CSV Read" >> beam.Create(input_paths)
                 | "Read CSV File" >> beam.ParDo(ReadCsvDoFn())
             )
             parse_rejected = p | "Empty CSV Rejected" >> beam.Create([])
         else:
             jsonl_outputs = (
                 p
-                | "Start JSONL Read" >> beam.Create([args.input_path])
+                | "Start JSONL Read" >> beam.Create(input_paths)
                 | "Read JSONL File" >> beam.ParDo(
                     ReadJsonlDoFn(),
                     source_system=args.source_system,
