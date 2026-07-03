@@ -374,6 +374,4 @@ def test_pyproject_packages_pipeline_modules():
     pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
 
     assert '[tool.setuptools.packages.find]' in pyproject
-    assert '"pipelines"' in pyproject
-    assert '"pipelines.common"' in pyproject
-    assert '"pipelines.transforms"' in pyproject
+    assert 'include = ["pipelines*"]' in pyproject

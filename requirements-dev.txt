@@ -1,5 +1,3 @@
--r requirements.txt
-
 # Testing
 pytest
 
@@ -11,3 +9,4 @@ sqlfluff
 
 # Local notebooks or exploration
 ipykernel
+pandas

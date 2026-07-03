@@ -1,12 +1,9 @@
 # Google Cloud clients
 google-cloud-storage
 google-cloud-bigquery
-google-cloud-logging
 
 # Data processing
-apache-beam[gcp]
-pandas
-pyarrow
+apache-beam[gcp]==2.74.0
 ftfy
 
 # Configuration
@@ -16,7 +13,3 @@ python-dotenv
 # HTTP extraction and scraping
 requests
 beautifulsoup4
-
-# Logging and retries
-loguru
-tenacity

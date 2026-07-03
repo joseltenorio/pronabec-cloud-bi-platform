@@ -9,8 +9,4 @@ description = "PRONABEC Cloud BI Platform pipelines"
 requires-python = ">=3.11"
 
 [tool.setuptools.packages.find]
-include = [
-    "pipelines",
-    "pipelines.common",
-    "pipelines.transforms",
-]
+include = ["pipelines*"]

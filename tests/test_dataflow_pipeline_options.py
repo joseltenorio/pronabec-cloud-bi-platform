@@ -330,9 +330,7 @@ def test_pyproject_packages_pipelines_modules() -> None:
     pyproject = PYPROJECT_FILE.read_text(encoding="utf-8")
 
     assert '[tool.setuptools.packages.find]' in pyproject
-    assert '"pipelines"' in pyproject
-    assert '"pipelines.common"' in pyproject
-    assert '"pipelines.transforms"' in pyproject
+    assert 'include = ["pipelines*"]' in pyproject
 
 
 def test_runtime_arguments_resolve_cloud_run_environment(monkeypatch) -> None:
