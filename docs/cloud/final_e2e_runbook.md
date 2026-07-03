@@ -216,7 +216,7 @@ DATAFLOW_SDK_CONTAINER_IMAGE=us-central1-docker.pkg.dev/<project>/<repository>/p
 --sdk-container-image us-central1-docker.pkg.dev/<project>/<repository>/pronabec-dataflow-worker:<tag>
 ```
 
-`Dockerfile.dataflow` se basa en una imagen oficial Apache Beam SDK Python, instala `requirements.txt` e instala el proyecto con `pip install .` usando `pyproject.toml`.
+`Dockerfile.dataflow` se basa en una imagen oficial Apache Beam SDK Python, instala `requirements-dataflow-worker.txt` e instala el proyecto con `pip install .` usando `pyproject.toml`.
 
 Despues de cambiar transforms, dependencias o packaging de Dataflow, reconstruya la imagen worker antes de redeployar:
 
@@ -231,7 +231,7 @@ Troubleshooting:
 ModuleNotFoundError: No module named 'ftfy'
 ```
 
-Causa: el worker de Dataflow no esta usando la imagen worker correcta o la imagen no tiene `requirements.txt` instalado.
+Causa: el worker de Dataflow no esta usando la imagen worker correcta o la imagen no tiene `requirements-dataflow-worker.txt` instalado.
 
 Solucion: verificar `DATAFLOW_SDK_CONTAINER_IMAGE` en el Cloud Run Job, revisar `--sdk-container-image` en los argumentos del launcher, confirmar la imagen en Artifact Registry, reconstruir la imagen worker y redeployar Cloud Run Jobs.
 
@@ -269,7 +269,7 @@ Ejemplo de `dag_run.conf`:
 
 ## 10. Validacion final
 
-Si cambian modulos Python usados por launchers, reconstruya la imagen launcher. Si cambian transforms, dependencias o packaging de Dataflow, reconstruya la imagen worker. Si solo cambian DAG, configuracion o documentacion, suba los artefactos a Composer y actualice las variables Airflow.
+Si cambian modulos Python usados por launchers o `requirements.txt`, reconstruya la imagen launcher. Si cambian transforms, `requirements-dataflow-worker.txt` o packaging de Dataflow, reconstruya la imagen worker. Si solo cambian DAG, configuracion o documentacion, suba los artefactos a Composer y actualice las variables Airflow.
 
 Para ventanas de prueba controladas, Composer puede eliminarse y recrearse con los comandos oficiales del proyecto:
 

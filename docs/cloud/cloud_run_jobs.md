@@ -77,7 +77,7 @@ Los jobs `dataflow-*` son launchers: arrancan el pipeline Beam desde Cloud Run, 
 
 La service account del job Cloud Run necesita `roles/iam.serviceAccountUser` sobre `DATAFLOW_SERVICE_ACCOUNT`. La service account worker de Dataflow necesita permisos para Dataflow, GCS y BigQuery. No se debe depender de la Compute default service account.
 
-Los workers de Dataflow no heredan automaticamente el codigo ni las dependencias del launcher. Por eso los jobs Dataflow pasan `DATAFLOW_SDK_CONTAINER_IMAGE` y `--sdk-container-image`, apuntando a una imagen worker dedicada que instala `requirements.txt` y el paquete `pipelines`.
+Los workers de Dataflow no heredan automaticamente el codigo ni las dependencias del launcher. Por eso los jobs Dataflow pasan `DATAFLOW_SDK_CONTAINER_IMAGE` y `--sdk-container-image`, apuntando a una imagen worker dedicada que instala `requirements-dataflow-worker.txt` y el paquete `pipelines`.
 
 Si aparece `ModuleNotFoundError`, verifique que el job tenga `DATAFLOW_SDK_CONTAINER_IMAGE`, que sus argumentos incluyan `--sdk-container-image` y que la imagen worker haya sido reconstruida con `Dockerfile.dataflow`.
 
@@ -100,4 +100,4 @@ pronabec-finalize-dataset-job
 
 La plataforma usa una imagen launcher para Cloud Run Jobs y una imagen worker dedicada para Dataflow. El deploy script registra o actualiza los jobs con la imagen launcher, service account, bucket y variables base, variando el modulo Python o los argumentos del contenedor.
 
-Si cambian modulos Python usados por launchers, reconstruya la imagen launcher antes de redeployar Cloud Run Jobs. Si cambian transforms, dependencias o packaging de Dataflow, reconstruya la imagen worker y luego redeploye Cloud Run Jobs para propagar `DATAFLOW_SDK_CONTAINER_IMAGE`. Si solo cambian DAG, configuracion o documentos, basta con subir los artefactos de Composer y actualizar variables.
+Si cambian modulos Python usados por launchers o `requirements.txt`, reconstruya la imagen launcher antes de redeployar Cloud Run Jobs. Si cambian transforms, `requirements-dataflow-worker.txt` o packaging de Dataflow, reconstruya la imagen worker y luego redeploye Cloud Run Jobs para propagar `DATAFLOW_SDK_CONTAINER_IMAGE`. Si solo cambian DAG, configuracion o documentos, basta con subir los artefactos de Composer y actualizar variables.

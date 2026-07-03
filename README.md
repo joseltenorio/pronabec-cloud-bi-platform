@@ -223,9 +223,15 @@ La transformación Bronze a Silver se ejecuta mediante Apache Beam/Dataflow. Par
 Este modelo usa dos imagenes separadas:
 
 - imagen launcher Cloud Run: ejecuta los jobs batch y lanza Dataflow;
-- imagen worker Dataflow: se define en `Dockerfile.dataflow`, instala `requirements.txt`, instala el paquete `pipelines` mediante `pyproject.toml` y se pasa con `DATAFLOW_SDK_CONTAINER_IMAGE` / `--sdk-container-image`.
+- imagen worker Dataflow: se define en `Dockerfile.dataflow`, instala `requirements-dataflow-worker.txt`, instala el paquete `pipelines` mediante `pyproject.toml` y se pasa con `DATAFLOW_SDK_CONTAINER_IMAGE` / `--sdk-container-image`.
 
 Para cambios Python que afecten launchers, reconstruya la imagen launcher. Para cambios en transforms, dependencias o packaging de Dataflow, reconstruya la imagen worker. Para cambios solo de DAG, configuracion o documentacion, no reconstruya imagen salvo que aplique.
+
+Los contratos de dependencias quedan separados por runtime:
+
+- `requirements.txt`: imagen launcher Cloud Run y jobs batch generales;
+- `requirements-dataflow-worker.txt`: build de imagen worker Dataflow, nunca como archivo runtime de Dataflow;
+- `requirements-dev.txt`: desarrollo local, tests, lint y exploracion.
 
 Documentación técnica relacionada:
 
@@ -298,6 +304,7 @@ pronabec-cloud-bi-platform/
 ├── Dockerfile.dataflow
 ├── pyproject.toml
 ├── requirements.txt
+├── requirements-dataflow-worker.txt
 ├── requirements-dev.txt
 └── README.md
 ```

@@ -150,7 +150,13 @@ Los procesos de extracción utilizan configuración versionada para identificar 
 
 El pipeline Bronze a Silver utiliza parametros de runner, region, rutas temporales, staging, tabla destino, DLQ, resumen de procesamiento y `DATAFLOW_SDK_CONTAINER_IMAGE`. La configuracion cloud permite mantener consistencia entre ejecucion local controlada y ejecucion sobre infraestructura administrada.
 
-En DataflowRunner, `DATAFLOW_SDK_CONTAINER_IMAGE` es obligatorio. La imagen worker se construye con `Dockerfile.dataflow`, instala `requirements.txt` e instala el paquete `pipelines` mediante `pip install .` y `pyproject.toml`.
+En DataflowRunner, `DATAFLOW_SDK_CONTAINER_IMAGE` es obligatorio. La imagen worker se construye con `Dockerfile.dataflow`, instala `requirements-dataflow-worker.txt` e instala el paquete `pipelines` mediante `pip install .` y `pyproject.toml`.
+
+Los contratos de dependencias son:
+
+- `requirements.txt`: runtime de imagen launcher Cloud Run y jobs batch generales;
+- `requirements-dataflow-worker.txt`: dependencias instaladas durante build de la imagen worker Dataflow;
+- `requirements-dev.txt`: desarrollo local, tests, lint y exploracion.
 
 ### BigQuery
 

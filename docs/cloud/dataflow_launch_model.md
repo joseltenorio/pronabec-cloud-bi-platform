@@ -181,7 +181,9 @@ Argumentos principales:
 
 `DATAFLOW_SERVICE_ACCOUNT` define la service account worker usada por Dataflow. Los Cloud Run Jobs actuan como launchers y pueden usar una service account distinta; esa service account launcher necesita `roles/iam.serviceAccountUser` sobre `DATAFLOW_SERVICE_ACCOUNT`. Los workers Dataflow deben usar una service account dedicada con permisos Dataflow, GCS y BigQuery, y no la Compute default service account.
 
-`DATAFLOW_SDK_CONTAINER_IMAGE` apunta a la imagen worker dedicada. Esta imagen instala `requirements.txt` e instala el paquete `pipelines` mediante `pip install .` y `pyproject.toml`. Los workers de Dataflow no heredan automaticamente el filesystem ni las dependencias del launcher Cloud Run; por eso los jobs Dataflow pasan `--sdk-container-image`.
+`DATAFLOW_SDK_CONTAINER_IMAGE` apunta a la imagen worker dedicada. Esta imagen instala `requirements-dataflow-worker.txt` durante build e instala el paquete `pipelines` mediante `pip install .` y `pyproject.toml`. Los workers de Dataflow no heredan automaticamente el filesystem ni las dependencias del launcher Cloud Run; por eso los jobs Dataflow pasan `--sdk-container-image`.
+
+`requirements-dataflow-worker.txt` no se pasa a Dataflow como archivo runtime. Las dependencias del worker deben estar dentro de la imagen indicada por `DATAFLOW_SDK_CONTAINER_IMAGE`.
 
 ### Troubleshooting de imagen worker
 
@@ -196,7 +198,7 @@ verifique que:
 - El Cloud Run Job tiene `DATAFLOW_SDK_CONTAINER_IMAGE`.
 - Los argumentos del job incluyen `--sdk-container-image`.
 - La imagen worker existe en Artifact Registry.
-- La imagen worker fue reconstruida despues de cambiar `requirements.txt`, `pyproject.toml` o `pipelines/`.
+- La imagen worker fue reconstruida despues de cambiar `requirements-dataflow-worker.txt`, `pyproject.toml` o `pipelines/`.
 
 ## Rutas operativas
 
