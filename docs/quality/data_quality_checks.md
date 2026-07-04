@@ -119,6 +119,8 @@ Se puede añadir el flag `--fail-on-error` si se desea levantar una excepción y
 
 ### Excepciones documentadas
 
+La tabla `pronabec_colegios_elegibles` puede incluir el registro semántico `ESTUDIOS EN EL EXTRANJERO CONVALIDADOS POR MINEDU`. Este caso no representa un colegio nacional ubicado en una UGEL peruana, por lo que no bloquea el E2E por `ugel` faltante en el check crítico. La completitud territorial/descriptiva asociada sigue auditándose como `WARNING`.
+
 La tabla `pronabec_ubigeo_postulacion` puede incluir registros de postulación en el extranjero. Para los registros con `region` igual a `CHILE`, `COLOMBIA` o `MEXICO`, una `provincia` nula no se considera error porque el registro representa un país extranjero y no una provincia peruana incompleta. `region` y `distrito` siguen siendo obligatorios.
 
 ## 9. Relación con Gold y Power BI
