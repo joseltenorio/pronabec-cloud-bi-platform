@@ -132,9 +132,15 @@ SELECT
 FROM (
   SELECT COUNT(*) AS failed_cnt
   FROM `{project_id}.{silver_dataset}.pronabec_colegios_elegibles`
-  WHERE ugel IS NULL OR TRIM(ugel) = ''
-     OR institucion_educativa IS NULL OR TRIM(institucion_educativa) = ''
-     OR tipo_gestion_colegio IS NULL OR TRIM(tipo_gestion_colegio) = ''
+  WHERE (
+    ugel IS NULL OR TRIM(ugel) = ''
+    OR institucion_educativa IS NULL OR TRIM(institucion_educativa) = ''
+    OR tipo_gestion_colegio IS NULL OR TRIM(tipo_gestion_colegio) = ''
+  )
+  AND NOT REGEXP_CONTAINS(
+    UPPER(TRIM(COALESCE(institucion_educativa, ''))),
+    r'ESTUDIOS EN EL EXTRANJERO|CONVALIDADOS POR MINEDU'
+  )
 );
 
 -- Check: silver_pronabec_report_beca18_universitarios_carrera_anual_not_empty
