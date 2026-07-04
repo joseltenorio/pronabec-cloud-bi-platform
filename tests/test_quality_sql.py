@@ -3,6 +3,7 @@ Pruebas unitarias para validar las consultas de calidad de datos en SQL.
 Garantiza que las consultas sigan las reglas de diseño y estructura del repositorio.
 """
 
+import json
 import re
 from pathlib import Path
 
@@ -12,6 +13,56 @@ from pipelines.quality_checks import split_sql_queries
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SQL_FILE_PATH = PROJECT_ROOT / "sql" / "quality" / "data_quality_checks.sql"
 SILVER_SCHEMAS_DIR = PROJECT_ROOT / "config" / "schemas" / "silver"
+GOLD_DDL_PATH = PROJECT_ROOT / "sql" / "ddl" / "create_gold_views.sql"
+EXPECTED_QUALITY_CHECKS = 62
+QUALITY_OUTPUT_COLUMNS = {
+    "check_id",
+    "layer",
+    "table_name",
+    "severity",
+    "failed_rows",
+    "passed",
+    "details",
+}
+SQL_FUNCTIONS_AND_KEYWORDS = {
+    "AND",
+    "AS",
+    "BETWEEN",
+    "BY",
+    "CAST",
+    "CONCAT",
+    "COUNT",
+    "COUNTIF",
+    "DATE",
+    "ELSE",
+    "FALSE",
+    "FROM",
+    "GROUP",
+    "HAVING",
+    "IF",
+    "IN",
+    "IS",
+    "LENGTH",
+    "LIKE",
+    "NOT",
+    "NULL",
+    "OR",
+    "ORDER",
+    "SELECT",
+    "STRING",
+    "THEN",
+    "TRIM",
+    "TRUE",
+    "UPPER",
+    "WHEN",
+    "WHERE",
+}
+QUALITY_LOCAL_ALIASES = {
+    "cnt",
+    "dup_cnt",
+    "failed_cnt",
+    "total_cnt",
+}
 
 
 def _legacy_get_queries() -> list[str]:
@@ -47,11 +98,89 @@ def get_queries() -> list[str]:
     return split_sql_queries(content)
 
 
+def _clean_query(query: str) -> str:
+    return "\n".join(line for line in query.splitlines() if not line.strip().startswith("--"))
+
+
+def _extract_literal_alias(query: str, alias: str) -> str:
+    match = re.search(rf"'\s*([a-zA-Z0-9_-]+)\s*'\s+AS\s+{alias}\b", query, re.IGNORECASE)
+    assert match is not None, f"La consulta no define '{alias}' con la nomenclatura esperada."
+    return match.group(1)
+
+
+def _load_silver_schemas() -> dict[str, set[str]]:
+    schemas = {}
+    for path in SILVER_SCHEMAS_DIR.glob("*.json"):
+        table_name = path.name.replace("_schema.json", "")
+        fields = json.loads(path.read_text(encoding="utf-8"))
+        schemas[table_name] = {field["name"] for field in fields}
+    return schemas
+
+
+def _extract_gold_views() -> set[str]:
+    ddl = GOLD_DDL_PATH.read_text(encoding="utf-8")
+    return set(
+        re.findall(
+            r"CREATE\s+OR\s+REPLACE\s+VIEW\s+`?\{project_id\}\.\{gold_dataset\}\.([A-Za-z0-9_]+)`?",
+            ddl,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def _extract_target_refs(query: str) -> list[tuple[str, str]]:
+    return re.findall(
+        r"`\{project_id\}\.\{(silver|gold)_dataset\}\.([A-Za-z0-9_]+)`",
+        query,
+        flags=re.IGNORECASE,
+    )
+
+
+def _strip_literals_and_table_refs(sql: str) -> str:
+    without_strings = re.sub(r"'(?:[^']|'')*'", " ", sql)
+    return re.sub(r"`[^`]+`", " ", without_strings)
+
+
+def _extract_simple_column_references(query: str) -> set[str]:
+    """Extrae columnas obvias usadas en predicados y claves, evitando aliases de salida."""
+    clean_query = _strip_literals_and_table_refs(_clean_query(query))
+    clauses = []
+
+    for pattern in [
+        r"\bWHERE\b(?P<clause>.*?)(?:\)\s*$|\bGROUP\s+BY\b|\bHAVING\b)",
+        r"\bGROUP\s+BY\b(?P<clause>.*?)(?:\bHAVING\b|\)\s*$)",
+        r"\bCOUNTIF\s*\((?P<clause>.*?)\)",
+    ]:
+        clauses.extend(
+            match.group("clause")
+            for match in re.finditer(pattern, clean_query, re.IGNORECASE | re.DOTALL)
+        )
+
+    identifiers = set()
+    for clause in clauses:
+        identifiers.update(
+            identifier.lower()
+            for identifier in re.findall(r"\b[a-z_][a-z0-9_]*\b", clause, flags=re.IGNORECASE)
+        )
+
+    ignored = {word.lower() for word in SQL_FUNCTIONS_AND_KEYWORDS}
+    ignored.update(QUALITY_LOCAL_ALIASES)
+    ignored.update(QUALITY_OUTPUT_COLUMNS)
+    ignored.update({"float64", "int64"})
+    return {identifier for identifier in identifiers if identifier.lower() not in ignored}
+
+
 def test_sql_file_exists_and_is_not_empty():
     """Valida que el archivo de calidad de datos exista y no esté vacío."""
     assert SQL_FILE_PATH.exists(), f"El archivo {SQL_FILE_PATH} no existe."
     queries = get_queries()
     assert len(queries) > 0, "El archivo SQL no contiene consultas ejecutables."
+
+
+def test_quality_sql_parses_expected_number_of_checks():
+    queries = get_queries()
+
+    assert len(queries) == EXPECTED_QUALITY_CHECKS
 
 
 def test_sql_contains_required_placeholders():
@@ -242,3 +371,91 @@ def test_no_global_negative_mef_restriction():
                 # Verificar que no haya un filtro general ciego como "devengado < 0" o "pia < 0"
                 devengado_neg_check = re.search(r"\bdevengado\s*<\s*0", clean_query, re.IGNORECASE)
                 assert not devengado_neg_check, f"La consulta {i} para la tabla temporal '{table_name}' prohíbe devengado negativo globalmente, lo cual no es correcto para ajustes MEF."
+
+
+def test_checks_reference_existing_physical_targets():
+    silver_schemas = _load_silver_schemas()
+    gold_views = _extract_gold_views()
+
+    for index, query in enumerate(get_queries(), start=1):
+        clean_query = _clean_query(query)
+        check_id = _extract_literal_alias(clean_query, "check_id")
+        refs = _extract_target_refs(clean_query)
+
+        assert refs, f"El check {index} ({check_id}) no referencia una tabla o vista objetivo."
+        for dataset_kind, target_name in refs:
+            if dataset_kind.lower() == "silver":
+                assert target_name in silver_schemas, (
+                    f"El check {index} ({check_id}) referencia una tabla Silver inexistente: {target_name}"
+                )
+            elif dataset_kind.lower() == "gold":
+                assert target_name in gold_views, (
+                    f"El check {index} ({check_id}) referencia una vista Gold inexistente: {target_name}"
+                )
+
+
+def test_quality_sql_does_not_reference_legacy_colegios_columns():
+    content = SQL_FILE_PATH.read_text(encoding="utf-8")
+
+    assert "codigo_modular" not in content
+    assert re.search(r"\banexo\b", content, re.IGNORECASE) is None
+
+
+def test_pronabec_colegios_elegibles_nulls_uses_existing_schema_columns():
+    silver_schemas = _load_silver_schemas()
+    colegios_columns = silver_schemas["pronabec_colegios_elegibles"]
+    query = next(
+        query
+        for query in get_queries()
+        if "silver_pronabec_colegios_elegibles_nulls" in query
+    )
+
+    referenced_columns = _extract_simple_column_references(query)
+
+    assert referenced_columns
+    assert referenced_columns <= colegios_columns
+    assert {
+        "ugel",
+        "institucion_educativa",
+        "tipo_gestion_colegio",
+        "nivel_modalidad",
+        "forma_atencion",
+        "distrito",
+    } <= referenced_columns
+
+
+def test_silver_checks_use_declared_schema_columns_for_simple_predicates():
+    silver_schemas = _load_silver_schemas()
+
+    for index, query in enumerate(get_queries(), start=1):
+        clean_query = _clean_query(query)
+        check_id = _extract_literal_alias(clean_query, "check_id")
+        layer = _extract_literal_alias(clean_query, "layer")
+        table_name = _extract_literal_alias(clean_query, "table_name")
+
+        if layer != "silver":
+            continue
+
+        schema_columns = silver_schemas[table_name]
+        referenced_columns = _extract_simple_column_references(clean_query)
+        unknown_columns = sorted(referenced_columns - schema_columns)
+
+        assert not unknown_columns, (
+            f"El check {index} ({check_id}) referencia columnas no declaradas "
+            f"en config/schemas/silver/{table_name}_schema.json: {unknown_columns}"
+        )
+
+
+def test_gold_checks_reference_declared_gold_views_when_present():
+    gold_views = _extract_gold_views()
+
+    for index, query in enumerate(get_queries(), start=1):
+        clean_query = _clean_query(query)
+        check_id = _extract_literal_alias(clean_query, "check_id")
+        layer = _extract_literal_alias(clean_query, "layer")
+        table_name = _extract_literal_alias(clean_query, "table_name")
+
+        if layer == "gold":
+            assert table_name in gold_views, (
+                f"El check {index} ({check_id}) referencia una vista Gold no declarada: {table_name}"
+            )
