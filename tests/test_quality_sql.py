@@ -6,13 +6,15 @@ Garantiza que las consultas sigan las reglas de diseño y estructura del reposit
 import re
 from pathlib import Path
 
+from pipelines.quality_checks import split_sql_queries
+
 # Obtener la ruta raíz del proyecto
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SQL_FILE_PATH = PROJECT_ROOT / "sql" / "quality" / "data_quality_checks.sql"
 SILVER_SCHEMAS_DIR = PROJECT_ROOT / "config" / "schemas" / "silver"
 
 
-def get_queries() -> list[str]:
+def _legacy_get_queries() -> list[str]:
     """
     Lee el archivo SQL de calidad de datos y devuelve la lista de consultas
     divididas por punto y coma (;), filtrando comentarios y segmentos vacíos.
@@ -34,6 +36,15 @@ def get_queries() -> list[str]:
             queries.append(trimmed)
             
     return queries
+
+
+def get_queries() -> list[str]:
+    """Lee el SQL real usando el mismo splitter que ejecuta quality_checks.py."""
+    if not SQL_FILE_PATH.exists():
+        return []
+
+    content = SQL_FILE_PATH.read_text(encoding="utf-8")
+    return split_sql_queries(content)
 
 
 def test_sql_file_exists_and_is_not_empty():
@@ -105,6 +116,20 @@ def test_homogeneous_query_shape_and_metadata():
         assert re.search(r"AS\s+failed_rows", clean_query, re.IGNORECASE) is not None, f"El check '{check_id}' no define la columna 'failed_rows'."
         assert re.search(r"AS\s+passed", clean_query, re.IGNORECASE) is not None, f"El check '{check_id}' no define la columna 'passed'."
         assert re.search(r"AS\s+details", clean_query, re.IGNORECASE) is not None, f"El check '{check_id}' no define la columna 'details'."
+
+
+def test_real_quality_sql_has_no_invalid_fragments():
+    queries = get_queries()
+
+    assert queries
+    for index, query in enumerate(queries, start=1):
+        stripped = query.lstrip()
+        assert stripped.upper().startswith(("SELECT", "WITH")), (
+            f"La consulta {index} no inicia con SELECT/WITH: {stripped[:80]}"
+        )
+        assert not stripped.startswith(")"), (
+            f"La consulta {index} es un fragmento colgante: {stripped[:80]}"
+        )
 
 
 def test_checks_reference_existing_silver_tables():

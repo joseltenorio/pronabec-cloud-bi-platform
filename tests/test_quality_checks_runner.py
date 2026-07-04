@@ -7,12 +7,15 @@ de consultas, el manejo de excepciones y la persistencia en la tabla Audit utili
 from __future__ import annotations
 
 import re
+from pathlib import Path
 import pytest
 
 from pipelines.quality_checks import (
     deduce_source_metadata,
-    split_sql_queries,
+    expand_env_placeholders,
+    main,
     run_quality_checks,
+    split_sql_queries,
 )
 
 
@@ -157,6 +160,84 @@ def test_split_sql_queries():
     assert "check_2" in queries[1]
 
 
+def test_split_sql_queries_keeps_subquery_as_single_query():
+    sql = """
+    SELECT 'check_1' AS check_id
+    FROM (
+      SELECT COUNT(*) AS cnt
+      FROM `{project_id}.{silver_dataset}.table`
+    );
+    """
+
+    queries = split_sql_queries(sql)
+
+    assert len(queries) == 1
+    assert queries[0].count("FROM (") == 1
+    assert not queries[0].lstrip().startswith(")")
+
+
+def test_split_sql_queries_never_returns_dangling_closing_parenthesis():
+    sql = """
+    -- Comentario con punto y coma; no debe partir la query.
+    SELECT 'check_1' AS check_id FROM (SELECT 1 AS x);
+    """
+
+    queries = split_sql_queries(sql)
+
+    assert len(queries) == 1
+    assert all(not query.lstrip().startswith(")") for query in queries)
+
+
+def test_split_sql_queries_ignores_comments_and_empty_segments():
+    sql = """
+    -- Comentario inicial;
+    ;
+    /* Bloque comentado; tambien ignorado */
+    SELECT 'check_1' AS check_id;
+    -- comentario final;
+    ;
+    """
+
+    queries = split_sql_queries(sql)
+
+    assert queries == ["SELECT 'check_1' AS check_id"]
+
+
+def test_split_sql_queries_respects_semicolon_inside_strings():
+    sql = "SELECT 'texto; con punto y coma' AS details;"
+
+    queries = split_sql_queries(sql)
+
+    assert queries == ["SELECT 'texto; con punto y coma' AS details"]
+
+
+def test_split_sql_queries_rejects_unbalanced_parentheses():
+    with pytest.raises(ValueError, match="Unbalanced parentheses"):
+        split_sql_queries("SELECT * FROM (SELECT 1 AS x;")
+
+
+def test_split_sql_queries_rejects_non_select_fragment():
+    with pytest.raises(ValueError, match="Invalid quality check SQL fragment at index 1"):
+        split_sql_queries("INSERT INTO audit.table SELECT 1;")
+
+
+def test_real_quality_sql_splits_into_select_or_with_queries():
+    sql_path = Path("sql/quality/data_quality_checks.sql")
+    queries = split_sql_queries(sql_path.read_text(encoding="utf-8"))
+
+    assert queries
+    for query in queries:
+        normalized = query.lstrip().upper()
+        assert normalized.startswith(("SELECT", "WITH"))
+
+
+def test_real_quality_sql_does_not_generate_dangling_parenthesis_fragment():
+    sql_path = Path("sql/quality/data_quality_checks.sql")
+    queries = split_sql_queries(sql_path.read_text(encoding="utf-8"))
+
+    assert all(not query.lstrip().startswith(")") for query in queries)
+
+
 def test_runner_dry_run(tmp_path, monkeypatch):
     """Valida que el modo dry-run no instancie el cliente de BigQuery y complete con éxito."""
     # Crear archivo de checks temporal
@@ -184,6 +265,41 @@ def test_runner_dry_run(tmp_path, monkeypatch):
     )
 
     assert exit_code == 0
+
+
+def test_quality_checks_cli_requires_project_id(monkeypatch, capsys):
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "quality_checks.py",
+            "--silver-dataset",
+            "silver",
+            "--gold-dataset",
+            "gold",
+            "--audit-dataset",
+            "audit",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        main()
+
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 2
+    assert "the following arguments are required: --project-id" in captured.err
+
+
+def test_quality_checks_expands_pipeline_run_id_env_placeholder(monkeypatch):
+    monkeypatch.setenv("PIPELINE_RUN_ID", "manual_20260702")
+
+    assert expand_env_placeholders("${PIPELINE_RUN_ID}") == "manual_20260702"
+
+
+def test_quality_checks_rejects_missing_pipeline_run_id_env_placeholder(monkeypatch):
+    monkeypatch.delenv("PIPELINE_RUN_ID", raising=False)
+
+    with pytest.raises(ValueError, match="Variable de entorno requerida no definida: PIPELINE_RUN_ID"):
+        expand_env_placeholders("${PIPELINE_RUN_ID}")
 
 
 def test_runner_successful_execution(tmp_path, monkeypatch):
