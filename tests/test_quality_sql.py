@@ -401,27 +401,52 @@ def test_quality_sql_does_not_reference_legacy_colegios_columns():
     assert re.search(r"\banexo\b", content, re.IGNORECASE) is None
 
 
-def test_pronabec_colegios_elegibles_nulls_uses_existing_schema_columns():
+def test_pronabec_colegios_elegibles_checks_split_critical_and_completeness_fields():
     silver_schemas = _load_silver_schemas()
     colegios_columns = silver_schemas["pronabec_colegios_elegibles"]
-    query = next(
+    critical_query = next(
         query
         for query in get_queries()
         if "silver_pronabec_colegios_elegibles_nulls" in query
     )
+    completeness_query = next(
+        query
+        for query in get_queries()
+        if "silver_pronabec_colegios_elegibles_fields_format" in query
+    )
 
-    referenced_columns = _extract_simple_column_references(query)
+    critical_columns = _extract_simple_column_references(critical_query)
+    completeness_columns = _extract_simple_column_references(completeness_query)
 
-    assert referenced_columns
-    assert referenced_columns <= colegios_columns
+    assert _extract_literal_alias(critical_query, "severity") == "ERROR"
+    assert critical_columns <= colegios_columns
     assert {
         "ugel",
         "institucion_educativa",
         "tipo_gestion_colegio",
+    } <= critical_columns
+    assert "distrito" not in critical_columns
+
+    assert _extract_literal_alias(completeness_query, "severity") == "WARNING"
+    assert completeness_columns <= colegios_columns
+    assert {
         "nivel_modalidad",
         "forma_atencion",
         "distrito",
-    } <= referenced_columns
+    } <= completeness_columns
+
+
+def test_pronabec_ubigeo_postulacion_allows_known_foreign_province_nulls():
+    query = next(
+        query
+        for query in get_queries()
+        if "silver_pronabec_ubigeo_postulacion_fields_nulls" in query
+    )
+    normalized = " ".join(_clean_query(query).split()).upper()
+
+    assert _extract_literal_alias(query, "severity") == "ERROR"
+    assert "PROVINCIA IS NULL OR TRIM(PROVINCIA) = ''" in normalized
+    assert "NOT IN ('CHILE', 'COLOMBIA', 'MEXICO')" in normalized
 
 
 def test_silver_checks_use_declared_schema_columns_for_simple_predicates():

@@ -391,6 +391,107 @@ def test_runner_failed_check(tmp_path, monkeypatch):
     assert rows[0]["details"] == "Se encontraron 15 nulos"
 
 
+def test_runner_warning_failure_returns_zero_and_is_persisted(tmp_path, monkeypatch):
+    checks_file = tmp_path / "checks.sql"
+    checks_file.write_text(
+        "SELECT 'check_warning' AS check_id, 'silver' AS layer, 'pronabec_colegios_elegibles' AS table_name, 'WARNING' AS severity, 3 AS failed_rows, FALSE AS passed, '3 advertencias' AS details;",
+        encoding="utf-8",
+    )
+
+    mock_client = MockBigQueryClient()
+    mock_client.mock_rows_by_query["check_warning"] = [{
+        "check_id": "check_warning",
+        "layer": "silver",
+        "table_name": "pronabec_colegios_elegibles",
+        "severity": "WARNING",
+        "passed": False,
+        "failed_rows": 3,
+        "details": "3 advertencias",
+    }]
+    log_calls = []
+
+    def capture_log_event(logger, level, message, **fields):
+        log_calls.append((level, message, fields))
+
+    monkeypatch.setattr("google.cloud.bigquery.Client", lambda project: mock_client)
+    monkeypatch.setattr("pipelines.quality_checks.log_event", capture_log_event)
+
+    exit_code = run_quality_checks(
+        project_id="test-project",
+        silver_dataset="silver_ds",
+        gold_dataset="gold_ds",
+        audit_dataset="audit_ds",
+        checks_file=str(checks_file),
+        pipeline_run_id="run-warning",
+        dry_run=False,
+        fail_on_error=True,
+    )
+
+    assert exit_code == 0
+    assert len(mock_client.insert_calls) == 1
+    _, rows = mock_client.insert_calls[0]
+    assert rows[0]["check_id"] == "check_warning"
+    assert rows[0]["severity"] == "WARNING"
+    assert rows[0]["passed"] is False
+    assert any(level == "WARNING" and fields.get("check_id") == "check_warning" for level, _, fields in log_calls)
+
+
+def test_runner_persists_warning_and_error_but_returns_one_for_error(tmp_path, monkeypatch):
+    checks_file = tmp_path / "checks.sql"
+    checks_file.write_text(
+        "\n".join([
+            "SELECT 'check_warning' AS check_id, 'silver' AS layer, 'pronabec_colegios_elegibles' AS table_name, 'WARNING' AS severity, 3 AS failed_rows, FALSE AS passed, '3 advertencias' AS details;",
+            "SELECT 'check_error' AS check_id, 'silver' AS layer, 'pronabec_convocatorias' AS table_name, 'ERROR' AS severity, 1 AS failed_rows, FALSE AS passed, '1 error' AS details;",
+        ]),
+        encoding="utf-8",
+    )
+
+    mock_client = MockBigQueryClient()
+    mock_client.mock_rows_by_query["check_warning"] = [{
+        "check_id": "check_warning",
+        "layer": "silver",
+        "table_name": "pronabec_colegios_elegibles",
+        "severity": "WARNING",
+        "passed": False,
+        "failed_rows": 3,
+        "details": "3 advertencias",
+    }]
+    mock_client.mock_rows_by_query["check_error"] = [{
+        "check_id": "check_error",
+        "layer": "silver",
+        "table_name": "pronabec_convocatorias",
+        "severity": "ERROR",
+        "passed": False,
+        "failed_rows": 1,
+        "details": "1 error",
+    }]
+    log_calls = []
+
+    def capture_log_event(logger, level, message, **fields):
+        log_calls.append((level, message, fields))
+
+    monkeypatch.setattr("google.cloud.bigquery.Client", lambda project: mock_client)
+    monkeypatch.setattr("pipelines.quality_checks.log_event", capture_log_event)
+
+    exit_code = run_quality_checks(
+        project_id="test-project",
+        silver_dataset="silver_ds",
+        gold_dataset="gold_ds",
+        audit_dataset="audit_ds",
+        checks_file=str(checks_file),
+        pipeline_run_id="run-mixed",
+        dry_run=False,
+        fail_on_error=True,
+    )
+
+    assert exit_code == 1
+    assert len(mock_client.insert_calls) == 1
+    _, rows = mock_client.insert_calls[0]
+    assert {row["check_id"] for row in rows} == {"check_warning", "check_error"}
+    assert any(level == "WARNING" and fields.get("check_id") == "check_warning" for level, _, fields in log_calls)
+    assert any(level == "ERROR" and fields.get("check_id") == "check_error" for level, _, fields in log_calls)
+
+
 def test_runner_sql_exception_fail_on_error_false(tmp_path, monkeypatch):
     """Valida que si falla la query en BigQuery y fail_on_error=False, el runner no se detiene y registra el fallo en Audit."""
     checks_file = tmp_path / "checks.sql"
