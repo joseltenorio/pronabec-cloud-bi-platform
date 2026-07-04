@@ -39,7 +39,8 @@ El sistema de validación cubre los tres sistemas principales del proyecto:
 Las consultas versionadas en `sql/quality/data_quality_checks.sql` cubren las siguientes tipologías de reglas:
 
 * **Tablas No Vacías (`not empty`)**: Garantiza que los procesos de carga no hayan quedado en blanco.
-* **Nulos en Campos Críticos (`critical nulls`)**: Verifica que campos clave de negocio (ej. IDs, códigos modular, país de estudio) y metadatos técnicos (`source_system`, `extraction_date`, `pipeline_run_id`) estén presentes.
+* **Nulos en Campos Críticos (`critical nulls`)**: Verifica que campos clave de negocio (ej. IDs, UGEL, institución educativa, tipo de gestión, país de estudio) y metadatos técnicos (`source_system`, `extraction_date`, `pipeline_run_id`) estén presentes.
+* **Completitud no crítica (`completeness warnings`)**: Registra como `WARNING` brechas parciales de completitud provenientes de fuentes oficiales cuando no impiden el uso analítico base. En `pronabec_colegios_elegibles`, `distrito`, `nivel_modalidad` y `forma_atencion` se auditan como advertencia; los campos críticos `ugel`, `institucion_educativa` y `tipo_gestion_colegio` se mantienen como `ERROR`.
 * **Formatos de Texto (`schema-safe format`)**: Validaciones de estructura de cadenas de texto (ej. código de ubigeo no vacío y longitud apropiada).
 * **Rangos de Valores Válidos (`valid ranges`)**: Comprobación de año fiscal lógico (rango 2000-2050) y cantidades métricas no negativas en reportes analíticos de becarios.
 * **Consistencia de Campos Canónicos (`canonical consistency`)**: Si un campo de canonización (`carrera_estudio_canonical_match_method` o `universidad_canonical_match_method`) no es nulo, el valor canonizado correspondiente (`*_canonical`) no debe ser nulo.
@@ -112,9 +113,13 @@ Se puede añadir el flag `--fail-on-error` si se desea levantar una excepción y
 
 ## 8. Interpretación de Severidades
 
-* **`ERROR`**: Fallo crítico de negocio o integridad (ej. campos críticos nulos, tablas vacías, o inconsistencias de claves). Requiere intervención inmediata del equipo de ingeniería de datos.
-* **`WARNING`**: Advertencias operativas o lógicas no críticas (ej. códigos vacíos o inconsistencias de formatos menores). No detiene el flujo pero debe revisarse periódicamente.
+* **`ERROR`**: Fallo crítico de negocio o integridad (ej. campos críticos nulos, tablas vacías, o inconsistencias de claves). Requiere intervención inmediata del equipo de ingeniería de datos y hace que el runner retorne código de salida `1`.
+* **`WARNING`**: Advertencias operativas o lógicas no críticas (ej. completitud territorial/descriptiva parcial o inconsistencias de formatos menores). Se persisten en auditoría y se registran como warning, pero no detienen el flujo si no existen checks `ERROR` fallidos.
 * **`INFO`**: Checks informativos o de control general.
+
+### Excepciones documentadas
+
+La tabla `pronabec_ubigeo_postulacion` puede incluir registros de postulación en el extranjero. Para los registros con `region` igual a `CHILE`, `COLOMBIA` o `MEXICO`, una `provincia` nula no se considera error porque el registro representa un país extranjero y no una provincia peruana incompleta. `region` y `distrito` siguen siendo obligatorios.
 
 ## 9. Relación con Gold y Power BI
 
