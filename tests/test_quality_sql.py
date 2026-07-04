@@ -31,6 +31,7 @@ SQL_FUNCTIONS_AND_KEYWORDS = {
     "BY",
     "CAST",
     "CONCAT",
+    "COALESCE",
     "COUNT",
     "COUNTIF",
     "DATE",
@@ -48,6 +49,8 @@ SQL_FUNCTIONS_AND_KEYWORDS = {
     "NULL",
     "OR",
     "ORDER",
+    "R",
+    "REGEXP_CONTAINS",
     "SELECT",
     "STRING",
     "THEN",
@@ -426,6 +429,10 @@ def test_pronabec_colegios_elegibles_checks_split_critical_and_completeness_fiel
         "tipo_gestion_colegio",
     } <= critical_columns
     assert "distrito" not in critical_columns
+    normalized_critical_query = " ".join(_clean_query(critical_query).split()).upper()
+    assert "UGEL IS NULL OR TRIM(UGEL) = ''" in normalized_critical_query
+    assert "NOT REGEXP_CONTAINS" in normalized_critical_query
+    assert "ESTUDIOS EN EL EXTRANJERO|CONVALIDADOS POR MINEDU" in normalized_critical_query
 
     assert _extract_literal_alias(completeness_query, "severity") == "WARNING"
     assert completeness_columns <= colegios_columns
@@ -434,6 +441,23 @@ def test_pronabec_colegios_elegibles_checks_split_critical_and_completeness_fiel
         "forma_atencion",
         "distrito",
     } <= completeness_columns
+
+
+def test_pronabec_colegios_elegibles_critical_nulls_excludes_foreign_studies_only():
+    query = next(
+        query
+        for query in get_queries()
+        if "silver_pronabec_colegios_elegibles_nulls" in query
+    )
+    normalized = " ".join(_clean_query(query).split()).upper()
+
+    assert _extract_literal_alias(query, "severity") == "ERROR"
+    assert "UGEL IS NULL OR TRIM(UGEL) = ''" in normalized
+    assert "TIPO_GESTION_COLEGIO IS NULL OR TRIM(TIPO_GESTION_COLEGIO) = ''" in normalized
+    assert "INSTITUCION_EDUCATIVA IS NULL OR TRIM(INSTITUCION_EDUCATIVA) = ''" in normalized
+    assert "NOT REGEXP_CONTAINS" in normalized
+    assert "COALESCE(INSTITUCION_EDUCATIVA, '')" in normalized
+    assert "ESTUDIOS EN EL EXTRANJERO|CONVALIDADOS POR MINEDU" in normalized
 
 
 def test_pronabec_ubigeo_postulacion_allows_known_foreign_province_nulls():
