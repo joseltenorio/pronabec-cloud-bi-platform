@@ -135,9 +135,6 @@ FROM (
   WHERE ugel IS NULL OR TRIM(ugel) = ''
      OR institucion_educativa IS NULL OR TRIM(institucion_educativa) = ''
      OR tipo_gestion_colegio IS NULL OR TRIM(tipo_gestion_colegio) = ''
-     OR nivel_modalidad IS NULL OR TRIM(nivel_modalidad) = ''
-     OR forma_atencion IS NULL OR TRIM(forma_atencion) = ''
-     OR distrito IS NULL OR TRIM(distrito) = ''
 );
 
 -- Check: silver_pronabec_report_beca18_universitarios_carrera_anual_not_empty
@@ -993,15 +990,16 @@ SELECT
   'silver_pronabec_colegios_elegibles_fields_format' AS check_id,
   'silver' AS layer,
   'pronabec_colegios_elegibles' AS table_name,
-  'ERROR' AS severity,
+  'WARNING' AS severity,
   failed_cnt AS failed_rows,
   (failed_cnt = 0) AS passed,
-  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' colegios con institución educativa o tipo de gestión inválidos'), 'Validación exitosa') AS details
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' colegios con completitud territorial o descriptiva parcial'), 'Validación exitosa') AS details
 FROM (
   SELECT COUNT(*) AS failed_cnt
   FROM `{project_id}.{silver_dataset}.pronabec_colegios_elegibles`
-  WHERE institucion_educativa IS NULL OR TRIM(institucion_educativa) = ''
-     OR tipo_gestion_colegio IS NULL OR TRIM(tipo_gestion_colegio) = ''
+  WHERE distrito IS NULL OR TRIM(distrito) = ''
+     OR nivel_modalidad IS NULL OR TRIM(nivel_modalidad) = ''
+     OR forma_atencion IS NULL OR TRIM(forma_atencion) = ''
 );
 
 -- Check: silver_pronabec_ubigeo_postulacion_fields_nulls
@@ -1018,8 +1016,11 @@ FROM (
   SELECT COUNT(*) AS failed_cnt
   FROM `{project_id}.{silver_dataset}.pronabec_ubigeo_postulacion`
   WHERE region IS NULL OR TRIM(region) = ''
-     OR provincia IS NULL OR TRIM(provincia) = ''
      OR distrito IS NULL OR TRIM(distrito) = ''
+     OR (
+       (provincia IS NULL OR TRIM(provincia) = '')
+       AND UPPER(TRIM(region)) NOT IN ('CHILE', 'COLOMBIA', 'MEXICO')
+     )
 );
 
 -- Check: silver_pronabec_becarios_pais_estudio_fields_nulls

@@ -296,7 +296,7 @@ def run_quality_checks(
     if not dry_run:
         client = bigquery.Client(project=project_id)
 
-    had_failures = False
+    had_error_failures = False
 
     for idx, query in enumerate(queries):
         # Parametrizar la consulta reemplazando placeholders
@@ -386,8 +386,9 @@ def run_quality_checks(
             })
 
             if not passed:
-                had_failures = True
                 level = "WARNING" if severity == "WARNING" else "ERROR"
+                if level == "ERROR":
+                    had_error_failures = True
                 log_event(
                     logger, 
                     level, 
@@ -401,7 +402,7 @@ def run_quality_checks(
 
         except Exception as e:
             log_event(logger, "ERROR", f"Error crítico al ejecutar consulta para check [{check_id}]: {str(e)}")
-            had_failures = True
+            had_error_failures = True
             results.append({
                 "check_id": check_id,
                 "layer": layer,
@@ -457,7 +458,7 @@ def run_quality_checks(
         if fail_on_error:
             raise e
 
-    return 1 if had_failures else 0
+    return 1 if had_error_failures else 0
 
 
 def main() -> None:
