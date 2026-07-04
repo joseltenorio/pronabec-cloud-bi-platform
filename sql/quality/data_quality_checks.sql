@@ -128,11 +128,16 @@ SELECT
   'ERROR' AS severity,
   failed_cnt AS failed_rows,
   (failed_cnt = 0) AS passed,
-  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' colegios con código modular o de anexo nulos'), 'Validación exitosa') AS details
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' colegios con campos críticos nulos o vacíos'), 'Validación exitosa') AS details
 FROM (
   SELECT COUNT(*) AS failed_cnt
   FROM `{project_id}.{silver_dataset}.pronabec_colegios_elegibles`
-  WHERE codigo_modular IS NULL OR anexo IS NULL
+  WHERE ugel IS NULL OR TRIM(ugel) = ''
+     OR institucion_educativa IS NULL OR TRIM(institucion_educativa) = ''
+     OR tipo_gestion_colegio IS NULL OR TRIM(tipo_gestion_colegio) = ''
+     OR nivel_modalidad IS NULL OR TRIM(nivel_modalidad) = ''
+     OR forma_atencion IS NULL OR TRIM(forma_atencion) = ''
+     OR distrito IS NULL OR TRIM(distrito) = ''
 );
 
 -- Check: silver_pronabec_report_beca18_universitarios_carrera_anual_not_empty
