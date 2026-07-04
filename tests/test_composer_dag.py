@@ -13,6 +13,8 @@ sys.modules["airflow.models.param"] = MagicMock()
 sys.modules["airflow.operators"] = MagicMock()
 sys.modules["airflow.operators.bash"] = MagicMock()
 sys.modules["airflow.operators.empty"] = MagicMock()
+sys.modules["airflow.utils"] = MagicMock()
+sys.modules["airflow.utils.task_group"] = MagicMock()
 
 import dags.pronabec_medallion_batch_dag as dag_mod  # noqa: E402
 
@@ -113,6 +115,7 @@ def test_dag_schedule_is_weekly_without_catchup() -> None:
 
     assert 'schedule_interval=ORCHESTRATION_CONFIG["dag"]["schedule"]' in content
     assert "catchup=False" in content
+    assert "max_active_tasks=8" in content
 
 
 def test_composer_upload_script_syncs_support_files() -> None:
@@ -136,9 +139,16 @@ def test_dag_contains_bronze_manifest_validation_gate() -> None:
 def test_bronze_manifest_validation_runs_after_bronze_tasks() -> None:
     content = _read_dag_source()
 
-    assert "finalize_task >> validate_bronze_manifests" in content
-    assert "extract_mef >> validate_bronze_manifests" in content
-    assert "stage_task >> validate_bronze_manifests" in content
+    assert 'TaskGroup(group_id="pronabec_api_bronze")' in content
+    assert 'TaskGroup(group_id="mef_bronze")' in content
+    assert 'TaskGroup(group_id="pronabec_reports_bronze")' in content
+    assert "discover_pronabec_datasets >> build_pronabec_extraction_plan >> run_pronabec_extraction_plan" in content
+    assert "run_pronabec_extraction_plan >> pronabec_finalize_tasks" in content
+    assert "bronze_parallel = [pronabec_api_bronze, mef_bronze, pronabec_reports_bronze]" in content
+    assert "init_run >> bronze_parallel" in content
+    assert "bronze_parallel >> validate_bronze_manifests" in content
+    assert "extract_mef >> validate_bronze_manifests" not in content
+    assert "stage_task >> validate_bronze_manifests" not in content
 
 
 def test_bronze_manifest_validation_runs_before_silver_tasks() -> None:

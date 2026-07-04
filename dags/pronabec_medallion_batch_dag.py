@@ -7,6 +7,7 @@ from airflow import DAG
 from airflow.models.param import Param
 from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
+from airflow.utils.task_group import TaskGroup
 
 from pipelines.common.orchestration_config import (
     build_bq_table_ref,
@@ -219,6 +220,7 @@ with DAG(
     schedule_interval=ORCHESTRATION_CONFIG["dag"]["schedule"],
     catchup=False,
     max_active_runs=ORCHESTRATION_CONFIG["dag"]["max_active_runs"],
+    max_active_tasks=8,
     tags=["pronabec", "medallion", "batch", "cloud-run", "dataflow", "composer"],
     params={
         "extraction_date": Param(
@@ -244,70 +246,75 @@ with DAG(
 ) as dag:
     init_run = EmptyOperator(task_id="init_run")
 
-    discover_pronabec_datasets = BashOperator(
-        task_id="discover_pronabec_datasets",
-        bash_command=cloud_run_execute_command(
-            job_name=PRONABEC_DISCOVERY_JOB,
-            enabled_expression=RUN_PRONABEC_DISCOVERY,
-        ),
-    )
-
-    build_pronabec_extraction_plan = BashOperator(
-        task_id="build_pronabec_extraction_plan",
-        bash_command=cloud_run_execute_command(
-            job_name=PRONABEC_BUILD_PLAN_JOB,
-            enabled_expression=RUN_PRONABEC_BUILD_PLAN,
-        ),
-    )
-
-    pronabec_finalize_tasks = []
-    pronabec_finalize_task_by_dataset = {}
-    for policy in PRONABEC_EXTRACTION_POLICIES:
-        source_dataset = policy.source_dataset
-        finalize_task = BashOperator(
-            task_id=f"finalize_pronabec_{source_dataset}",
+    with TaskGroup(group_id="pronabec_api_bronze") as pronabec_api_bronze:
+        discover_pronabec_datasets = BashOperator(
+            task_id="discover_pronabec_datasets",
             bash_command=cloud_run_execute_command(
-                job_name=PRONABEC_FINALIZE_DATASET_JOB,
-                enabled_expression=RUN_PRONABEC_FINALIZE,
-                extra_env_vars={
-                    "SOURCE_DATASET": source_dataset,
-                },
+                job_name=PRONABEC_DISCOVERY_JOB,
+                enabled_expression=RUN_PRONABEC_DISCOVERY,
             ),
         )
-        pronabec_finalize_task_by_dataset[source_dataset] = finalize_task
-        pronabec_finalize_tasks.append(finalize_task)
 
-    run_pronabec_extraction_plan = BashOperator(
-        task_id="run_pronabec_extraction_plan",
-        bash_command=cloud_run_execute_command(
-            job_name=PRONABEC_RUN_PLAN_JOB,
-            enabled_expression=RUN_PRONABEC_PLAN_EXECUTION,
-        ),
-    )
-
-    extract_mef = BashOperator(
-        task_id="extract_mef",
-        bash_command=cloud_run_execute_command(
-            job_name=MEF_EXTRACT_JOB,
-            enabled_expression=RUN_MEF,
-        ),
-    )
-
-    report_stage_tasks = []
-    for group in REPORT_GROUPS:
-        source_subset = group["source_subset"]
-        report_stage_tasks.append(
-            BashOperator(
-                task_id=f"stage_pronabec_reports_{source_subset}",
-                bash_command=cloud_run_execute_command(
-                    job_name=PRONABEC_REPORTS_STAGE_JOB,
-                    enabled_expression=RUN_PRONABEC_REPORTS_STAGING,
-                    extra_env_vars={
-                        "SOURCE_SUBSET": source_subset,
-                    },
-                ),
-            )
+        build_pronabec_extraction_plan = BashOperator(
+            task_id="build_pronabec_extraction_plan",
+            bash_command=cloud_run_execute_command(
+                job_name=PRONABEC_BUILD_PLAN_JOB,
+                enabled_expression=RUN_PRONABEC_BUILD_PLAN,
+            ),
         )
+
+        run_pronabec_extraction_plan = BashOperator(
+            task_id="run_pronabec_extraction_plan",
+            bash_command=cloud_run_execute_command(
+                job_name=PRONABEC_RUN_PLAN_JOB,
+                enabled_expression=RUN_PRONABEC_PLAN_EXECUTION,
+            ),
+        )
+
+        pronabec_finalize_tasks = []
+        for policy in PRONABEC_EXTRACTION_POLICIES:
+            source_dataset = policy.source_dataset
+            pronabec_finalize_tasks.append(
+                BashOperator(
+                    task_id=f"finalize_pronabec_{source_dataset}",
+                    bash_command=cloud_run_execute_command(
+                        job_name=PRONABEC_FINALIZE_DATASET_JOB,
+                        enabled_expression=RUN_PRONABEC_FINALIZE,
+                        extra_env_vars={
+                            "SOURCE_DATASET": source_dataset,
+                        },
+                    ),
+                )
+            )
+
+        discover_pronabec_datasets >> build_pronabec_extraction_plan >> run_pronabec_extraction_plan
+        run_pronabec_extraction_plan >> pronabec_finalize_tasks
+
+    with TaskGroup(group_id="mef_bronze") as mef_bronze:
+        extract_mef = BashOperator(
+            task_id="extract_mef",
+            bash_command=cloud_run_execute_command(
+                job_name=MEF_EXTRACT_JOB,
+                enabled_expression=RUN_MEF,
+            ),
+        )
+
+    with TaskGroup(group_id="pronabec_reports_bronze") as pronabec_reports_bronze:
+        report_stage_tasks = []
+        for group in REPORT_GROUPS:
+            source_subset = group["source_subset"]
+            report_stage_tasks.append(
+                BashOperator(
+                    task_id=f"stage_pronabec_reports_{source_subset}",
+                    bash_command=cloud_run_execute_command(
+                        job_name=PRONABEC_REPORTS_STAGE_JOB,
+                        enabled_expression=RUN_PRONABEC_REPORTS_STAGING,
+                        extra_env_vars={
+                            "SOURCE_SUBSET": source_subset,
+                        },
+                    ),
+                )
+            )
 
     validate_bronze_manifests = BashOperator(
         task_id="validate_bronze_manifests",
@@ -411,16 +418,9 @@ with DAG(
 
     finish_run = EmptyOperator(task_id="finish_run")
 
-    init_run >> discover_pronabec_datasets >> build_pronabec_extraction_plan >> run_pronabec_extraction_plan
-    for source_dataset, finalize_task in pronabec_finalize_task_by_dataset.items():
-        run_pronabec_extraction_plan >> finalize_task
-        finalize_task >> validate_bronze_manifests
-
-    init_run >> extract_mef
-    init_run >> report_stage_tasks
-    extract_mef >> validate_bronze_manifests
-    for stage_task in report_stage_tasks:
-        stage_task >> validate_bronze_manifests
+    bronze_parallel = [pronabec_api_bronze, mef_bronze, pronabec_reports_bronze]
+    init_run >> bronze_parallel
+    bronze_parallel >> validate_bronze_manifests
 
     validate_bronze_manifests >> pronabec_api_tasks
     validate_bronze_manifests >> mef_tasks
