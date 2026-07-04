@@ -9,6 +9,7 @@ la tabla de auditoría correspondiente. Soporta un modo dry-run para validación
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -21,6 +22,7 @@ from pipelines.common.logging import log_event, setup_structured_logger
 
 # Configuración del logger estructurado
 logger = setup_structured_logger("quality_checks")
+ENV_PLACEHOLDER_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
 def deduce_source_metadata(table_name: str) -> tuple[str, str]:
@@ -55,7 +57,22 @@ def deduce_source_metadata(table_name: str) -> tuple[str, str]:
     return "unknown", "unknown"
 
 
-def split_sql_queries(sql_content: str) -> list[str]:
+def expand_env_placeholders(value: str | None) -> str | None:
+    """Expand ${VAR} placeholders in Cloud Run job args before execution."""
+    if value is None:
+        return None
+
+    def replace(match: re.Match[str]) -> str:
+        env_name = match.group(1)
+        env_value = os.getenv(env_name)
+        if env_value is None:
+            raise ValueError(f"Variable de entorno requerida no definida: {env_name}")
+        return env_value
+
+    return ENV_PLACEHOLDER_PATTERN.sub(replace, value)
+
+
+def _legacy_split_sql_queries(sql_content: str) -> list[str]:
     """
     Divide el contenido de un archivo SQL en consultas individuales usando punto y coma (;).
     Ignora líneas comentadas enteras y bloques vacíos.
@@ -83,6 +100,138 @@ def split_sql_queries(sql_content: str) -> list[str]:
             queries.append(trimmed)
             
     return queries
+
+
+def split_sql_queries(sql_content: str) -> list[str]:
+    """
+    Divide SQL de calidad en consultas ejecutables.
+
+    El splitter respeta literales de texto, identificadores con backticks,
+    comentarios y parentesis. Solo divide por punto y coma cuando el parser
+    esta en nivel superior, evitando fragmentos sueltos como ")".
+    """
+    queries: list[str] = []
+    current: list[str] = []
+    paren_depth = 0
+    in_single_quote = False
+    in_backtick = False
+    in_line_comment = False
+    in_block_comment = False
+    index = 0
+
+    while index < len(sql_content):
+        char = sql_content[index]
+        next_char = sql_content[index + 1] if index + 1 < len(sql_content) else ""
+
+        if in_line_comment:
+            if char == "\n":
+                in_line_comment = False
+                current.append(char)
+            index += 1
+            continue
+
+        if in_block_comment:
+            if char == "*" and next_char == "/":
+                in_block_comment = False
+                index += 2
+                continue
+            if char == "\n":
+                current.append(char)
+            index += 1
+            continue
+
+        if in_single_quote:
+            current.append(char)
+            if char == "'" and next_char == "'":
+                current.append(next_char)
+                index += 2
+                continue
+            if char == "'":
+                in_single_quote = False
+            index += 1
+            continue
+
+        if in_backtick:
+            current.append(char)
+            if char == "`":
+                in_backtick = False
+            index += 1
+            continue
+
+        if char == "-" and next_char == "-":
+            in_line_comment = True
+            index += 2
+            continue
+
+        if char == "/" and next_char == "*":
+            in_block_comment = True
+            index += 2
+            continue
+
+        if char == "'":
+            in_single_quote = True
+            current.append(char)
+            index += 1
+            continue
+
+        if char == "`":
+            in_backtick = True
+            current.append(char)
+            index += 1
+            continue
+
+        if char == "(":
+            paren_depth += 1
+            current.append(char)
+            index += 1
+            continue
+
+        if char == ")":
+            paren_depth -= 1
+            if paren_depth < 0:
+                preview = "".join(current + [char]).strip().replace("\n", " ")[:160]
+                raise ValueError(f"Unbalanced parentheses in quality check SQL near: {preview}")
+            current.append(char)
+            index += 1
+            continue
+
+        if char == ";" and paren_depth == 0:
+            _append_quality_query_fragment(queries, "".join(current))
+            current = []
+            index += 1
+            continue
+
+        current.append(char)
+        index += 1
+
+    if in_single_quote:
+        raise ValueError("Unclosed string literal in quality check SQL.")
+    if in_backtick:
+        raise ValueError("Unclosed backtick identifier in quality check SQL.")
+    if in_block_comment:
+        raise ValueError("Unclosed block comment in quality check SQL.")
+    if paren_depth != 0:
+        raise ValueError("Unbalanced parentheses in quality check SQL.")
+
+    _append_quality_query_fragment(queries, "".join(current))
+    return queries
+
+
+def _append_quality_query_fragment(queries: list[str], fragment: str) -> None:
+    trimmed = fragment.strip()
+    if not trimmed:
+        return
+
+    if not any(char.isalnum() for char in trimmed):
+        return
+
+    if not re.match(r"^(SELECT|WITH)\b", trimmed, flags=re.IGNORECASE):
+        preview = trimmed.replace("\n", " ")[:160]
+        raise ValueError(
+            f"Invalid quality check SQL fragment at index {len(queries) + 1}: {preview}"
+        )
+
+    queries.append(trimmed)
 
 
 def run_quality_checks(
@@ -358,6 +507,7 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+    pipeline_run_id = expand_env_placeholders(args.pipeline_run_id)
 
     exit_code = run_quality_checks(
         project_id=args.project_id,
@@ -365,7 +515,7 @@ def main() -> None:
         gold_dataset=args.gold_dataset,
         audit_dataset=args.audit_dataset,
         checks_file=args.checks_file,
-        pipeline_run_id=args.pipeline_run_id,
+        pipeline_run_id=pipeline_run_id or "",
         dry_run=args.dry_run,
         fail_on_error=args.fail_on_error
     )
