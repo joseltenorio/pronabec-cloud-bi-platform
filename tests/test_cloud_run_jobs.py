@@ -333,6 +333,45 @@ def test_dataflow_jobs_package_pipeline_modules_for_workers():
     assert "--requirements" + "-file" not in content
 
 
+def test_quality_checks_job_has_required_cli_arguments():
+    content = _read_deploy_script()
+    quality_section = content[
+        content.index("-JobName $QualityJobName"):
+        content.index("Write-Host \"Cloud Run Jobs configurados correctamente.\"")
+    ]
+
+    required_args = [
+        '"-m"',
+        '"pipelines.quality_checks"',
+        '"--project-id"',
+        "$ProjectId",
+        '"--silver-dataset"',
+        "$SilverDataset",
+        '"--gold-dataset"',
+        "$GoldDataset",
+        '"--audit-dataset"',
+        "$AuditDataset",
+        '"--pipeline-run-id"',
+        '"`${PIPELINE_RUN_ID}"',
+        '"--fail-on-error"',
+    ]
+
+    for required_arg in required_args:
+        assert required_arg in quality_section
+
+
+def test_quality_checks_job_cannot_be_deployed_without_project_id_arg():
+    content = _read_deploy_script()
+    quality_section = content[
+        content.index("-JobName $QualityJobName"):
+        content.index("Write-Host \"Cloud Run Jobs configurados correctamente.\"")
+    ]
+
+    assert "pipelines.quality_checks" in quality_section
+    assert '"--project-id"' in quality_section
+    assert quality_section.index('"--project-id"') < quality_section.index("$ProjectId")
+
+
 def test_non_dataflow_jobs_do_not_receive_sdk_container_arg():
     content = _read_deploy_script()
 
