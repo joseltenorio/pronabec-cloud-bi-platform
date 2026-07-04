@@ -34,7 +34,6 @@ param(
     [string]$PronabecDiscoveryJobName = $(if ($env:PRONABEC_DISCOVERY_JOB_NAME) { $env:PRONABEC_DISCOVERY_JOB_NAME } else { "pronabec-discovery-job" }),
     [string]$PronabecBuildPlanJobName = $(if ($env:PRONABEC_BUILD_PLAN_JOB_NAME) { $env:PRONABEC_BUILD_PLAN_JOB_NAME } else { "pronabec-build-plan-job" }),
     [string]$PronabecRunPlanJobName = $(if ($env:PRONABEC_RUN_PLAN_JOB_NAME) { $env:PRONABEC_RUN_PLAN_JOB_NAME } else { "pronabec-run-plan-job" }),
-    [string]$PronabecExtractChunkJobName = $(if ($env:PRONABEC_EXTRACT_CHUNK_JOB_NAME) { $env:PRONABEC_EXTRACT_CHUNK_JOB_NAME } else { "pronabec-extract-chunk-job" }),
     [string]$PronabecFinalizeDatasetJobName = $(if ($env:PRONABEC_FINALIZE_DATASET_JOB_NAME) { $env:PRONABEC_FINALIZE_DATASET_JOB_NAME } else { "pronabec-finalize-dataset-job" }),
 
     [string]$PronabecReportsLandingPrefix = $(if ($env:PRONABEC_REPORTS_LANDING_PREFIX) { $env:PRONABEC_REPORTS_LANDING_PREFIX } else { "landing/pronabec_reports" }),
@@ -299,17 +298,6 @@ Upsert-CloudRunJob `
     -ContainerArgs @(
         "-m",
         "pipelines.run_pronabec_extraction_plan"
-    )
-
-Upsert-CloudRunJob `
-    -JobName $PronabecExtractChunkJobName `
-    -Description "Extraccion particionada PRONABEC hacia Bronze work" `
-    -SetEnvVars @(
-        "OUTPUT_MODE=chunk"
-    ) `
-    -ContainerArgs @(
-        "-m",
-        "pipelines.extract_pronabec"
     )
 
 Upsert-CloudRunJob `

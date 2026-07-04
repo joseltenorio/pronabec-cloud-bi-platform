@@ -35,7 +35,6 @@ def test_configure_airflow_variables_sets_job_names():
         "pronabec_discovery_job_name",
         "pronabec_build_plan_job_name",
         "pronabec_run_plan_job_name",
-        "pronabec_extract_chunk_job_name",
         "pronabec_finalize_dataset_job_name",
         "mef_extract_job_name",
         "pronabec_reports_stage_job_name",
@@ -62,6 +61,20 @@ def test_configure_airflow_variables_sets_job_names():
 
     for variable in required_variables:
         assert variable in content
+
+
+def test_configure_airflow_variables_omits_legacy_pronabec_jobs():
+    content = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    forbidden_variables = [
+        "pronabec_" + "extract_job_name",
+        "pronabec_" + "extract_chunk_job_name",
+        "PRONABEC_" + "EXTRACT_JOB_NAME",
+        "PRONABEC_" + "EXTRACT_CHUNK_JOB_NAME",
+    ]
+
+    for variable in forbidden_variables:
+        assert variable not in content
 
 
 def test_configure_airflow_variables_checks_gcloud_exit_code():

@@ -155,18 +155,16 @@ def test_dag_exposes_bronze_manifest_validation_param() -> None:
     assert '"run_bronze_manifest_validation": Param(default=True, type="boolean")' in content
 
 
-def test_dag_contains_chunked_pronabec_job_refs() -> None:
+def test_dag_contains_plan_driven_pronabec_job_refs() -> None:
     content = _read_dag_source()
 
     assert "PRONABEC_DISCOVERY_JOB" in content
     assert "PRONABEC_BUILD_PLAN_JOB" in content
     assert "PRONABEC_RUN_PLAN_JOB" in content
-    assert "PRONABEC_EXTRACT_CHUNK_JOB" in content
     assert "PRONABEC_FINALIZE_DATASET_JOB" in content
     assert "pronabec-discovery-job" in content
     assert "pronabec-build-plan-job" in content
     assert "pronabec-run-plan-job" in content
-    assert "pronabec-extract-chunk-job" in content
     assert "pronabec-finalize-dataset-job" in content
 
 
@@ -200,11 +198,10 @@ def test_dag_uses_pronabec_flags_for_chunked_tasks() -> None:
     assert "RUN_PRONABEC_DISCOVERY" in content
     assert "RUN_PRONABEC_BUILD_PLAN" in content
     assert "RUN_PRONABEC_PLAN_EXECUTION" in content
-    assert "RUN_PRONABEC_CHUNK_EXTRACTION" in content
     assert "RUN_PRONABEC_FINALIZE" in content
     assert "dag_run.conf.get('run_pronabec', true) and dag_run.conf.get('run_pronabec_discovery', true)" in content
-    assert "dag_run.conf.get('run_pronabec_plan_execution', dag_run.conf.get('run_pronabec_chunk_extraction', true))" in content
-    assert '"run_pronabec_chunk_extraction": Param(default=True, type="boolean")' in content
+    assert "dag_run.conf.get('run_pronabec_plan_execution', true)" in content
+    assert "run_pronabec_" + "chunk_extraction" not in content
     assert '"run_pronabec_plan_execution": Param(default=True, type="boolean")' in content
 
 

@@ -101,7 +101,6 @@ Los jobs relevantes para observabilidad son:
 pronabec-discovery-job
 pronabec-build-plan-job
 pronabec-run-plan-job
-pronabec-extract-chunk-job
 pronabec-finalize-dataset-job
 mef-extract-job
 pronabec-stage-reports-job

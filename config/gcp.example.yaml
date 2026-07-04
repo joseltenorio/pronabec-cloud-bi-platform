@@ -46,11 +46,6 @@ cloud_run_jobs:
       command:
         - -m
         - pipelines.run_pronabec_extraction_plan
-    pronabec_extract_chunk:
-      name: pronabec-extract-chunk-job
-      command:
-        - -m
-        - pipelines.extract_pronabec
     pronabec_finalize_dataset:
       name: pronabec-finalize-dataset-job
       command:

@@ -34,10 +34,9 @@ Los jobs nuevos de PRONABEC particionado son:
 - `pronabec-discovery-job`
 - `pronabec-build-plan-job`
 - `pronabec-run-plan-job`
-- `pronabec-extract-chunk-job`
 - `pronabec-finalize-dataset-job`
 
-`pronabec-extract-chunk-job` se mantiene solo para debug manual o reproceso puntual de chunks aislados. El flujo principal usa `pronabec-run-plan-job`.
+La unica ruta soportada para PRONABEC API Bronze es plan-driven: discovery -> build-plan -> run-plan -> finalize. Para reprocesar PRONABEC API, reejecute ese flujo con la misma o una nueva combinacion de `BRONZE_EXTRACTION_DATE` y `PIPELINE_RUN_ID`.
 
 ## 4. Composer
 
@@ -90,16 +89,6 @@ gcloud run jobs execute pronabec-run-plan-job `
   --region="$CLOUD_RUN_REGION" `
   --project="$GCP_PROJECT_ID" `
   --update-env-vars="BRONZE_EXTRACTION_DATE=2026-06-29,PIPELINE_RUN_ID=manual_20260629" `
-  --wait
-```
-
-### Extract chunk aislado
-
-```powershell
-gcloud run jobs execute pronabec-extract-chunk-job `
-  --region="$CLOUD_RUN_REGION" `
-  --project="$GCP_PROJECT_ID" `
-  --update-env-vars="BRONZE_EXTRACTION_DATE=2026-06-29,PIPELINE_RUN_ID=manual_20260629,SOURCE_DATASET=convocatorias_carrera_sede,PAGE_START=1,PAGE_END=10,OUTPUT_MODE=chunk" `
   --wait
 ```
 
@@ -284,8 +273,6 @@ Ejemplo de `dag_run.conf`:
   "run_quality": true
 }
 ```
-
-`run_pronabec_chunk_extraction` queda como alias de compatibilidad para `run_pronabec_plan_execution`.
 
 ## 10. Validacion final
 

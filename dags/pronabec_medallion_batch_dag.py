@@ -95,10 +95,6 @@ PRONABEC_RUN_PLAN_JOB = airflow_var_template(
     resolve_airflow_var_name(ORCHESTRATION_CONFIG, "pronabec_run_plan_job_name_var"),
     "pronabec-run-plan-job",
 )
-PRONABEC_EXTRACT_CHUNK_JOB = airflow_var_template(
-    resolve_airflow_var_name(ORCHESTRATION_CONFIG, "pronabec_extract_chunk_job_name_var"),
-    "pronabec-extract-chunk-job",
-)
 PRONABEC_FINALIZE_DATASET_JOB = airflow_var_template(
     resolve_airflow_var_name(ORCHESTRATION_CONFIG, "pronabec_finalize_dataset_job_name_var"),
     "pronabec-finalize-dataset-job",
@@ -139,8 +135,7 @@ EXTRACTION_DATE = "{{ dag_run.conf.get('extraction_date') or ds }}"
 RUN_PRONABEC = "{{ dag_run.conf.get('run_pronabec', true) }}"
 RUN_PRONABEC_DISCOVERY = "{{ dag_run.conf.get('run_pronabec', true) and dag_run.conf.get('run_pronabec_discovery', true) }}"
 RUN_PRONABEC_BUILD_PLAN = "{{ dag_run.conf.get('run_pronabec', true) and dag_run.conf.get('run_pronabec_build_plan', true) }}"
-RUN_PRONABEC_PLAN_EXECUTION = "{{ dag_run.conf.get('run_pronabec', true) and dag_run.conf.get('run_pronabec_plan_execution', dag_run.conf.get('run_pronabec_chunk_extraction', true)) }}"
-RUN_PRONABEC_CHUNK_EXTRACTION = RUN_PRONABEC_PLAN_EXECUTION
+RUN_PRONABEC_PLAN_EXECUTION = "{{ dag_run.conf.get('run_pronabec', true) and dag_run.conf.get('run_pronabec_plan_execution', true) }}"
 RUN_PRONABEC_FINALIZE = "{{ dag_run.conf.get('run_pronabec', true) and dag_run.conf.get('run_pronabec_finalize', true) }}"
 RUN_MEF = "{{ dag_run.conf.get('run_mef', true) }}"
 RUN_PRONABEC_REPORTS_STAGING = "{{ dag_run.conf.get('run_pronabec_reports_staging', true) }}"
@@ -235,7 +230,6 @@ with DAG(
         "run_pronabec_discovery": Param(default=True, type="boolean"),
         "run_pronabec_build_plan": Param(default=True, type="boolean"),
         "run_pronabec_plan_execution": Param(default=True, type="boolean"),
-        "run_pronabec_chunk_extraction": Param(default=True, type="boolean"),
         "run_pronabec_finalize": Param(default=True, type="boolean"),
         "run_mef": Param(default=True, type="boolean"),
         "run_pronabec_reports_staging": Param(default=True, type="boolean"),

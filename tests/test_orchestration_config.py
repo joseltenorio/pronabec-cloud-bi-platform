@@ -54,13 +54,19 @@ def test_resolve_airflow_var_name_reads_runtime_and_jobs() -> None:
     assert resolve_airflow_var_name(config, "pronabec_discovery_job_name_var") == "pronabec_discovery_job_name"
     assert resolve_airflow_var_name(config, "pronabec_build_plan_job_name_var") == "pronabec_build_plan_job_name"
     assert resolve_airflow_var_name(config, "pronabec_run_plan_job_name_var") == "pronabec_run_plan_job_name"
-    assert resolve_airflow_var_name(config, "pronabec_extract_chunk_job_name_var") == "pronabec_extract_chunk_job_name"
     assert resolve_airflow_var_name(config, "pronabec_finalize_dataset_job_name_var") == "pronabec_finalize_dataset_job_name"
     assert (
         resolve_airflow_var_name(config, "bronze_manifest_validation_job_name_var")
         == "bronze_manifest_validation_job_name"
     )
     assert config["jobs"]["pronabec_run_plan_job_name_var"] == "pronabec_run_plan_job_name"
+
+
+def test_orchestration_manifest_omits_legacy_pronabec_job_vars() -> None:
+    config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
+
+    assert "pronabec_" + "extract_job_name_var" not in config["jobs"]
+    assert "pronabec_" + "extract_chunk_job_name_var" not in config["jobs"]
 
 
 def test_build_gcs_uri_returns_valid_uri() -> None:

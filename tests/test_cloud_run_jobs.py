@@ -25,7 +25,6 @@ def test_selected_pronabec_api_jobs_are_defined():
         "pronabec-discovery-job",
         "pronabec-build-plan-job",
         "pronabec-run-plan-job",
-        "pronabec-extract-chunk-job",
         "pronabec-finalize-dataset-job",
         "pronabec-stage-reports-job",
         "bronze-manifest-validation-job",
@@ -168,7 +167,6 @@ def test_gold_jobs_and_env_vars_are_defined():
     assert "PRONABEC_DISCOVERY_JOB_NAME" in content
     assert "PRONABEC_BUILD_PLAN_JOB_NAME" in content
     assert "PRONABEC_RUN_PLAN_JOB_NAME" in content
-    assert "PRONABEC_EXTRACT_CHUNK_JOB_NAME" in content
     assert "PRONABEC_FINALIZE_DATASET_JOB_NAME" in content
     assert "GOLD_PUBLISH_JOB_NAME" in content
     assert "GOLD_VALIDATE_JOB_NAME" in content
@@ -182,38 +180,41 @@ def test_gold_jobs_and_env_vars_are_defined():
     assert "pipelines.discover_pronabec" in content
     assert "pipelines.build_pronabec_extraction_plan" in content
     assert "pipelines.run_pronabec_extraction_plan" in content
-    assert "pipelines.extract_pronabec" in content
     assert "pipelines.finalize_pronabec_dataset" in content
 
 
-def test_pronabec_chunked_jobs_have_expected_names_and_no_dataset_specific_jobs():
+def test_legacy_pronabec_extraction_jobs_are_not_deployed():
     content = _read_deploy_script()
 
     forbidden_job_names = [
-        "pronabec-extract-notas-becarios-job",
-        "pronabec-extract-becarios-pais-estudio-job",
-        "pronabec-extract-convocatorias-carrera-sede-job",
+        "pronabec-" + "extract-job",
+        "pronabec-" + "extract-chunk-job",
+        "PRONABEC_" + "EXTRACT_JOB_NAME",
+        "PRONABEC_" + "EXTRACT_CHUNK_JOB_NAME",
+        "PronabecExtractJobName",
+        "PronabecExtract" + "ChunkJobName",
+        "OUTPUT_MODE=chunk",
+        "pronabec-" + "extract-notas-becarios-job",
+        "pronabec-" + "extract-becarios-pais-estudio-job",
+        "pronabec-" + "extract-convocatorias-carrera-sede-job",
         "dataflow-pronabec-convocatorias-carrera-sede-job",
     ]
 
     for job_name in forbidden_job_names:
         assert job_name not in content, f"Nombre de job específico por dataset detectado: {job_name}"
 
-    assert "OUTPUT_MODE=chunk" in content
 
 
-def test_pronabec_chunked_job_modules_are_correct():
+def test_pronabec_plan_driven_job_modules_are_correct():
     content = _read_deploy_script()
 
     assert "pronabec-discovery-job" in content
     assert "pronabec-build-plan-job" in content
     assert "pronabec-run-plan-job" in content
-    assert "pronabec-extract-chunk-job" in content
     assert "pronabec-finalize-dataset-job" in content
     assert "pipelines.discover_pronabec" in content
     assert "pipelines.build_pronabec_extraction_plan" in content
     assert "pipelines.run_pronabec_extraction_plan" in content
-    assert "pipelines.extract_pronabec" in content
     assert "pipelines.finalize_pronabec_dataset" in content
 
 
@@ -378,8 +379,7 @@ def test_non_dataflow_jobs_do_not_receive_sdk_container_arg():
     non_dataflow_sections = [
         content[content.index("-JobName $PronabecDiscoveryJobName"):content.index("-JobName $PronabecBuildPlanJobName")],
         content[content.index("-JobName $PronabecBuildPlanJobName"):content.index("-JobName $PronabecRunPlanJobName")],
-        content[content.index("-JobName $PronabecRunPlanJobName"):content.index("-JobName $PronabecExtractChunkJobName")],
-        content[content.index("-JobName $PronabecExtractChunkJobName"):content.index("-JobName $PronabecFinalizeDatasetJobName")],
+        content[content.index("-JobName $PronabecRunPlanJobName"):content.index("-JobName $PronabecFinalizeDatasetJobName")],
         content[content.index("-JobName $PronabecFinalizeDatasetJobName"):content.index("-JobName $MefJobName")],
         content[content.index("-JobName $MefJobName"):content.index("-JobName $PronabecReportsStageJobName")],
         content[content.index("-JobName $GoldPublishJobName"):content.index("-JobName $GoldValidateJobName")],

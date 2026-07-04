@@ -88,7 +88,6 @@ run_pronabec
 run_pronabec_discovery
 run_pronabec_build_plan
 run_pronabec_plan_execution
-run_pronabec_chunk_extraction
 run_pronabec_finalize
 run_mef
 run_pronabec_reports_staging
@@ -101,7 +100,7 @@ run_gold_validation
 run_quality
 ```
 
-`run_pronabec_chunk_extraction` se conserva como alias de compatibilidad para `run_pronabec_plan_execution`. `extraction_date` usa `dag_run.conf.get('extraction_date') or ds`. Si `run_pronabec=false`, las subtareas PRONABEC particionadas tambien quedan deshabilitadas.
+`extraction_date` usa `dag_run.conf.get('extraction_date') or ds`. Si `run_pronabec=false`, las subtareas PRONABEC particionadas tambien quedan deshabilitadas.
 
 Ejemplo de `dag_run.conf` para ejecucion manual:
 
@@ -140,7 +139,6 @@ bq_audit_dataset
 pronabec_discovery_job_name
 pronabec_build_plan_job_name
 pronabec_run_plan_job_name
-pronabec_extract_chunk_job_name
 pronabec_finalize_dataset_job_name
 mef_extract_job_name
 pronabec_reports_stage_job_name
@@ -151,7 +149,7 @@ gold_validate_job_name
 quality_checks_job_name
 ```
 
-El DAG principal usa `pronabec-discovery-job`, `pronabec-build-plan-job`, `pronabec-run-plan-job` y `pronabec-finalize-dataset-job`. `pronabec-extract-chunk-job` queda como herramienta manual para debug de chunks aislados.
+El DAG principal usa `pronabec-discovery-job`, `pronabec-build-plan-job`, `pronabec-run-plan-job` y `pronabec-finalize-dataset-job`. Esa es la unica ruta soportada para PRONABEC API Bronze.
 
 ## Debug operativo
 
@@ -161,11 +159,10 @@ Para depurar el flujo PRONABEC, ejecute primero los Cloud Run Jobs manualmente:
 pronabec-discovery-job
 pronabec-build-plan-job
 pronabec-run-plan-job
-pronabec-extract-chunk-job con SOURCE_DATASET, PAGE_START, PAGE_END y OUTPUT_MODE=chunk
 pronabec-finalize-dataset-job
 ```
 
-Despues de validar esos componentes, ejecute el DAG completo.
+Para reprocesar PRONABEC API, reejecute el flujo plan-driven con la misma o una nueva combinacion de `BRONZE_EXTRACTION_DATE` y `PIPELINE_RUN_ID`. Despues de validar esos componentes, ejecute el DAG completo.
 
 Si cambian modulos Python, haga rebuild/push de la imagen antes de `scripts/deploy_cloud_run_jobs.ps1`. Si solo cambian DAG, configuracion o documentacion, suba el DAG y archivos de soporte a Composer con `scripts/upload_composer_dag.ps1`.
 

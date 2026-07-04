@@ -18,10 +18,6 @@ Ejecuta `python -m pipelines.build_pronabec_extraction_plan`. Construye `plan.js
 
 Ejecuta `python -m pipelines.run_pronabec_extraction_plan`. Lee `plan.json` y ejecuta exactamente los chunks definidos en el plan. Este es el job principal para la extraccion PRONABEC particionada.
 
-### `pronabec-extract-chunk-job`
-
-Ejecuta `python -m pipelines.extract_pronabec`. Se conserva para debug manual o reprocesos de chunks aislados con `SOURCE_DATASET`, `PAGE_START`, `PAGE_END` y `OUTPUT_MODE=chunk`.
-
 ### `pronabec-finalize-dataset-job`
 
 Ejecuta `python -m pipelines.finalize_pronabec_dataset`. Consolida los chunks intermedios hacia Bronze final y escribe `data.jsonl`, `manifest.json` y `_SUCCESS`.
@@ -116,9 +112,11 @@ pronabec-run-plan-job
 pronabec-finalize-dataset-job
 ```
 
+Esta es la unica ruta soportada para PRONABEC API Bronze en el despliegue estandar. Para reprocesar PRONABEC API, reejecute el flujo plan-driven con la misma o una nueva combinacion de `BRONZE_EXTRACTION_DATE` y `PIPELINE_RUN_ID`; no use jobs legacy de extraccion directa o chunks aislados.
+
 `bronze_work/` es temporal. Dataflow no debe leer `bronze_work`; solo Bronze final consolidado por `pronabec-finalize-dataset-job` es consumible por `validate_bronze_manifests` y por Silver.
 
-`required_for_e2e` no recorta la descarga Bronze. Si se necesita una ejecucion acotada para debug o pruebas manuales, use `SOURCE_DATASET` en discovery, run-plan o extract-chunk segun corresponda.
+`required_for_e2e` no recorta la descarga Bronze. Si se necesita una ejecucion acotada para debug o pruebas manuales, use `SOURCE_DATASET` en discovery, build-plan, run-plan o finalize segun corresponda.
 
 ## Imagenes y despliegue
 
