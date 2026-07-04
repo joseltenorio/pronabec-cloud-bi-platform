@@ -291,6 +291,18 @@ Ejemplo de `dag_run.conf`:
 
 Si cambian modulos Python usados por launchers o `requirements.txt`, reconstruya la imagen launcher. Si cambian transforms, `requirements-dataflow-worker.txt` o packaging de Dataflow, reconstruya la imagen worker. Si solo cambian DAG, configuracion o documentacion, suba los artefactos a Composer y actualice las variables Airflow.
 
+### Quality checks
+
+`quality-checks-job` queda desplegado con los argumentos requeridos por `pipelines.quality_checks`: `--project-id`, `--silver-dataset`, `--gold-dataset`, `--audit-dataset`, `--pipeline-run-id` y `--fail-on-error`. Para reintentar solo calidad despues de Gold validate:
+
+```bash
+gcloud run jobs execute quality-checks-job \
+  --region="$CLOUD_RUN_REGION" \
+  --project="$GCP_PROJECT_ID" \
+  --update-env-vars="PIPELINE_RUN_ID=${PIPELINE_RUN_ID}" \
+  --wait
+```
+
 Para ventanas de prueba controladas, Composer puede eliminarse y recrearse con los comandos oficiales del proyecto:
 
 ```bash

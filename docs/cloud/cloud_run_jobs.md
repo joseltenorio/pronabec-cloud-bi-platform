@@ -38,6 +38,12 @@ Ejecuta `python -m pipelines.finalize_pronabec_dataset`. Consolida los chunks in
 - `gold-validate-job`: valida contratos Gold.
 - `quality-checks-job`: ejecuta controles de calidad.
 
+### Quality checks
+
+`quality-checks-job` ejecuta `python -m pipelines.quality_checks` con argumentos CLI persistidos en `scripts/deploy_cloud_run_jobs.ps1`: `--project-id`, `--silver-dataset`, `--gold-dataset`, `--audit-dataset`, `--pipeline-run-id` y `--fail-on-error`. El `PIPELINE_RUN_ID` se pasa como placeholder runtime para que cada ejecucion manual o Composer conserve trazabilidad.
+
+El runner lee `sql/quality/data_quality_checks.sql` por defecto. El parser divide el archivo por `;` solo en nivel superior, respetando comentarios, strings, backticks y parentesis; no se deben ejecutar fragmentos sueltos como `)`.
+
 ### Runtime MEF
 
 `mef-extract-job` usa Consulta Amigable y queda configurado durante `scripts/deploy_cloud_run_jobs.ps1`. Composer o una ejecucion manual no deben repetir todo el runtime MEF; basta con pasar `BRONZE_EXTRACTION_DATE` y `PIPELINE_RUN_ID`.
