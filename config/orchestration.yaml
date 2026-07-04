@@ -254,34 +254,34 @@ gold:
   validation_job_name_var: gold_validate_job_name
   validation_queries:
     - name: vw_pronabec_resumen_ejecutivo
-      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_pronabec_resumen_ejecutivo`"
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_pronabec_resumen_ejecutivo`"
     - name: vw_beca18_becas_otorgadas_anual
-      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_beca18_becas_otorgadas_anual`"
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_beca18_becas_otorgadas_anual`"
     - name: vw_beca18_cobertura_territorial_2016
-      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_beca18_cobertura_territorial_2016`"
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_beca18_cobertura_territorial_2016`"
     - name: vw_beca18_universitarios_carrera_anual
-      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_beca18_universitarios_carrera_anual`"
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_beca18_universitarios_carrera_anual`"
     - name: vw_beca18_universitarios_universidad_anual
-      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_beca18_universitarios_universidad_anual`"
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_beca18_universitarios_universidad_anual`"
     - name: vw_beca18_perfil_social_indicadores
-      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_beca18_perfil_social_indicadores`"
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_beca18_perfil_social_indicadores`"
     - name: vw_beca18_region_postulacion
-      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_beca18_region_postulacion`"
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_beca18_region_postulacion`"
     - name: vw_beca18_migracion_region
-      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_beca18_migracion_region`"
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_beca18_migracion_region`"
     - name: vw_beca18_trayectoria_eleccion
-      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_beca18_trayectoria_eleccion`"
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_beca18_trayectoria_eleccion`"
     - name: vw_mef_presupuesto_ejecucion_anual
-      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_mef_presupuesto_ejecucion_anual`"
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_mef_presupuesto_ejecucion_anual`"
     - name: vw_mef_presupuesto_ejecucion_temporal
-      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_mef_presupuesto_ejecucion_temporal`"
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_mef_presupuesto_ejecucion_temporal`"
     - name: vw_mef_presupuesto_producto
-      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_mef_presupuesto_producto`"
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_mef_presupuesto_producto`"
     - name: vw_mef_presupuesto_actividad
-      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_mef_presupuesto_actividad`"
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_mef_presupuesto_actividad`"
     - name: vw_mef_presupuesto_generica
-      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_mef_presupuesto_generica`"
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_mef_presupuesto_generica`"
     - name: vw_pronabec_becas_vs_presupuesto_anual
-      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_pronabec_becas_vs_presupuesto_anual`"
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_pronabec_becas_vs_presupuesto_anual`"
     - name: vw_pronabec_beca18_resumen_analitico
-      query: "SELECT COUNT(*) AS rows FROM `{project_id}.{gold_dataset}.vw_pronabec_beca18_resumen_analitico`"
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_pronabec_beca18_resumen_analitico`"
