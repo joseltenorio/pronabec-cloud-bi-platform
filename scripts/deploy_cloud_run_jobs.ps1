@@ -734,7 +734,18 @@ Upsert-CloudRunJob `
     -Description "EjecuciÃ³n batch de controles de calidad BigQuery" `
     -ContainerArgs @(
         "-m",
-        "pipelines.quality_checks"
+        "pipelines.quality_checks",
+        "--project-id",
+        $ProjectId,
+        "--silver-dataset",
+        $SilverDataset,
+        "--gold-dataset",
+        $GoldDataset,
+        "--audit-dataset",
+        $AuditDataset,
+        "--pipeline-run-id",
+        "`${PIPELINE_RUN_ID}",
+        "--fail-on-error"
     )
 
 Write-Host "Cloud Run Jobs configurados correctamente."
