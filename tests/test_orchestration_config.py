@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -92,6 +93,8 @@ def test_orchestration_manifest_gold_queries_are_renderable() -> None:
         assert "{project_id}" not in rendered
         assert "{gold_dataset}" not in rendered
         assert "project.gold." in rendered
+        assert "COUNT(*) AS rows_count" in rendered
+        assert not re.search(r"\bAS\s+ROWS\b", rendered, flags=re.IGNORECASE)
 
 
 def test_resolve_pronabec_report_groups_and_datasets() -> None:

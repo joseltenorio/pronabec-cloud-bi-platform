@@ -3,18 +3,18 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 import yaml
-import re
-from pathlib import Path
 
 from pipelines.validate_gold import (
     GoldValidationSettings,
     load_validation_queries,
-    validate_gold_views,
     render_validation_query,
+    validate_gold_views,
 )
 
 
@@ -50,6 +50,32 @@ def test_load_validation_queries_reads_manifest() -> None:
 
     assert queries
     assert all("name" in query and "query" in query for query in queries)
+
+
+def test_gold_validation_queries_do_not_use_reserved_rows_alias() -> None:
+    queries = load_validation_queries()
+
+    assert len(queries) == 16
+    for query in queries:
+        query_text = query["query"]
+        assert not re.search(r"\bAS\s+ROWS\b", query_text, flags=re.IGNORECASE)
+        assert not re.search(r"\bAS\s+`?rows`?\b", query_text, flags=re.IGNORECASE)
+
+
+def test_gold_validation_queries_render_with_rows_count_alias() -> None:
+    queries = load_validation_queries()
+
+    for query in queries:
+        rendered = render_validation_query(
+            query["query"],
+            project_id="project-1",
+            gold_dataset="gold",
+            audit_dataset="audit",
+            silver_dataset="silver",
+        )
+
+        assert "SELECT COUNT(*) AS rows_count FROM" in rendered
+        assert not re.search(r"\bAS\s+ROWS\b", rendered, flags=re.IGNORECASE)
 
 
 def test_validate_gold_views_executes_configured_queries(monkeypatch: pytest.MonkeyPatch) -> None:
