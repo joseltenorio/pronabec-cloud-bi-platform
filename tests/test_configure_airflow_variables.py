@@ -22,6 +22,7 @@ def test_configure_airflow_variables_sets_required_core_values():
         "bq_silver_dataset",
         "bq_gold_dataset",
         "bq_audit_dataset",
+        "dataflow_sdk_container_image",
     ]
 
     for variable in required_variables:
@@ -82,3 +83,9 @@ def test_configure_airflow_variables_checks_gcloud_exit_code():
 
     assert "$LASTEXITCODE -ne 0" in content
     assert "Falló configuración de Airflow Variable" in content
+def test_configure_airflow_variables_sets_dataflow_worker_image() -> None:
+    content = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert "$DataflowSdkContainerImage = $env:DATAFLOW_SDK_CONTAINER_IMAGE" in content
+    assert 'Assert-RequiredValue -Name "DataflowSdkContainerImage"' in content
+    assert '"dataflow_sdk_container_image" = $DataflowSdkContainerImage' in content

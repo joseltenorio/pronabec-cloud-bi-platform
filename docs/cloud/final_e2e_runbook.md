@@ -40,25 +40,26 @@ La unica ruta soportada para PRONABEC API Bronze es plan-driven: discovery -> bu
 
 ## 4. Composer
 
-Composer ya orquesta el flujo plan-driven de PRONABEC:
+Composer orquesta el flujo plan-driven de PRONABEC y aprovecha paralelismo controlado entre ramas independientes:
 
 ```text
-discover_pronabec_datasets
-build_pronabec_extraction_plan
-run_pronabec_extraction_plan
-finalize_pronabec_datasets
-validate_bronze_manifests
-dataflow_pronabec
-dataflow_mef
-dataflow_reports
-publish_gold_views
-validate_gold_contracts
-run_quality_checks
+init_run
+  -> pronabec_api_bronze | mef_bronze | pronabec_reports_bronze
+  -> validate_bronze_manifests
+  -> pronabec_api_silver | mef_silver | pronabec_reports_silver
+  -> publish_gold_views
+  -> validate_gold_contracts
+  -> run_quality_checks
+  -> finish_run
 ```
 
 Composer no hardcodea rangos. `plan.json` es la fuente de verdad para los chunks.
 
 Bronze PRONABEC descarga todos los datasets `bronze_enabled=true`. Silver solo transforma datasets `silver_enabled=true`. `required_for_e2e` queda como metadata operativa y no recorta discovery, build-plan, run-plan ni finalize.
+
+`bronze-manifest-validation-job` es la barrera obligatoria antes de Silver. Gold espera a que terminen las tres ramas Silver y Quality corre al final.
+
+Composer paraleliza launchers de Cloud Run/Dataflow con `max_active_runs=1` y `max_active_tasks=8`. Los workers de cada Dataflow job se controlan aparte con la configuracion Dataflow existente, como `DATAFLOW_MAX_NUM_WORKERS`; no se asignan workers por dataset desde el DAG.
 
 ## 5. Ejecucion manual con gcloud
 

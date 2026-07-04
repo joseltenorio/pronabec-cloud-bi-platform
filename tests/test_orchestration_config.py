@@ -37,6 +37,7 @@ def test_load_orchestration_config_reads_manifest() -> None:
     assert config["dag"]["id"] == "pronabec_medallion_batch"
     assert config["dag"]["schedule"] == "0 5 * * 6"
     assert config["runtime"]["project_id_var"] == "gcp_project_id"
+    assert config["runtime"]["dataflow_sdk_container_image_var"] == "dataflow_sdk_container_image"
     assert config["datasets"]["pronabec_reports"]["landing_path_template"] == "landing/pronabec_reports/{source_subset}"
     assert config["datasets"]["pronabec_reports"]["bronze_path_template"] == "bronze/pronabec_reports/{dataset}/extraction_date={extraction_date}/data.csv"
 
@@ -50,6 +51,10 @@ def test_resolve_airflow_var_name_reads_runtime_and_jobs() -> None:
     config = load_orchestration_config(ORCHESTRATION_CONFIG_PATH)
 
     assert resolve_airflow_var_name(config, "project_id_var") == "gcp_project_id"
+    assert (
+        resolve_airflow_var_name(config, "dataflow_sdk_container_image_var")
+        == "dataflow_sdk_container_image"
+    )
     assert resolve_airflow_var_name(config, "gold_publish_job_name_var") == "gold_publish_job_name"
     assert resolve_airflow_var_name(config, "pronabec_discovery_job_name_var") == "pronabec_discovery_job_name"
     assert resolve_airflow_var_name(config, "pronabec_build_plan_job_name_var") == "pronabec_build_plan_job_name"

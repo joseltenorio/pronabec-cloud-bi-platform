@@ -134,6 +134,10 @@ La combinación de Cloud Logging, summary JSON y DLQ permite rastrear una ejecuc
 
 Composer registra la orquestación de dependencias y la ejecución de comandos `gcloud run jobs execute`. Su responsabilidad observacional es mostrar orden de ejecución, estados de tareas, reintentos y fallos de coordinación.
 
+En el DAG principal, las ramas Bronze independientes (`pronabec_api_bronze`, `mef_bronze` y `pronabec_reports_bronze`) pueden verse ejecutando en paralelo. `validate_bronze_manifests` debe quedar como barrera antes de Silver. Luego las ramas Silver/Dataflow (`pronabec_api_silver`, `mef_silver` y `pronabec_reports_silver`) tambien pueden ejecutarse en paralelo, y `publish_gold_views` solo debe arrancar cuando esas tres ramas concluyen.
+
+El paralelismo visible en Composer corresponde a launchers Cloud Run/Dataflow. La cantidad de workers dentro de cada Dataflow job se observa y ajusta desde Dataflow, no desde el grafo de tareas Composer.
+
 Composer no concentra la lógica de procesamiento ni reemplaza los logs emitidos por Cloud Run Jobs y Dataflow.
 
 ## BigQuery Audit

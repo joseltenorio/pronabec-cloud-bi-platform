@@ -83,6 +83,9 @@ BRONZE_DATASET = airflow_var_template(resolve_airflow_var_name(ORCHESTRATION_CON
 SILVER_DATASET = airflow_var_template(resolve_airflow_var_name(ORCHESTRATION_CONFIG, "silver_dataset_var"))
 GOLD_DATASET = airflow_var_template(resolve_airflow_var_name(ORCHESTRATION_CONFIG, "gold_dataset_var"))
 AUDIT_DATASET = airflow_var_template(resolve_airflow_var_name(ORCHESTRATION_CONFIG, "audit_dataset_var"))
+DATAFLOW_SDK_CONTAINER_IMAGE = airflow_var_template(
+    resolve_airflow_var_name(ORCHESTRATION_CONFIG, "dataflow_sdk_container_image_var")
+)
 
 PRONABEC_DISCOVERY_JOB = airflow_var_template(
     resolve_airflow_var_name(ORCHESTRATION_CONFIG, "pronabec_discovery_job_name_var"),
@@ -324,73 +327,77 @@ with DAG(
         ),
     )
 
-    pronabec_api_tasks = []
-    for item in PRONABEC_API_ITEMS:
-        source_dataset = item["source_dataset"]
-        job_name = resolve_job_name(item, f"dataflow-pronabec-{source_dataset.replace('_', '-')}-job")
-        pronabec_api_tasks.append(
-            BashOperator(
-                task_id=f"bronze_to_silver_pronabec_api_{source_dataset}",
-                bash_command=cloud_run_execute_command(
-                    job_name=job_name,
-                    enabled_expression=RUN_DATAFLOW_PRONABEC,
-                    extra_env_vars={
-                        "SOURCE_SYSTEM": "pronabec",
-                        "SOURCE_DATASET": source_dataset,
-                        "INPUT_FORMAT": "jsonl",
-                        "INPUT_PATH": build_api_input_path(source_dataset),
-                        "OUTPUT_TABLE": build_api_output_table(source_dataset),
-                    },
-                ),
+    with TaskGroup(group_id="pronabec_api_silver") as pronabec_api_silver:
+        pronabec_api_tasks = []
+        for item in PRONABEC_API_ITEMS:
+            source_dataset = item["source_dataset"]
+            job_name = resolve_job_name(item, f"dataflow-pronabec-{source_dataset.replace('_', '-')}-job")
+            pronabec_api_tasks.append(
+                BashOperator(
+                    task_id=f"bronze_to_silver_pronabec_api_{source_dataset}",
+                    bash_command=cloud_run_execute_command(
+                        job_name=job_name,
+                        enabled_expression=RUN_DATAFLOW_PRONABEC,
+                        extra_env_vars={
+                            "SOURCE_SYSTEM": "pronabec",
+                            "SOURCE_DATASET": source_dataset,
+                            "INPUT_FORMAT": "jsonl",
+                            "INPUT_PATH": build_api_input_path(source_dataset),
+                            "OUTPUT_TABLE": build_api_output_table(source_dataset),
+                        },
+                    ),
+                )
             )
-        )
 
-    mef_tasks = []
-    for item in MEF_ITEMS:
-        source_dataset = item["source_dataset"]
-        input_path_template = ORCHESTRATION_CONFIG["datasets"]["mef"]["bronze_path_template"]
-        input_path = f"gs://{BUCKET_NAME}/{render_gcs_path(input_path_template, dataset=source_dataset, extraction_date=EXTRACTION_DATE)}"
-        job_name = resolve_job_name(item, f"dataflow-mef-{source_dataset.replace('_', '-')}-job")
-        mef_tasks.append(
-            BashOperator(
-                task_id=f"bronze_to_silver_mef_{source_dataset}",
-                bash_command=cloud_run_execute_command(
-                    job_name=job_name,
-                    enabled_expression=RUN_DATAFLOW_MEF,
-                    extra_env_vars={
-                        "SOURCE_SYSTEM": "mef",
-                        "SOURCE_DATASET": source_dataset,
-                        "INPUT_FORMAT": "csv",
-                        "INPUT_PATH": input_path,
-                        "OUTPUT_TABLE": build_mef_output_table(item["silver_table"]),
-                    },
-                ),
+    with TaskGroup(group_id="mef_silver") as mef_silver:
+        mef_tasks = []
+        for item in MEF_ITEMS:
+            source_dataset = item["source_dataset"]
+            input_path_template = ORCHESTRATION_CONFIG["datasets"]["mef"]["bronze_path_template"]
+            input_path = f"gs://{BUCKET_NAME}/{render_gcs_path(input_path_template, dataset=source_dataset, extraction_date=EXTRACTION_DATE)}"
+            job_name = resolve_job_name(item, f"dataflow-mef-{source_dataset.replace('_', '-')}-job")
+            mef_tasks.append(
+                BashOperator(
+                    task_id=f"bronze_to_silver_mef_{source_dataset}",
+                    bash_command=cloud_run_execute_command(
+                        job_name=job_name,
+                        enabled_expression=RUN_DATAFLOW_MEF,
+                        extra_env_vars={
+                            "SOURCE_SYSTEM": "mef",
+                            "SOURCE_DATASET": source_dataset,
+                            "INPUT_FORMAT": "csv",
+                            "INPUT_PATH": input_path,
+                            "OUTPUT_TABLE": build_mef_output_table(item["silver_table"]),
+                        },
+                    ),
+                )
             )
-        )
 
-    report_tasks = []
-    for item in REPORT_DATASETS:
-        source_dataset = item["source_dataset"]
-        report_tasks.append(
-            BashOperator(
-                task_id=f"bronze_to_silver_pronabec_reports_{source_dataset}",
-                bash_command=cloud_run_execute_command(
-                    job_name=DATAFLOW_PRONABEC_REPORT_JOB,
-                    enabled_expression=RUN_DATAFLOW_REPORTS,
-                    extra_env_vars={
-                        "SOURCE_SYSTEM": "pronabec_reports",
-                        "SOURCE_DATASET": source_dataset,
-                        "INPUT_FORMAT": "csv",
-                        "INPUT_PATH": build_report_bronze_uri(source_dataset),
-                        "OUTPUT_TABLE": build_bq_table_ref(
-                            PROJECT_ID,
-                            SILVER_DATASET,
-                            f"pronabec_{source_dataset}",
-                        ),
-                    },
-                ),
+    with TaskGroup(group_id="pronabec_reports_silver") as pronabec_reports_silver:
+        report_tasks = []
+        for item in REPORT_DATASETS:
+            source_dataset = item["source_dataset"]
+            report_tasks.append(
+                BashOperator(
+                    task_id=f"bronze_to_silver_pronabec_reports_{source_dataset}",
+                    bash_command=cloud_run_execute_command(
+                        job_name=DATAFLOW_PRONABEC_REPORT_JOB,
+                        enabled_expression=RUN_DATAFLOW_REPORTS,
+                        extra_env_vars={
+                            "SOURCE_SYSTEM": "pronabec_reports",
+                            "SOURCE_DATASET": source_dataset,
+                            "INPUT_FORMAT": "csv",
+                            "INPUT_PATH": build_report_bronze_uri(source_dataset),
+                            "OUTPUT_TABLE": build_bq_table_ref(
+                                PROJECT_ID,
+                                SILVER_DATASET,
+                                f"pronabec_{source_dataset}",
+                            ),
+                            "DATAFLOW_SDK_CONTAINER_IMAGE": DATAFLOW_SDK_CONTAINER_IMAGE,
+                        },
+                    ),
+                )
             )
-        )
 
     publish_gold_views = BashOperator(
         task_id="publish_gold_views",
@@ -422,9 +429,7 @@ with DAG(
     init_run >> bronze_parallel
     bronze_parallel >> validate_bronze_manifests
 
-    validate_bronze_manifests >> pronabec_api_tasks
-    validate_bronze_manifests >> mef_tasks
-    validate_bronze_manifests >> report_tasks
-
-    all_silver_tasks = pronabec_api_tasks + mef_tasks + report_tasks
-    all_silver_tasks >> publish_gold_views >> validate_gold_contracts >> run_quality_checks >> finish_run
+    silver_parallel = [pronabec_api_silver, mef_silver, pronabec_reports_silver]
+    validate_bronze_manifests >> silver_parallel
+    silver_parallel >> publish_gold_views
+    publish_gold_views >> validate_gold_contracts >> run_quality_checks >> finish_run

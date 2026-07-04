@@ -154,9 +154,12 @@ def test_bronze_manifest_validation_runs_after_bronze_tasks() -> None:
 def test_bronze_manifest_validation_runs_before_silver_tasks() -> None:
     content = _read_dag_source()
 
-    assert "validate_bronze_manifests >> pronabec_api_tasks" in content
-    assert "validate_bronze_manifests >> mef_tasks" in content
-    assert "validate_bronze_manifests >> report_tasks" in content
+    assert 'TaskGroup(group_id="pronabec_api_silver")' in content
+    assert 'TaskGroup(group_id="mef_silver")' in content
+    assert 'TaskGroup(group_id="pronabec_reports_silver")' in content
+    assert "silver_parallel = [pronabec_api_silver, mef_silver, pronabec_reports_silver]" in content
+    assert "validate_bronze_manifests >> silver_parallel" in content
+    assert "silver_parallel >> publish_gold_views" in content
 
 
 def test_dag_exposes_bronze_manifest_validation_param() -> None:
@@ -260,3 +263,66 @@ def test_dag_keeps_existing_non_pronabec_sections() -> None:
     assert "publish_gold_views" in content
     assert "validate_gold_contracts" in content
     assert "run_quality_checks" in content
+
+
+def test_silver_dataflow_groups_are_parallel_and_complete() -> None:
+    content = _read_dag_source()
+
+    pronabec_jobs = {item["job_name"] for item in dag_mod.PRONABEC_API_ITEMS}
+    mef_jobs = {item["job_name"] for item in dag_mod.MEF_ITEMS}
+
+    assert pronabec_jobs == {
+        "dataflow-pronabec-becarios-pais-estudio-job",
+        "dataflow-pronabec-becarios-provincia-job",
+        "dataflow-pronabec-colegios-habiles-job",
+        "dataflow-pronabec-convocatorias-job",
+        "dataflow-pronabec-ubigeo-postulacion-job",
+    }
+    assert mef_jobs == {
+        "dataflow-mef-presupuesto-job",
+        "dataflow-mef-presupuesto-temporal-job",
+        "dataflow-mef-producto-job",
+        "dataflow-mef-producto-temporal-job",
+        "dataflow-mef-actividad-job",
+        "dataflow-mef-actividad-temporal-job",
+        "dataflow-mef-generica-job",
+        "dataflow-mef-generica-temporal-job",
+        "dataflow-mef-hierarchy-job",
+    }
+    assert len(dag_mod.REPORT_DATASETS) == 23
+    assert "all_silver_tasks" not in content
+
+
+def test_report_dataflow_tasks_use_real_dataset_parameters() -> None:
+    content = _read_dag_source()
+
+    assert "DATAFLOW_SDK_CONTAINER_IMAGE" in content
+    assert '"DATAFLOW_SDK_CONTAINER_IMAGE": DATAFLOW_SDK_CONTAINER_IMAGE' in content
+    assert '"SOURCE_DATASET": source_dataset' in content
+    assert '"INPUT_PATH": build_report_bronze_uri(source_dataset)' in content
+    assert 'f"pronabec_{source_dataset}"' in content
+    assert "placeholder" not in content.lower()
+    assert "TODO" not in content
+    assert "SOURCE_DATASET=report_dataset" not in content
+    assert "INPUT_PATH=report_dataset" not in content
+    assert "OUTPUT_TABLE=report_dataset" not in content
+
+
+def test_report_dataflow_paths_and_tables_are_bound_per_report() -> None:
+    dataset = "report_beca18_region_postulacion_2025"
+
+    assert (
+        dag_mod.build_report_bronze_uri(dataset)
+        == "gs://{{ var.value.gcs_bucket_name }}/bronze/pronabec_reports/"
+        "report_beca18_region_postulacion_2025/"
+        "extraction_date={{ dag_run.conf.get('extraction_date') or ds }}/data.csv"
+    )
+    assert (
+        dag_mod.build_bq_table_ref(
+            dag_mod.PROJECT_ID,
+            dag_mod.SILVER_DATASET,
+            f"pronabec_{dataset}",
+        )
+        == "{{ var.value.gcp_project_id }}:{{ var.value.bq_silver_dataset }}."
+        "pronabec_report_beca18_region_postulacion_2025"
+    )

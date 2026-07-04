@@ -18,9 +18,9 @@ def test_bronze_manifest_validation_is_deployable_and_orchestrated():
 
     assert "validate_bronze_manifests" in dag_content
     assert "run_bronze_manifest_validation" in dag_content
-    assert "validate_bronze_manifests >> pronabec_api_tasks" in dag_content
-    assert "validate_bronze_manifests >> mef_tasks" in dag_content
-    assert "validate_bronze_manifests >> report_tasks" in dag_content
+    assert "silver_parallel = [pronabec_api_silver, mef_silver, pronabec_reports_silver]" in dag_content
+    assert "validate_bronze_manifests >> silver_parallel" in dag_content
+    assert "silver_parallel >> publish_gold_views" in dag_content
 
 
 def test_cost_controlled_composer_operations_are_documented():

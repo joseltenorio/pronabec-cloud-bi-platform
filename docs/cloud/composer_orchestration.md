@@ -16,12 +16,15 @@ El DAG orquesta el flujo PRONABEC particionado de forma plan-driven:
 
 ```text
 init_run
-  -> discover_pronabec_datasets
-  -> build_pronabec_extraction_plan
-  -> run_pronabec_extraction_plan
-  -> finalize_pronabec_datasets
+  -> bronze_parallel
+       -> pronabec_api_bronze
+       -> mef_bronze
+       -> pronabec_reports_bronze
   -> validate_bronze_manifests
-  -> Dataflow Bronze a Silver
+  -> silver_parallel
+       -> pronabec_api_silver
+       -> mef_silver
+       -> pronabec_reports_silver
   -> publish_gold_views
   -> validate_gold_contracts
   -> run_quality_checks
@@ -30,7 +33,9 @@ init_run
 
 `plan.json` es la fuente de verdad para los chunks ejecutados. Composer no hardcodea `PAGE_END`, no define rangos estaticos por dataset y no lee `plan.json` dinamicamente en runtime. El runner `pronabec-run-plan-job` consume el plan ya construido y ejecuta cada chunk exacto.
 
-MEF y PRONABEC reports siguen corriendo como ramas Bronze independientes antes de `validate_bronze_manifests`. La compuerta Bronze espera los finalizers PRONABEC, la extraccion MEF y el staging de reportes antes de lanzar cualquier transformacion Dataflow.
+MEF y PRONABEC reports corren como ramas Bronze independientes en paralelo con PRONABEC API Bronze. La compuerta `validate_bronze_manifests` espera los finalizers PRONABEC, la extraccion MEF y el staging de reportes antes de lanzar cualquier transformacion Dataflow.
+
+Despues de la validacion Bronze, Composer lanza en paralelo las ramas Silver/Dataflow: PRONABEC API, MEF y PRONABEC reports. `publish_gold_views` espera que terminen las tres ramas Silver; luego corren `validate_gold_contracts` y `run_quality_checks`.
 
 ## Responsabilidades PRONABEC
 
@@ -168,7 +173,9 @@ Si cambian modulos Python, haga rebuild/push de la imagen antes de `scripts/depl
 
 ## Reintentos y concurrencia
 
-El DAG mantiene `catchup=False` y `max_active_runs=1`. Esta configuracion evita backfills automaticos y ejecuciones superpuestas para una misma fecha logica.
+El DAG mantiene `catchup=False`, `max_active_runs=1` y `max_active_tasks=8`. Esta configuracion evita backfills automaticos, ejecuciones superpuestas para una misma fecha logica y paralelismo ilimitado de launchers.
+
+Composer controla cuantos Cloud Run Jobs/Dataflow launchers se lanzan al mismo tiempo. `Dataflow max_num_workers` controla cuantos workers puede usar cada job Dataflow individual; es una capa distinta y no se hardcodea por dataset en el DAG.
 
 ## Exclusiones
 

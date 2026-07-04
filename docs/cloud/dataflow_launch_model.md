@@ -245,7 +245,9 @@ Esta separación permite rastrear el resultado de cada transformación sin deten
 
 Composer ejecuta los Cloud Run Jobs lanzadores mediante comandos `gcloud run jobs execute`. Cada ejecución puede recibir overrides operativos de fecha, identificador de corrida y parámetros de dataset.
 
-El DAG mantiene el orden entre extracción, transformación y calidad, pero no ejecuta directamente transformaciones Beam dentro del entorno Airflow.
+El DAG mantiene el orden entre extracción, transformación y calidad, pero no ejecuta directamente transformaciones Beam dentro del entorno Airflow. Después de `validate_bronze_manifests`, Composer lanza en paralelo tres ramas Silver independientes: PRONABEC API, MEF y PRONABEC reports. Gold se publica solo cuando terminan las tres.
+
+Composer paraleliza launchers. `Dataflow max_num_workers` controla cuantos workers puede usar cada job Dataflow individual. Aumentar `max_active_tasks` en Composer no aumenta workers dentro de un job; solo permite lanzar mas jobs a la vez. La configuracion de workers probada sigue viviendo en los Cloud Run Jobs/Dataflow options.
 
 ## Alcance operativo y selección de datasets
 

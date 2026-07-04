@@ -13,6 +13,7 @@ param(
     [string]$SilverDataset = $(if ($env:BQ_SILVER_DATASET) { $env:BQ_SILVER_DATASET } else { "silver" }),
     [string]$GoldDataset = $(if ($env:BQ_GOLD_DATASET) { $env:BQ_GOLD_DATASET } else { "gold" }),
     [string]$AuditDataset = $(if ($env:BQ_AUDIT_DATASET) { $env:BQ_AUDIT_DATASET } else { "audit" }),
+    [string]$DataflowSdkContainerImage = $env:DATAFLOW_SDK_CONTAINER_IMAGE,
 
     [string]$PronabecDiscoveryJobName = $(if ($env:PRONABEC_DISCOVERY_JOB_NAME) { $env:PRONABEC_DISCOVERY_JOB_NAME } else { "pronabec-discovery-job" }),
     [string]$PronabecBuildPlanJobName = $(if ($env:PRONABEC_BUILD_PLAN_JOB_NAME) { $env:PRONABEC_BUILD_PLAN_JOB_NAME } else { "pronabec-build-plan-job" }),
@@ -83,6 +84,7 @@ Assert-RequiredValue -Name "ComposerLocation" -Value $ComposerLocation
 Assert-RequiredValue -Name "GcpRegion" -Value $GcpRegion
 Assert-RequiredValue -Name "CloudRunRegion" -Value $CloudRunRegion
 Assert-RequiredValue -Name "GcsBucketName" -Value $GcsBucketName
+Assert-RequiredValue -Name "DataflowSdkContainerImage" -Value $DataflowSdkContainerImage
 
 $Variables = [ordered]@{
     "gcp_project_id" = $ProjectId
@@ -94,6 +96,7 @@ $Variables = [ordered]@{
     "bq_silver_dataset" = $SilverDataset
     "bq_gold_dataset" = $GoldDataset
     "bq_audit_dataset" = $AuditDataset
+    "dataflow_sdk_container_image" = $DataflowSdkContainerImage
 
     "pronabec_discovery_job_name" = $PronabecDiscoveryJobName
     "pronabec_build_plan_job_name" = $PronabecBuildPlanJobName

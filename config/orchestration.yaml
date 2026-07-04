@@ -14,6 +14,7 @@ runtime:
   silver_dataset_var: bq_silver_dataset
   gold_dataset_var: bq_gold_dataset
   audit_dataset_var: bq_audit_dataset
+  dataflow_sdk_container_image_var: dataflow_sdk_container_image
 
 jobs:
   pronabec_discovery_job_name_var: pronabec_discovery_job_name

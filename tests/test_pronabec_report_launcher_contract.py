@@ -2,8 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+from pipelines.common.orchestration_config import (
+    build_bq_table_ref,
+    load_endpoints_config,
+    load_orchestration_config,
+    resolve_pronabec_report_datasets,
+)
 from pipelines.dataflow_bronze_to_silver import (
     PRONABEC_REPORTS_INVALID_CONFIG_MESSAGE,
     parse_arguments,
@@ -92,3 +100,34 @@ def test_mef_is_not_affected_by_report_launcher_contract() -> None:
             output_table="test-project:silver.presupuesto_mef",
         )
     )
+
+
+def test_composer_defines_one_parameterized_report_launch_per_dataset() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    orchestration_config = load_orchestration_config(repo_root / "config" / "orchestration.yaml")
+    endpoints_config = load_endpoints_config(repo_root / "config" / "endpoints.yaml")
+    report_datasets = resolve_pronabec_report_datasets(orchestration_config, endpoints_config)
+    dag_source = (repo_root / "dags" / "pronabec_medallion_batch_dag.py").read_text(encoding="utf-8")
+
+    assert len(report_datasets) == 23
+    assert 'TaskGroup(group_id="pronabec_reports_silver")' in dag_source
+    assert "for item in REPORT_DATASETS" in dag_source
+    assert '"SOURCE_DATASET": source_dataset' in dag_source
+    assert '"INPUT_PATH": build_report_bronze_uri(source_dataset)' in dag_source
+    assert '"OUTPUT_TABLE": build_bq_table_ref(' in dag_source
+    assert '"DATAFLOW_SDK_CONTAINER_IMAGE": DATAFLOW_SDK_CONTAINER_IMAGE' in dag_source
+
+    dataset = "report_beca18_universitarios_universidad_anual"
+    bronze_template = orchestration_config["datasets"]["pronabec_reports"]["bronze_path_template"]
+    input_path = "gs://bucket/" + bronze_template.format(
+        dataset=dataset,
+        extraction_date="2026-07-02",
+    )
+    output_table = build_bq_table_ref("project", "silver", f"pronabec_{dataset}")
+
+    assert input_path == (
+        "gs://bucket/bronze/pronabec_reports/"
+        "report_beca18_universitarios_universidad_anual/"
+        "extraction_date=2026-07-02/data.csv"
+    )
+    assert output_table == "project:silver.pronabec_report_beca18_universitarios_universidad_anual"
