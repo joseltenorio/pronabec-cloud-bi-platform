@@ -138,6 +138,15 @@ En el DAG principal, las ramas Bronze independientes (`pronabec_api_bronze`, `me
 
 El paralelismo visible en Composer corresponde a launchers Cloud Run/Dataflow. La cantidad de workers dentro de cada Dataflow job se observa y ajusta desde Dataflow, no desde el grafo de tareas Composer.
 
+Las tasks Cloud Run del DAG no dependen de `gcloud run jobs execute --wait`. El operador lanza la execution, captura su nombre y hace polling explicito. En logs de Composer, el `execution_name` es la llave para correlacionar:
+
+```text
+Created Cloud Run execution: <execution-name>
+Cloud Run execution=<execution-name> job=<job-name> elapsed=<seconds> running=<n> succeeded=<n> failed=<n>
+```
+
+Si Composer marca una task como failed, primero revise si Cloud Run reporto `failedCount > 0`, condicion `Failed=True`, condicion `Cancelled=True` o timeout de polling. Si Cloud Run fue exitoso pero Airflow fallo, conserve como evidencia el task log completo, el `execution_name`, el JSON de `gcloud run jobs executions describe` y los logs de Cloud Run/Dataflow asociados.
+
 Composer no concentra la lógica de procesamiento ni reemplaza los logs emitidos por Cloud Run Jobs y Dataflow.
 
 ## BigQuery Audit

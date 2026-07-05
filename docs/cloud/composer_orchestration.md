@@ -156,6 +156,29 @@ quality_checks_job_name
 
 El DAG principal usa `pronabec-discovery-job`, `pronabec-build-plan-job`, `pronabec-run-plan-job` y `pronabec-finalize-dataset-job`. Esa es la unica ruta soportada para PRONABEC API Bronze.
 
+## Ejecucion robusta de Cloud Run Jobs
+
+Composer no usa `gcloud run jobs execute --wait` dentro de `BashOperator`. Ese patron puede quedarse sin output mientras `gcloud` espera, perder heartbeat en Airflow y provocar retries que lancen ejecuciones duplicadas.
+
+Cada task Cloud Run usa un `PythonOperator` con `run_cloud_run_job_with_polling`. El operador:
+
+```text
+1. lanza el Cloud Run Job sin --wait;
+2. captura el nombre de la execution;
+3. consulta `gcloud run jobs executions describe` en JSON;
+4. imprime estado periodico con running/succeeded/failed;
+5. falla solo si Cloud Run reporta failed/cancelled o si se supera el timeout.
+```
+
+Los logs de Composer deben mostrar:
+
+```text
+Created Cloud Run execution: <execution-name>
+Polling Cloud Run execution...
+Cloud Run execution=<execution-name> job=<job-name> elapsed=<seconds> running=<n> succeeded=<n> failed=<n>
+Cloud Run execution succeeded.
+```
+
 ## Debug operativo
 
 Para depurar el flujo PRONABEC, ejecute primero los Cloud Run Jobs manualmente:
@@ -174,6 +197,22 @@ Si cambian modulos Python, haga rebuild/push de la imagen antes de `scripts/depl
 ## Reintentos y concurrencia
 
 El DAG mantiene `catchup=False`, `max_active_runs=1` y `max_active_tasks=8`. Esta configuracion evita backfills automaticos, ejecuciones superpuestas para una misma fecha logica y paralelismo ilimitado de launchers.
+
+Durante la validacion E2E, el DAG es manual-only (`schedule_interval=None`) para evitar que Airflow dispare scheduled runs antiguos al despausar el DAG y bloquee la corrida manual correcta.
+
+Dispare Composer con fecha y run id explicitos:
+
+```bash
+gcloud composer environments run "$COMPOSER_ENVIRONMENT_NAME" \
+  --location "$COMPOSER_LOCATION" \
+  --project "$GCP_PROJECT_ID" \
+  dags trigger -- \
+  --run-id "manual_20260702_composer_e2e_hardened_01" \
+  --conf '{"extraction_date":"2026-07-02","pipeline_run_id":"manual_20260702"}' \
+  pronabec_medallion_batch
+```
+
+El DAG propaga `BRONZE_EXTRACTION_DATE` desde `dag_run.conf.extraction_date` y `PIPELINE_RUN_ID` desde `dag_run.conf.pipeline_run_id`. Si `pipeline_run_id` no viene en el trigger, usa `run_id` como fallback.
 
 Composer controla cuantos Cloud Run Jobs/Dataflow launchers se lanzan al mismo tiempo. `Dataflow max_num_workers` controla cuantos workers puede usar cada job Dataflow individual; es una capa distinta y no se hardcodea por dataset en el DAG.
 

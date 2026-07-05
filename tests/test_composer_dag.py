@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 
@@ -13,6 +15,7 @@ sys.modules["airflow.models.param"] = MagicMock()
 sys.modules["airflow.operators"] = MagicMock()
 sys.modules["airflow.operators.bash"] = MagicMock()
 sys.modules["airflow.operators.empty"] = MagicMock()
+sys.modules["airflow.operators.python"] = MagicMock()
 sys.modules["airflow.utils"] = MagicMock()
 sys.modules["airflow.utils.task_group"] = MagicMock()
 
@@ -110,12 +113,13 @@ def test_dag_uses_non_empty_extraction_date_fallback() -> None:
     assert "dag_run.conf.get('extraction_date', ds)" not in content
 
 
-def test_dag_schedule_is_weekly_without_catchup() -> None:
+def test_dag_is_manual_only_without_catchup() -> None:
     content = _read_dag_source()
 
-    assert 'schedule_interval=ORCHESTRATION_CONFIG["dag"]["schedule"]' in content
+    assert "schedule_interval=None" in content
     assert "catchup=False" in content
     assert "max_active_tasks=8" in content
+    assert 'max_active_runs=ORCHESTRATION_CONFIG["dag"]["max_active_runs"]' in content
 
 
 def test_composer_upload_script_syncs_support_files() -> None:
@@ -194,7 +198,8 @@ def test_dag_passes_chunk_runtime_env_vars() -> None:
     content = _read_dag_source()
 
     assert "BRONZE_EXTRACTION_DATE" in content
-    assert "PIPELINE_RUN_ID={{ run_id }}" in content
+    assert "dag_run.conf.get('pipeline_run_id', run_id)" in content
+    assert "PIPELINE_RUN_ID={{ run_id }}" not in content
     assert '"SOURCE_DATASET": source_dataset' in content
     assert '"PAGE_START": str(page_start)' not in content
     assert '"PAGE_END": str(page_end)' not in content
@@ -326,3 +331,135 @@ def test_report_dataflow_paths_and_tables_are_bound_per_report() -> None:
         == "{{ var.value.gcp_project_id }}:{{ var.value.bq_silver_dataset }}."
         "pronabec_report_beca18_region_postulacion_2025"
     )
+
+
+def test_dag_uses_cloud_run_polling_helper_instead_of_bash_wait() -> None:
+    content = _read_dag_source()
+
+    assert "run_cloud_run_job_with_polling" in content
+    assert "PythonOperator" in content
+    assert "BashOperator" not in content
+    assert "--wait" not in content
+    assert "retries=0" in content
+
+
+def test_cloud_run_polling_helper_succeeds(monkeypatch, capsys) -> None:
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        if "execute" in command:
+            return SimpleNamespace(returncode=0, stdout="test-job-abc\n", stderr="")
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "status": {
+                        "taskCount": 1,
+                        "runningCount": 0,
+                        "succeededCount": 1,
+                        "failedCount": 0,
+                        "conditions": [{"type": "Completed", "status": "True"}],
+                    }
+                }
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(dag_mod.subprocess, "run", fake_run)
+
+    dag_mod.run_cloud_run_job_with_polling(
+        job_name="test-job",
+        project_id="project",
+        region="us-central1",
+        env_vars={"BRONZE_EXTRACTION_DATE": "2026-07-02", "PIPELINE_RUN_ID": "manual_20260702"},
+        poll_interval_seconds=1,
+        timeout_seconds=30,
+    )
+
+    output = capsys.readouterr().out
+    assert "Created Cloud Run execution: test-job-abc" in output
+    assert "Cloud Run execution succeeded: test-job-abc" in output
+    assert any("execute" in command for command in calls)
+    assert all("--wait" not in command for command in calls)
+
+
+def test_cloud_run_polling_helper_fails_on_failed_count(monkeypatch) -> None:
+    def fake_run(command, **kwargs):
+        if "execute" in command:
+            return SimpleNamespace(returncode=0, stdout="test-job-failed\n", stderr="")
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps({"status": {"taskCount": 1, "succeededCount": 0, "failedCount": 1}}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(dag_mod.subprocess, "run", fake_run)
+
+    try:
+        dag_mod.run_cloud_run_job_with_polling(
+            job_name="test-job",
+            project_id="project",
+            region="us-central1",
+            env_vars={"BRONZE_EXTRACTION_DATE": "2026-07-02", "PIPELINE_RUN_ID": "manual_20260702"},
+            poll_interval_seconds=1,
+            timeout_seconds=30,
+        )
+    except RuntimeError as exc:
+        assert "Cloud Run execution failed" in str(exc)
+    else:
+        raise AssertionError("Expected RuntimeError for failed Cloud Run execution")
+
+
+def test_cloud_run_polling_helper_times_out(monkeypatch) -> None:
+    monotonic_values = iter([0, 0, 31])
+
+    def fake_run(command, **kwargs):
+        if "execute" in command:
+            return SimpleNamespace(returncode=0, stdout="test-job-running\n", stderr="")
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps({"status": {"taskCount": 1, "runningCount": 1, "failedCount": 0}}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(dag_mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(dag_mod.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(dag_mod.time, "sleep", lambda _: None)
+
+    try:
+        dag_mod.run_cloud_run_job_with_polling(
+            job_name="test-job",
+            project_id="project",
+            region="us-central1",
+            env_vars={"BRONZE_EXTRACTION_DATE": "2026-07-02", "PIPELINE_RUN_ID": "manual_20260702"},
+            poll_interval_seconds=1,
+            timeout_seconds=30,
+        )
+    except TimeoutError as exc:
+        assert "Timed out waiting for Cloud Run execution" in str(exc)
+    else:
+        raise AssertionError("Expected TimeoutError for long running Cloud Run execution")
+
+
+def test_gcloud_failure_prints_stdout_and_stderr(monkeypatch, capsys) -> None:
+    def fake_run(command, **kwargs):
+        return SimpleNamespace(returncode=1, stdout="bad stdout", stderr="bad stderr")
+
+    monkeypatch.setattr(dag_mod.subprocess, "run", fake_run)
+
+    try:
+        dag_mod.run_cloud_run_job_with_polling(
+            job_name="test-job",
+            project_id="project",
+            region="us-central1",
+            env_vars={"BRONZE_EXTRACTION_DATE": "2026-07-02", "PIPELINE_RUN_ID": "manual_20260702"},
+            poll_interval_seconds=1,
+            timeout_seconds=30,
+        )
+    except RuntimeError:
+        output = capsys.readouterr().out
+        assert "bad stdout" in output
+        assert "bad stderr" in output
+    else:
+        raise AssertionError("Expected RuntimeError for gcloud failure")

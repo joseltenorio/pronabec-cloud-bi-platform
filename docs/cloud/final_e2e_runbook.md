@@ -61,6 +61,33 @@ Bronze PRONABEC descarga todos los datasets `bronze_enabled=true`. Silver solo t
 
 Composer paraleliza launchers de Cloud Run/Dataflow con `max_active_runs=1` y `max_active_tasks=8`. Los workers de cada Dataflow job se controlan aparte con la configuracion Dataflow existente, como `DATAFLOW_MAX_NUM_WORKERS`; no se asignan workers por dataset desde el DAG.
 
+Durante la validacion E2E, el DAG es manual-only (`schedule_interval=None`). Esto evita que, al despausar Composer, se cree un scheduled run antiguo que bloquee la corrida manual correcta por `max_active_runs=1`.
+
+Las tasks Cloud Run no usan `gcloud run jobs execute --wait`. Composer lanza el job, captura el execution name y hace polling explicito con logs periodicos de estado. Esto evita ventanas silenciosas que pueden terminar en heartbeat perdido y `up_for_retry`.
+
+Trigger recomendado para la corrida validada:
+
+```bash
+gcloud composer environments run "$COMPOSER_ENVIRONMENT_NAME" \
+  --location "$COMPOSER_LOCATION" \
+  --project "$GCP_PROJECT_ID" \
+  dags trigger -- \
+  --run-id "manual_20260702_composer_e2e_hardened_01" \
+  --conf '{"extraction_date":"2026-07-02","pipeline_run_id":"manual_20260702"}' \
+  pronabec_medallion_batch
+```
+
+Los logs deben confirmar:
+
+```text
+BRONZE_EXTRACTION_DATE=2026-07-02
+PIPELINE_RUN_ID=manual_20260702
+Created Cloud Run execution: <execution-name>
+Polling Cloud Run execution...
+Cloud Run execution=<execution-name> job=<job-name> elapsed=<seconds> running=<n> succeeded=<n> failed=<n>
+Cloud Run execution succeeded.
+```
+
 ## 5. Ejecucion manual con gcloud
 
 ### Discovery
