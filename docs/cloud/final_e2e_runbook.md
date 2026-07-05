@@ -63,7 +63,7 @@ Composer paraleliza launchers de Cloud Run/Dataflow con `max_active_runs=1` y `m
 
 Durante la validacion E2E, el DAG es manual-only (`schedule_interval=None`). Esto evita que, al despausar Composer, se cree un scheduled run antiguo que bloquee la corrida manual correcta por `max_active_runs=1`.
 
-Las tasks Cloud Run no usan `gcloud run jobs execute --wait`. Composer lanza el job, captura el execution name y hace polling explicito con logs periodicos de estado. Esto evita ventanas silenciosas que pueden terminar en heartbeat perdido y `up_for_retry`.
+Las tasks Cloud Run no usan `gcloud run jobs execute --wait`. Composer lanza el job con `--async`, loggea stdout/stderr del launch, resuelve el execution name desde la salida o con `gcloud run jobs executions list`, y hace polling explicito con logs periodicos de estado. Esto evita que el launch quede bloqueado varios minutos y termine por timeout antes de comenzar el polling.
 
 Trigger recomendado para la corrida validada:
 
@@ -82,7 +82,9 @@ Los logs deben confirmar:
 ```text
 BRONZE_EXTRACTION_DATE=2026-07-02
 PIPELINE_RUN_ID=manual_20260702
-Created Cloud Run execution: <execution-name>
+Launching Cloud Run job asynchronously...
+Cloud Run launch command completed.
+Resolved Cloud Run execution: <execution-name>
 Polling Cloud Run execution...
 Cloud Run execution=<execution-name> job=<job-name> elapsed=<seconds> running=<n> succeeded=<n> failed=<n>
 Cloud Run execution succeeded.

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from airflow import DAG
@@ -193,6 +194,132 @@ def _run_gcloud(command: list[str], timeout_seconds: int = 120) -> subprocess.Co
     return result
 
 
+def _parse_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    normalized = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _execution_name_from_text(text: str, job_name: str) -> str | None:
+    execution_path_match = re.search(rf"(?:executions/)?({re.escape(job_name)}-[A-Za-z0-9-]+)", text)
+    if execution_path_match:
+        return execution_path_match.group(1)
+    return None
+
+
+def _find_execution_name_in_json(value: object, job_name: str) -> str | None:
+    if isinstance(value, dict):
+        for key in ("name", "execution", "executionName"):
+            candidate = value.get(key)
+            if isinstance(candidate, str):
+                execution_name = _execution_name_from_text(candidate, job_name)
+                if execution_name:
+                    return execution_name
+        for nested in value.values():
+            execution_name = _find_execution_name_in_json(nested, job_name)
+            if execution_name:
+                return execution_name
+    elif isinstance(value, list):
+        for nested in value:
+            execution_name = _find_execution_name_in_json(nested, job_name)
+            if execution_name:
+                return execution_name
+    elif isinstance(value, str):
+        return _execution_name_from_text(value, job_name)
+    return None
+
+
+def _list_recent_executions_for_job(job_name: str, project_id: str, region: str) -> list[dict]:
+    result = _run_gcloud(
+        [
+            "gcloud",
+            "run",
+            "jobs",
+            "executions",
+            "list",
+            "--job",
+            job_name,
+            "--project",
+            project_id,
+            "--region",
+            region,
+            "--format=json",
+            "--limit",
+            "10",
+        ],
+        timeout_seconds=60,
+    )
+    if not result.stdout.strip():
+        return []
+    return json.loads(result.stdout)
+
+
+def _execution_creation_timestamp(execution: dict) -> datetime | None:
+    metadata = execution.get("metadata", {})
+    return _parse_timestamp(
+        metadata.get("creationTimestamp")
+        or execution.get("createTime")
+        or execution.get("creationTimestamp")
+    )
+
+
+def _execution_name(execution: dict) -> str | None:
+    metadata = execution.get("metadata", {})
+    candidate = metadata.get("name") or execution.get("name")
+    if isinstance(candidate, str):
+        return candidate.split("/")[-1]
+    return None
+
+
+def _resolve_execution_name_from_launch(
+    job_name: str,
+    project_id: str,
+    region: str,
+    launch_started_at: datetime,
+    stdout: str,
+    stderr: str,
+) -> str:
+    for payload in (stdout, stderr):
+        if payload.strip():
+            try:
+                parsed = json.loads(payload)
+            except json.JSONDecodeError:
+                parsed = None
+            if parsed is not None:
+                execution_name = _find_execution_name_in_json(parsed, job_name)
+                if execution_name:
+                    return execution_name
+
+            execution_name = _execution_name_from_text(payload, job_name)
+            if execution_name:
+                return execution_name
+
+    tolerance_start = launch_started_at - timedelta(minutes=2)
+    candidates = _list_recent_executions_for_job(job_name, project_id, region)
+    recent_candidates = []
+    for execution in candidates:
+        created_at = _execution_creation_timestamp(execution)
+        execution_name = _execution_name(execution)
+        if execution_name and (created_at is None or created_at >= tolerance_start):
+            recent_candidates.append((created_at or datetime.min.replace(tzinfo=timezone.utc), execution_name))
+
+    if recent_candidates:
+        recent_candidates.sort(key=lambda item: item[0], reverse=True)
+        return recent_candidates[0][1]
+
+    raise RuntimeError(
+        "Could not resolve Cloud Run execution name after async launch. "
+        f"job={job_name} stdout={stdout!r} stderr={stderr!r} candidates={candidates!r}"
+    )
+
+
 def _condition_summary(execution: dict) -> str:
     conditions = execution.get("status", {}).get("conditions") or execution.get("conditions") or []
     summary = []
@@ -255,9 +382,10 @@ def run_cloud_run_job_with_polling(
         return
 
     joined_env_vars = ",".join(f"{key}={value}" for key, value in env_vars.items())
-    print(f"Launching Cloud Run job={job_name} project={project_id} region={region}")
+    print(f"Launching Cloud Run job asynchronously job={job_name} project={project_id} region={region}")
     print(f"Cloud Run env vars: {joined_env_vars}")
 
+    launch_started_at = datetime.now(timezone.utc)
     execute_result = _run_gcloud(
         [
             "gcloud",
@@ -271,18 +399,25 @@ def run_cloud_run_job_with_polling(
             region,
             "--update-env-vars",
             joined_env_vars,
-            "--format=value(metadata.name)",
+            "--async",
+            "--format=json",
         ],
-        timeout_seconds=180,
+        timeout_seconds=60,
     )
-    execution_name = next(
-        (line.strip().split("/")[-1] for line in execute_result.stdout.splitlines() if line.strip()),
-        "",
-    )
-    if not execution_name:
-        raise RuntimeError("Cloud Run execution name was not returned by gcloud.")
+    print("Cloud Run launch command completed.")
+    print(f"stdout: {execute_result.stdout}")
+    print(f"stderr: {execute_result.stderr}")
 
-    print(f"Created Cloud Run execution: {execution_name}")
+    execution_name = _resolve_execution_name_from_launch(
+        job_name=job_name,
+        project_id=project_id,
+        region=region,
+        launch_started_at=launch_started_at,
+        stdout=execute_result.stdout,
+        stderr=execute_result.stderr,
+    )
+    print(f"Resolved Cloud Run execution: {execution_name}")
+    print(f"Polling Cloud Run execution: {execution_name}")
     started_at = time.monotonic()
     while True:
         elapsed = int(time.monotonic() - started_at)
@@ -306,7 +441,7 @@ def run_cloud_run_job_with_polling(
                 region,
                 "--format=json",
             ],
-            timeout_seconds=120,
+            timeout_seconds=60,
         )
         execution = json.loads(describe_result.stdout)
         task_count, running_count, succeeded_count, failed_count = _execution_counts(execution)

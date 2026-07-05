@@ -163,17 +163,20 @@ Composer no usa `gcloud run jobs execute --wait` dentro de `BashOperator`. Ese p
 Cada task Cloud Run usa un `PythonOperator` con `run_cloud_run_job_with_polling`. El operador:
 
 ```text
-1. lanza el Cloud Run Job sin --wait;
-2. captura el nombre de la execution;
-3. consulta `gcloud run jobs executions describe` en JSON;
-4. imprime estado periodico con running/succeeded/failed;
-5. falla solo si Cloud Run reporta failed/cancelled o si se supera el timeout.
+1. lanza el Cloud Run Job con `--async`, sin esperar a que termine;
+2. loggea stdout/stderr del launch;
+3. resuelve el nombre de la execution desde stdout/stderr o desde `executions list`;
+4. consulta `gcloud run jobs executions describe` en JSON;
+5. imprime estado periodico con running/succeeded/failed;
+6. falla solo si Cloud Run reporta failed/cancelled o si se supera el timeout.
 ```
 
 Los logs de Composer deben mostrar:
 
 ```text
-Created Cloud Run execution: <execution-name>
+Launching Cloud Run job asynchronously...
+Cloud Run launch command completed.
+Resolved Cloud Run execution: <execution-name>
 Polling Cloud Run execution...
 Cloud Run execution=<execution-name> job=<job-name> elapsed=<seconds> running=<n> succeeded=<n> failed=<n>
 Cloud Run execution succeeded.

@@ -138,10 +138,10 @@ En el DAG principal, las ramas Bronze independientes (`pronabec_api_bronze`, `me
 
 El paralelismo visible en Composer corresponde a launchers Cloud Run/Dataflow. La cantidad de workers dentro de cada Dataflow job se observa y ajusta desde Dataflow, no desde el grafo de tareas Composer.
 
-Las tasks Cloud Run del DAG no dependen de `gcloud run jobs execute --wait`. El operador lanza la execution, captura su nombre y hace polling explicito. En logs de Composer, el `execution_name` es la llave para correlacionar:
+Las tasks Cloud Run del DAG no dependen de `gcloud run jobs execute --wait`. El operador lanza la execution con `--async`, registra stdout/stderr, resuelve el nombre de execution desde la salida o desde `executions list`, y hace polling explicito. En logs de Composer, el `execution_name` es la llave para correlacionar:
 
 ```text
-Created Cloud Run execution: <execution-name>
+Resolved Cloud Run execution: <execution-name>
 Cloud Run execution=<execution-name> job=<job-name> elapsed=<seconds> running=<n> succeeded=<n> failed=<n>
 ```
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -345,9 +346,11 @@ def test_dag_uses_cloud_run_polling_helper_instead_of_bash_wait() -> None:
 
 def test_cloud_run_polling_helper_succeeds(monkeypatch, capsys) -> None:
     calls = []
+    timeouts = []
 
     def fake_run(command, **kwargs):
         calls.append(command)
+        timeouts.append(kwargs["timeout"])
         if "execute" in command:
             return SimpleNamespace(returncode=0, stdout="test-job-abc\n", stderr="")
         return SimpleNamespace(
@@ -378,10 +381,128 @@ def test_cloud_run_polling_helper_succeeds(monkeypatch, capsys) -> None:
     )
 
     output = capsys.readouterr().out
-    assert "Created Cloud Run execution: test-job-abc" in output
+    assert "Launching Cloud Run job asynchronously" in output
+    assert "Cloud Run launch command completed." in output
+    assert "Resolved Cloud Run execution: test-job-abc" in output
+    assert "Polling Cloud Run execution: test-job-abc" in output
     assert "Cloud Run execution succeeded: test-job-abc" in output
     assert any("execute" in command for command in calls)
+    assert any("--async" in command for command in calls)
     assert all("--wait" not in command for command in calls)
+    assert 180 not in timeouts
+
+
+def test_cloud_run_polling_helper_uses_execution_name_from_launch_json(monkeypatch) -> None:
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        if "execute" in command:
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "metadata": {
+                            "name": (
+                                "projects/project/locations/us-central1/jobs/test-job/"
+                                "executions/test-job-json"
+                            )
+                        }
+                    }
+                ),
+                stderr="",
+            )
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps({"status": {"taskCount": 1, "succeededCount": 1, "failedCount": 0}}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(dag_mod.subprocess, "run", fake_run)
+
+    dag_mod.run_cloud_run_job_with_polling(
+        job_name="test-job",
+        project_id="project",
+        region="us-central1",
+        env_vars={"BRONZE_EXTRACTION_DATE": "2026-07-02", "PIPELINE_RUN_ID": "manual_20260702"},
+        poll_interval_seconds=1,
+        timeout_seconds=30,
+    )
+
+    assert any("describe" in command and "test-job-json" in command for command in calls)
+    assert not any("list" in command for command in calls)
+
+
+def test_cloud_run_polling_helper_falls_back_to_execution_list(monkeypatch) -> None:
+    calls = []
+    creation_timestamp = datetime.now(timezone.utc).isoformat()
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        if "execute" in command:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if "list" in command:
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(
+                    [
+                        {
+                            "metadata": {
+                                "name": "test-job-listed",
+                                "creationTimestamp": creation_timestamp,
+                            }
+                        }
+                    ]
+                ),
+                stderr="",
+            )
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps({"status": {"taskCount": 1, "succeededCount": 1, "failedCount": 0}}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(dag_mod.subprocess, "run", fake_run)
+
+    dag_mod.run_cloud_run_job_with_polling(
+        job_name="test-job",
+        project_id="project",
+        region="us-central1",
+        env_vars={"BRONZE_EXTRACTION_DATE": "2026-07-02", "PIPELINE_RUN_ID": "manual_20260702"},
+        poll_interval_seconds=1,
+        timeout_seconds=30,
+    )
+
+    assert any("list" in command for command in calls)
+    assert any("describe" in command and "test-job-listed" in command for command in calls)
+
+
+def test_cloud_run_polling_helper_error_includes_launch_output_when_execution_missing(monkeypatch) -> None:
+    def fake_run(command, **kwargs):
+        if "execute" in command:
+            return SimpleNamespace(returncode=0, stdout="launch stdout", stderr="launch stderr")
+        if "list" in command:
+            return SimpleNamespace(returncode=0, stdout="[]", stderr="")
+        raise AssertionError("describe should not run without execution name")
+
+    monkeypatch.setattr(dag_mod.subprocess, "run", fake_run)
+
+    try:
+        dag_mod.run_cloud_run_job_with_polling(
+            job_name="test-job",
+            project_id="project",
+            region="us-central1",
+            env_vars={"BRONZE_EXTRACTION_DATE": "2026-07-02", "PIPELINE_RUN_ID": "manual_20260702"},
+            poll_interval_seconds=1,
+            timeout_seconds=30,
+        )
+    except RuntimeError as exc:
+        message = str(exc)
+        assert "Could not resolve Cloud Run execution name" in message
+        assert "launch stdout" in message
+        assert "launch stderr" in message
+    else:
+        raise AssertionError("Expected RuntimeError when execution name cannot be resolved")
 
 
 def test_cloud_run_polling_helper_fails_on_failed_count(monkeypatch) -> None:

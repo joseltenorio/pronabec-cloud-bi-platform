@@ -20,6 +20,8 @@ def test_bronze_manifest_validation_is_deployable_and_orchestrated():
     assert "run_bronze_manifest_validation" in dag_content
     assert "run_cloud_run_job_with_polling" in dag_content
     assert "--wait" not in dag_content
+    assert "--async" in dag_content
+    assert "timeout_seconds=180" not in dag_content
     assert "schedule_interval=None" in dag_content
     assert "dag_run.conf.get('pipeline_run_id', run_id)" in dag_content
     assert "silver_parallel = [pronabec_api_silver, mef_silver, pronabec_reports_silver]" in dag_content
