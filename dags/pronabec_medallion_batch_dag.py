@@ -335,6 +335,17 @@ def _execution_failed(execution: dict) -> bool:
     return failed_count > 0 or _condition_is_true(execution, "Failed", "Cancelled")
 
 
+def _execution_candidate_summary(execution: dict) -> str:
+    task_count, running_count, succeeded_count, failed_count = _execution_counts(execution)
+    return (
+        f"name={_short_resource_name(execution.get('name'))} "
+        f"createTime={execution.get('createTime') or execution.get('metadata', {}).get('creationTimestamp')} "
+        f"completionTime={execution.get('completionTime') or execution.get('status', {}).get('completionTime')} "
+        f"running={running_count} succeeded={succeeded_count} failed={failed_count} "
+        f"taskCount={task_count} condition={_condition_summary(execution)}"
+    )
+
+
 def _raise_operation_error(operation: dict, job_name: str) -> None:
     error = operation.get("error")
     if not error:
@@ -395,10 +406,14 @@ def _resolve_execution_resource_name(
         return resource_name
 
     candidates = _list_recent_executions_for_job(session, project_id, region, job_name, launch_started_at)
-    if candidates:
-        candidate_names = [_short_resource_name(candidate.get("name")) for candidate in candidates]
-        print(f"Cloud Run execution candidates for job={job_name}: {candidate_names}")
+    if len(candidates) == 1:
+        print(f"Cloud Run execution candidate for job={job_name}: {_execution_candidate_summary(candidates[0])}")
         return candidates[0].get("name")
+    if len(candidates) > 1:
+        print(f"Ambiguous Cloud Run execution candidates for job={job_name}:")
+        for candidate in candidates:
+            print(f"  {_execution_candidate_summary(candidate)}")
+        return None
 
     print(f"No Cloud Run execution candidates found for job={job_name} after launch.")
     return None
@@ -478,7 +493,11 @@ def run_cloud_run_job_with_polling(
             if execution_resource_name:
                 print(f"Resolved Cloud Run execution: {_short_resource_name(execution_resource_name)}")
             elif operation.get("done"):
-                print("Cloud Run operation completed successfully without execution resource in response.")
+                print(
+                    "Cloud Run operation completed successfully but execution could not be resolved "
+                    "unambiguously"
+                )
+                _log_bigquery_success_evidence(env_vars, project_id)
                 return
             else:
                 print(f"Waiting for Cloud Run execution for job={job_name} operation={operation_name}")

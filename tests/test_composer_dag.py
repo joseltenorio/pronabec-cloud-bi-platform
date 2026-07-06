@@ -492,6 +492,84 @@ def test_cloud_run_api_polling_helper_resolves_execution_from_list(monkeypatch) 
     assert session.get_calls[1][0].endswith("/executions/test-job-listed")
 
 
+def test_cloud_run_api_polling_succeeds_when_done_without_resolved_execution(
+    monkeypatch,
+    capsys,
+) -> None:
+    session = _FakeSession(
+        post_payload={"name": "projects/project/locations/us-central1/operations/op-done"},
+        get_payloads=[
+            {"executions": []},
+            {"name": "projects/project/locations/us-central1/operations/op-done", "done": True},
+            {"executions": []},
+        ],
+    )
+    _patch_api_session(monkeypatch, session)
+
+    dag_mod.run_cloud_run_job_with_polling(
+        job_name="test-job",
+        project_id="project",
+        region="us-central1",
+        env_vars={"BRONZE_EXTRACTION_DATE": "2026-07-02", "PIPELINE_RUN_ID": "manual_20260702"},
+        poll_interval_seconds=1,
+        timeout_seconds=30,
+    )
+
+    output = capsys.readouterr().out
+    assert (
+        "Cloud Run operation completed successfully but execution could not be resolved "
+        "unambiguously"
+    ) in output
+
+
+def test_cloud_run_api_polling_does_not_select_ambiguous_execution_candidate(
+    monkeypatch,
+    capsys,
+) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    first_candidate = {
+        "name": "projects/project/locations/us-central1/jobs/test-job/executions/test-job-first",
+        "createTime": now,
+        "taskCount": 1,
+        "succeededCount": 0,
+        "failedCount": 1,
+        "conditions": [{"type": "Failed", "state": "CONDITION_SUCCEEDED"}],
+    }
+    second_candidate = {
+        "name": "projects/project/locations/us-central1/jobs/test-job/executions/test-job-second",
+        "createTime": now,
+        "taskCount": 1,
+        "succeededCount": 1,
+        "failedCount": 0,
+        "conditions": [{"type": "Completed", "state": "CONDITION_SUCCEEDED"}],
+    }
+    session = _FakeSession(
+        post_payload={"name": "projects/project/locations/us-central1/operations/op-ambiguous"},
+        get_payloads=[
+            {"executions": [first_candidate, second_candidate]},
+            {"name": "projects/project/locations/us-central1/operations/op-ambiguous", "done": True},
+            {"executions": [first_candidate, second_candidate]},
+        ],
+    )
+    _patch_api_session(monkeypatch, session)
+
+    dag_mod.run_cloud_run_job_with_polling(
+        job_name="test-job",
+        project_id="project",
+        region="us-central1",
+        env_vars={"BRONZE_EXTRACTION_DATE": "2026-07-02", "PIPELINE_RUN_ID": "manual_20260702"},
+        poll_interval_seconds=1,
+        timeout_seconds=30,
+    )
+
+    output = capsys.readouterr().out
+    assert "Ambiguous Cloud Run execution candidates for job=test-job:" in output
+    assert "test-job-first" in output
+    assert "test-job-second" in output
+    assert not any(call[0].endswith("/executions/test-job-first") for call in session.get_calls)
+    assert not any(call[0].endswith("/executions/test-job-second") for call in session.get_calls)
+
+
 def test_cloud_run_api_polling_helper_fails_on_operation_error(monkeypatch) -> None:
     session = _FakeSession(
         post_payload={"name": "operations/op-error"},
@@ -546,6 +624,13 @@ def test_cloud_run_api_polling_helper_fails_on_execution_failed_count(monkeypatc
         ],
     )
     _patch_api_session(monkeypatch, session)
+    monkeypatch.setattr(
+        dag_mod,
+        "_log_bigquery_success_evidence",
+        lambda env_vars, project_id: (_ for _ in ()).throw(
+            AssertionError("BigQuery evidence must not hide failed Cloud Run executions")
+        ),
+    )
 
     try:
         dag_mod.run_cloud_run_job_with_polling(
