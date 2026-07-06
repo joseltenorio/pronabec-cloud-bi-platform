@@ -541,6 +541,11 @@ def cloud_run_job_operator(
     )
 
 
+def chain_tasks(tasks: list) -> None:
+    for upstream, downstream in zip(tasks, tasks[1:]):
+        upstream >> downstream
+
+
 def render_gcs_path(template: str, **values: str) -> str:
     return template.format(**values)
 
@@ -650,6 +655,7 @@ with DAG(
 
         discover_pronabec_datasets >> build_pronabec_extraction_plan >> run_pronabec_extraction_plan
         run_pronabec_extraction_plan >> pronabec_finalize_tasks
+        chain_tasks(pronabec_finalize_tasks)
 
     with TaskGroup(group_id="mef_bronze") as mef_bronze:
         extract_mef = cloud_run_job_operator(
@@ -674,6 +680,7 @@ with DAG(
                     },
                 )
             )
+        chain_tasks(report_stage_tasks)
 
     validate_bronze_manifests = cloud_run_job_operator(
         task_id="validate_bronze_manifests",
@@ -750,6 +757,7 @@ with DAG(
                     },
                 )
             )
+        chain_tasks(report_tasks)
 
     publish_gold_views = cloud_run_job_operator(
         task_id="publish_gold_views",

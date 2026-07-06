@@ -148,6 +148,8 @@ def test_bronze_manifest_validation_runs_after_bronze_tasks() -> None:
     assert 'TaskGroup(group_id="pronabec_reports_bronze")' in content
     assert "discover_pronabec_datasets >> build_pronabec_extraction_plan >> run_pronabec_extraction_plan" in content
     assert "run_pronabec_extraction_plan >> pronabec_finalize_tasks" in content
+    assert "chain_tasks(pronabec_finalize_tasks)" in content
+    assert "chain_tasks(report_stage_tasks)" in content
     assert "bronze_parallel = [pronabec_api_bronze, mef_bronze, pronabec_reports_bronze]" in content
     assert "init_run >> bronze_parallel" in content
     assert "bronze_parallel >> validate_bronze_manifests" in content
@@ -296,6 +298,28 @@ def test_silver_dataflow_groups_are_parallel_and_complete() -> None:
     }
     assert len(dag_mod.REPORT_DATASETS) == 23
     assert "all_silver_tasks" not in content
+    assert "chain_tasks(report_tasks)" in content
+    assert "chain_tasks(mef_tasks)" not in content
+    assert "chain_tasks(pronabec_api_tasks)" not in content
+
+
+def test_shared_cloud_run_job_groups_are_serialized() -> None:
+    content = _read_dag_source()
+
+    assert "def chain_tasks(tasks: list) -> None:" in content
+    assert "for upstream, downstream in zip(tasks, tasks[1:]):" in content
+    assert "chain_tasks(report_stage_tasks)" in content
+    assert "chain_tasks(pronabec_finalize_tasks)" in content
+    assert "chain_tasks(report_tasks)" in content
+
+
+def test_distinct_cloud_run_job_silver_groups_stay_parallel() -> None:
+    content = _read_dag_source()
+
+    assert "mef_tasks = []" in content
+    assert "pronabec_api_tasks = []" in content
+    assert "chain_tasks(mef_tasks)" not in content
+    assert "chain_tasks(pronabec_api_tasks)" not in content
 
 
 def test_report_dataflow_tasks_use_real_dataset_parameters() -> None:
