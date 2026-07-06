@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -383,18 +384,23 @@ def _patch_api_session(monkeypatch, session: _FakeSession) -> None:
 
 def test_cloud_run_api_polling_helper_succeeds(monkeypatch, capsys) -> None:
     session = _FakeSession(
-        post_payload={"name": "projects/project/locations/us-central1/operations/op-1"},
+        post_payload={
+            "name": "projects/project/locations/us-central1/operations/op-1",
+            "response": {
+                "name": (
+                    "projects/project/locations/us-central1/jobs/test-job/"
+                    "executions/test-job-execution"
+                )
+            },
+        },
         get_payloads=[
-            {"name": "projects/project/locations/us-central1/operations/op-1", "done": False},
             {
-                "name": "projects/project/locations/us-central1/operations/op-1",
-                "done": True,
-                "response": {
-                    "name": (
-                        "projects/project/locations/us-central1/jobs/test-job/"
-                        "executions/test-job-execution"
-                    )
-                },
+                "name": "projects/project/locations/us-central1/jobs/test-job/executions/test-job-execution",
+                "taskCount": 1,
+                "runningCount": 0,
+                "succeededCount": 1,
+                "failedCount": 0,
+                "conditions": [{"type": "Completed", "state": "CONDITION_SUCCEEDED"}],
             },
         ],
     )
@@ -413,8 +419,8 @@ def test_cloud_run_api_polling_helper_succeeds(monkeypatch, capsys) -> None:
     output = capsys.readouterr().out
     assert "Launching Cloud Run job through REST API." in output
     assert "Cloud Run operation: projects/project/locations/us-central1/operations/op-1" in output
-    assert "Cloud Run operation completed successfully." in output
-    assert "Cloud Run execution: test-job-execution" in output
+    assert "Resolved Cloud Run execution: test-job-execution" in output
+    assert "Cloud Run execution succeeded: test-job-execution" in output
     assert session.post_calls[0][0] == "https://run.googleapis.com/v2/projects/project/locations/us-central1/jobs/test-job:run"
     post_body = session.post_calls[0][1]["json"]
     assert post_body["overrides"]["containerOverrides"][0]["env"] == [
@@ -424,10 +430,49 @@ def test_cloud_run_api_polling_helper_succeeds(monkeypatch, capsys) -> None:
     assert session.get_calls
 
 
+def test_cloud_run_api_polling_helper_resolves_execution_from_list(monkeypatch) -> None:
+    session = _FakeSession(
+        post_payload={"name": "projects/project/locations/us-central1/operations/op-list"},
+        get_payloads=[
+            {
+                "executions": [
+                    {
+                        "name": (
+                            "projects/project/locations/us-central1/jobs/test-job/"
+                            "executions/test-job-listed"
+                        ),
+                        "createTime": datetime.now(timezone.utc).isoformat(),
+                    }
+                ]
+            },
+            {
+                "name": "projects/project/locations/us-central1/jobs/test-job/executions/test-job-listed",
+                "taskCount": 1,
+                "succeededCount": 1,
+                "failedCount": 0,
+            },
+        ],
+    )
+    _patch_api_session(monkeypatch, session)
+
+    dag_mod.run_cloud_run_job_with_polling(
+        job_name="test-job",
+        project_id="project",
+        region="us-central1",
+        env_vars={"BRONZE_EXTRACTION_DATE": "2026-07-02", "PIPELINE_RUN_ID": "manual_20260702"},
+        poll_interval_seconds=1,
+        timeout_seconds=30,
+    )
+
+    assert session.get_calls[0][0].endswith("/jobs/test-job/executions")
+    assert session.get_calls[1][0].endswith("/executions/test-job-listed")
+
+
 def test_cloud_run_api_polling_helper_fails_on_operation_error(monkeypatch) -> None:
     session = _FakeSession(
         post_payload={"name": "operations/op-error"},
         get_payloads=[
+            {"executions": []},
             {
                 "name": "operations/op-error",
                 "done": True,
@@ -455,10 +500,111 @@ def test_cloud_run_api_polling_helper_fails_on_operation_error(monkeypatch) -> N
         raise AssertionError("Expected RuntimeError for Cloud Run operation error")
 
 
+def test_cloud_run_api_polling_helper_fails_on_execution_failed_count(monkeypatch) -> None:
+    session = _FakeSession(
+        post_payload={
+            "name": "operations/op-execution-failed",
+            "response": {
+                "name": (
+                    "projects/project/locations/us-central1/jobs/test-job/"
+                    "executions/test-job-failed"
+                )
+            },
+        },
+        get_payloads=[
+            {
+                "name": "projects/project/locations/us-central1/jobs/test-job/executions/test-job-failed",
+                "taskCount": 1,
+                "succeededCount": 0,
+                "failedCount": 1,
+                "conditions": [{"type": "Failed", "state": "CONDITION_SUCCEEDED"}],
+            }
+        ],
+    )
+    _patch_api_session(monkeypatch, session)
+
+    try:
+        dag_mod.run_cloud_run_job_with_polling(
+            job_name="test-job",
+            project_id="project",
+            region="us-central1",
+            env_vars={"BRONZE_EXTRACTION_DATE": "2026-07-02", "PIPELINE_RUN_ID": "manual_20260702"},
+            poll_interval_seconds=1,
+            timeout_seconds=30,
+        )
+    except RuntimeError as exc:
+        assert "Cloud Run execution failed" in str(exc)
+    else:
+        raise AssertionError("Expected RuntimeError for failed Cloud Run execution")
+
+
+def test_cloud_run_api_polling_logs_bigquery_evidence(monkeypatch, capsys) -> None:
+    session = _FakeSession(
+        post_payload={
+            "name": "operations/op-evidence",
+            "response": {
+                "name": (
+                    "projects/project/locations/us-central1/jobs/test-job/"
+                    "executions/test-job-evidence"
+                )
+            },
+        },
+        get_payloads=[
+            {
+                "name": "projects/project/locations/us-central1/jobs/test-job/executions/test-job-evidence",
+                "taskCount": 1,
+                "succeededCount": 1,
+                "failedCount": 0,
+            }
+        ],
+    )
+    _patch_api_session(monkeypatch, session)
+
+    class FakeQueryJob:
+        def result(self):
+            return [type("Row", (), {"rows_count": 42})()]
+
+    class FakeClient:
+        def __init__(self, project: str) -> None:
+            self.project = project
+
+        def query(self, query, job_config=None):
+            return FakeQueryJob()
+
+    fake_bigquery = MagicMock()
+    fake_bigquery.Client = FakeClient
+    fake_bigquery.QueryJobConfig = lambda query_parameters: {"query_parameters": query_parameters}
+    fake_bigquery.ScalarQueryParameter = lambda name, parameter_type, value: (name, parameter_type, value)
+    monkeypatch.setitem(sys.modules, "google.cloud.bigquery", fake_bigquery)
+
+    dag_mod.run_cloud_run_job_with_polling(
+        job_name="test-job",
+        project_id="project",
+        region="us-central1",
+        env_vars={
+            "BRONZE_EXTRACTION_DATE": "2026-07-02",
+            "PIPELINE_RUN_ID": "manual_20260702",
+            "SOURCE_SYSTEM": "mef",
+            "SOURCE_DATASET": "presupuesto",
+            "OUTPUT_TABLE": "project:silver.presupuesto_mef",
+        },
+        poll_interval_seconds=1,
+        timeout_seconds=30,
+    )
+
+    output = capsys.readouterr().out
+    assert "BigQuery Silver evidence:" in output
+    assert "rows=42" in output
+
+
 def test_cloud_run_api_polling_helper_times_out(monkeypatch) -> None:
     session = _FakeSession(
         post_payload={"name": "operations/op-running"},
-        get_payloads=[{"name": "operations/op-running", "done": False}],
+        get_payloads=[
+            {"executions": []},
+            {"name": "operations/op-running", "done": False},
+            {"executions": []},
+        ],
     )
     _patch_api_session(monkeypatch, session)
     monotonic_values = iter([0, 0, 31])
@@ -475,7 +621,7 @@ def test_cloud_run_api_polling_helper_times_out(monkeypatch) -> None:
             timeout_seconds=30,
         )
     except TimeoutError as exc:
-        assert "Timed out waiting for Cloud Run operation" in str(exc)
+        assert "Timed out waiting for Cloud Run execution" in str(exc)
     else:
         raise AssertionError("Expected TimeoutError for long running Cloud Run operation")
 

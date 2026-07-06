@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import importlib
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import google.auth
@@ -186,6 +187,14 @@ def _cloud_run_operation_url(operation_name: str) -> str:
     return f"https://run.googleapis.com/v2/{operation_name}"
 
 
+def _cloud_run_executions_url(project_id: str, region: str, job_name: str) -> str:
+    return f"https://run.googleapis.com/v2/projects/{project_id}/locations/{region}/jobs/{job_name}/executions"
+
+
+def _cloud_run_resource_url(resource_name: str) -> str:
+    return f"https://run.googleapis.com/v2/{resource_name}"
+
+
 def _request_json(method: str, session: AuthorizedSession, url: str, **kwargs) -> dict:
     response = getattr(session, method)(url, **kwargs)
     if response.status_code >= 400:
@@ -197,6 +206,18 @@ def _request_json(method: str, session: AuthorizedSession, url: str, **kwargs) -
     if not response.text:
         return {}
     return response.json()
+
+
+def _parse_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _env_overrides(env_vars: dict[str, str]) -> dict:
@@ -214,9 +235,9 @@ def _env_overrides(env_vars: dict[str, str]) -> dict:
     }
 
 
-def _extract_execution_name(operation: dict) -> str | None:
-    response = operation.get("response") or {}
-    metadata = operation.get("metadata") or {}
+def _extract_execution_resource_name(payload: dict) -> str | None:
+    response = payload.get("response") or {}
+    metadata = payload.get("metadata") or {}
     for candidate in (
         response.get("name"),
         response.get("execution"),
@@ -224,10 +245,94 @@ def _extract_execution_name(operation: dict) -> str | None:
         metadata.get("target"),
     ):
         if isinstance(candidate, str) and "/executions/" in candidate:
-            return candidate.split("/")[-1]
-        if isinstance(candidate, str) and candidate:
-            return candidate.split("/")[-1]
+            return candidate
     return None
+
+
+def _short_resource_name(resource_name: str | None) -> str | None:
+    if not resource_name:
+        return None
+    return resource_name.split("/")[-1]
+
+
+def _execution_created_at(execution: dict) -> datetime | None:
+    return _parse_timestamp(execution.get("createTime") or execution.get("metadata", {}).get("creationTimestamp"))
+
+
+def _list_recent_executions_for_job(
+    session: AuthorizedSession,
+    project_id: str,
+    region: str,
+    job_name: str,
+    launch_started_at: datetime,
+) -> list[dict]:
+    payload = _request_json(
+        "get",
+        session,
+        _cloud_run_executions_url(project_id, region, job_name),
+        params={"pageSize": 10},
+        timeout=60,
+    )
+    executions = payload.get("executions") or []
+    tolerance_start = launch_started_at - timedelta(minutes=2)
+    candidates = [
+        execution
+        for execution in executions
+        if _execution_created_at(execution) is None or _execution_created_at(execution) >= tolerance_start
+    ]
+    candidates.sort(
+        key=lambda execution: _execution_created_at(execution) or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+    return candidates
+
+
+def _condition_summary(execution: dict) -> str:
+    conditions = execution.get("conditions") or execution.get("status", {}).get("conditions") or []
+    summary = []
+    for condition in conditions:
+        condition_type = condition.get("type")
+        status = condition.get("state") or condition.get("status")
+        reason = condition.get("reason")
+        if condition_type:
+            value = f"{condition_type}={status}"
+            if reason:
+                value = f"{value}:{reason}"
+            summary.append(value)
+    return ";".join(summary) or "none"
+
+
+def _condition_is_true(execution: dict, *condition_types: str) -> bool:
+    expected = {condition_type.lower() for condition_type in condition_types}
+    conditions = execution.get("conditions") or execution.get("status", {}).get("conditions") or []
+    return any(
+        str(condition.get("type", "")).lower() in expected
+        and str(condition.get("state") or condition.get("status", "")).lower() in {"true", "condition_succeeded"}
+        for condition in conditions
+    )
+
+
+def _execution_counts(execution: dict) -> tuple[int, int, int, int]:
+    status = execution.get("status", {})
+    task_count = int(execution.get("taskCount") or status.get("taskCount") or 0)
+    running_count = int(execution.get("runningCount") or status.get("runningCount") or 0)
+    succeeded_count = int(execution.get("succeededCount") or status.get("succeededCount") or 0)
+    failed_count = int(execution.get("failedCount") or status.get("failedCount") or 0)
+    return task_count, running_count, succeeded_count, failed_count
+
+
+def _execution_succeeded(execution: dict) -> bool:
+    task_count, _, succeeded_count, failed_count = _execution_counts(execution)
+    if failed_count > 0:
+        return False
+    if task_count > 0 and succeeded_count >= task_count:
+        return True
+    return _condition_is_true(execution, "Completed", "Succeeded")
+
+
+def _execution_failed(execution: dict) -> bool:
+    _, _, _, failed_count = _execution_counts(execution)
+    return failed_count > 0 or _condition_is_true(execution, "Failed", "Cancelled")
 
 
 def _raise_operation_error(operation: dict, job_name: str) -> None:
@@ -239,6 +344,64 @@ def _raise_operation_error(operation: dict, job_name: str) -> None:
         f"job={job_name} code={error.get('code')} "
         f"message={error.get('message')} details={error.get('details')}"
     )
+
+
+def _log_bigquery_success_evidence(env_vars: dict[str, str], project_id: str) -> None:
+    output_table = env_vars.get("OUTPUT_TABLE")
+    extraction_date = env_vars.get("BRONZE_EXTRACTION_DATE")
+    pipeline_run_id = env_vars.get("PIPELINE_RUN_ID")
+    if not output_table or not extraction_date or not pipeline_run_id:
+        return
+
+    try:
+        bigquery = importlib.import_module("google.cloud.bigquery")
+
+        client = bigquery.Client(project=project_id)
+        table_ref = output_table.replace(":", ".")
+        filters = ["extraction_date = @extraction_date", "pipeline_run_id = @pipeline_run_id"]
+        query_parameters: list[bigquery.ScalarQueryParameter] = [
+            bigquery.ScalarQueryParameter("extraction_date", "DATE", extraction_date),
+            bigquery.ScalarQueryParameter("pipeline_run_id", "STRING", pipeline_run_id),
+        ]
+        if env_vars.get("SOURCE_SYSTEM"):
+            filters.append("source_system = @source_system")
+            query_parameters.append(bigquery.ScalarQueryParameter("source_system", "STRING", env_vars["SOURCE_SYSTEM"]))
+        if env_vars.get("SOURCE_DATASET"):
+            filters.append("source_dataset = @source_dataset")
+            query_parameters.append(bigquery.ScalarQueryParameter("source_dataset", "STRING", env_vars["SOURCE_DATASET"]))
+
+        query = f"SELECT COUNT(*) AS rows_count FROM `{table_ref}` WHERE {' AND '.join(filters)}"
+        job_config = bigquery.QueryJobConfig(query_parameters=query_parameters)
+        rows_count = next(iter(client.query(query, job_config=job_config).result())).rows_count
+        print(
+            "BigQuery Silver evidence: "
+            f"output_table={output_table} extraction_date={extraction_date} "
+            f"pipeline_run_id={pipeline_run_id} rows={rows_count}"
+        )
+    except Exception as exc:
+        print(f"BigQuery Silver evidence unavailable: {exc}")
+
+
+def _resolve_execution_resource_name(
+    session: AuthorizedSession,
+    project_id: str,
+    region: str,
+    job_name: str,
+    operation: dict,
+    launch_started_at: datetime,
+) -> str | None:
+    resource_name = _extract_execution_resource_name(operation)
+    if resource_name:
+        return resource_name
+
+    candidates = _list_recent_executions_for_job(session, project_id, region, job_name, launch_started_at)
+    if candidates:
+        candidate_names = [_short_resource_name(candidate.get("name")) for candidate in candidates]
+        print(f"Cloud Run execution candidates for job={job_name}: {candidate_names}")
+        return candidates[0].get("name")
+
+    print(f"No Cloud Run execution candidates found for job={job_name} after launch.")
+    return None
 
 
 def run_cloud_run_job_with_polling(
@@ -259,6 +422,7 @@ def run_cloud_run_job_with_polling(
     print(f"Cloud Run env vars: {joined_env_vars}")
 
     session = _authorized_session()
+    launch_started_at = datetime.now(timezone.utc)
     operation = _request_json(
         "post",
         session,
@@ -271,33 +435,78 @@ def run_cloud_run_job_with_polling(
         raise RuntimeError(f"Cloud Run run API did not return operation name. response={operation!r}")
     print(f"Cloud Run operation: {operation_name}")
 
+    execution_resource_name = _resolve_execution_resource_name(
+        session,
+        project_id,
+        region,
+        job_name,
+        operation,
+        launch_started_at,
+    )
+    if execution_resource_name:
+        print(f"Resolved Cloud Run execution: {_short_resource_name(execution_resource_name)}")
+
     started_at = time.monotonic()
     while True:
         elapsed = int(time.monotonic() - started_at)
         if timeout_seconds is not None and elapsed > timeout_seconds:
             raise TimeoutError(
-                f"Timed out waiting for Cloud Run operation={operation_name} job={job_name} "
+                f"Timed out waiting for Cloud Run execution job={job_name} operation={operation_name} "
                 f"after {elapsed} seconds."
             )
 
-        operation = _request_json(
-            "get",
-            session,
-            _cloud_run_operation_url(operation_name),
-            timeout=60,
-        )
-        print(
-            f"Cloud Run operation={operation_name} job={job_name} "
-            f"elapsed={elapsed} done={operation.get('done', False)}"
-        )
-
-        if operation.get("done"):
+        if execution_resource_name is None:
+            operation = _request_json(
+                "get",
+                session,
+                _cloud_run_operation_url(operation_name),
+                timeout=60,
+            )
             _raise_operation_error(operation, job_name)
-            print("Cloud Run operation completed successfully.")
-            execution_name = _extract_execution_name(operation)
-            if execution_name:
-                print(f"Cloud Run execution: {execution_name}")
-            return
+            print(
+                f"Cloud Run operation={operation_name} job={job_name} "
+                f"elapsed={elapsed} done={operation.get('done', False)}"
+            )
+            execution_resource_name = _resolve_execution_resource_name(
+                session,
+                project_id,
+                region,
+                job_name,
+                operation,
+                launch_started_at,
+            )
+            if execution_resource_name:
+                print(f"Resolved Cloud Run execution: {_short_resource_name(execution_resource_name)}")
+            elif operation.get("done"):
+                print("Cloud Run operation completed successfully without execution resource in response.")
+                return
+            else:
+                print(f"Waiting for Cloud Run execution for job={job_name} operation={operation_name}")
+
+        if execution_resource_name is not None:
+            execution = _request_json(
+                "get",
+                session,
+                _cloud_run_resource_url(execution_resource_name),
+                timeout=60,
+            )
+            task_count, running_count, succeeded_count, failed_count = _execution_counts(execution)
+            condition_summary = _condition_summary(execution)
+            execution_name = _short_resource_name(execution_resource_name)
+            print(
+                f"Cloud Run execution={execution_name} job={job_name} elapsed={elapsed} "
+                f"running={running_count} succeeded={succeeded_count} failed={failed_count} "
+                f"taskCount={task_count} condition={condition_summary}"
+            )
+            if _execution_succeeded(execution):
+                print(f"Cloud Run execution succeeded: {execution_name}")
+                _log_bigquery_success_evidence(env_vars, project_id)
+                return
+            if _execution_failed(execution):
+                raise RuntimeError(
+                    f"Cloud Run execution failed: execution={execution_name} "
+                    f"job={job_name} condition={condition_summary}"
+                )
 
         time.sleep(poll_interval_seconds)
 
