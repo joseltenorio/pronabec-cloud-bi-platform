@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from apache_beam.io.gcp.bigquery import WriteToBigQuery
+from google.cloud import bigquery
 
 VALID_WRITE_DISPOSITIONS = {
     "WRITE_APPEND",
@@ -15,6 +16,11 @@ VALID_WRITE_DISPOSITIONS = {
 VALID_CREATE_DISPOSITIONS = {
     "CREATE_NEVER",
     "CREATE_IF_NEEDED",
+}
+
+VALID_SILVER_WRITE_MODES = {
+    "append",
+    "replace_by_source_date",
 }
 
 
@@ -58,6 +64,79 @@ def validate_bigquery_table_reference(output_table: str | None) -> str:
         )
 
     return normalized
+
+
+def normalize_bigquery_table_reference_for_sql(output_table: str | None) -> str:
+    """Return a BigQuery SQL table reference in project.dataset.table format."""
+    return validate_bigquery_table_reference(output_table).replace(":", ".")
+
+
+def validate_silver_write_mode(value: str | None) -> str:
+    """Validate the Silver write mode used before appending rows."""
+    normalized = "replace_by_source_date" if value is None else str(value).strip().lower()
+    if normalized not in VALID_SILVER_WRITE_MODES:
+        allowed = ", ".join(sorted(VALID_SILVER_WRITE_MODES))
+        raise ValueError(
+            f"Valor invalido para SILVER_WRITE_MODE: {value}. Valores permitidos: {allowed}."
+        )
+    return normalized
+
+
+def build_silver_delete_query(
+    output_table: str | None,
+    extraction_date: str | None,
+    source_system: str | None,
+    source_dataset: str | None,
+) -> tuple[str, list[bigquery.ScalarQueryParameter]]:
+    """Build a scoped DELETE for idempotent Silver reloads."""
+    table_ref = normalize_bigquery_table_reference_for_sql(output_table)
+    required_values = {
+        "BRONZE_EXTRACTION_DATE": extraction_date,
+        "SOURCE_SYSTEM": source_system,
+        "SOURCE_DATASET": source_dataset,
+    }
+    missing = [name for name, value in required_values.items() if value is None or not str(value).strip()]
+    if missing:
+        raise ValueError(
+            "No se puede limpiar Silver sin filtros completos: "
+            f"{', '.join(missing)}."
+        )
+
+    query = (
+        f"DELETE FROM `{table_ref}` "
+        "WHERE extraction_date = @extraction_date "
+        "AND source_system = @source_system "
+        "AND source_dataset = @source_dataset"
+    )
+    parameters = [
+        bigquery.ScalarQueryParameter("extraction_date", "DATE", str(extraction_date).strip()),
+        bigquery.ScalarQueryParameter("source_system", "STRING", str(source_system).strip()),
+        bigquery.ScalarQueryParameter("source_dataset", "STRING", str(source_dataset).strip()),
+    ]
+    return query, parameters
+
+
+def cleanup_silver_rows_for_source_date(
+    output_table: str | None,
+    extraction_date: str | None,
+    source_system: str | None,
+    source_dataset: str | None,
+    *,
+    project_id: str | None = None,
+    client: bigquery.Client | None = None,
+) -> int | None:
+    """Delete only the target source/date slice before appending new Silver rows."""
+    query, parameters = build_silver_delete_query(
+        output_table=output_table,
+        extraction_date=extraction_date,
+        source_system=source_system,
+        source_dataset=source_dataset,
+    )
+    if client is None:
+        client = bigquery.Client(project=project_id)
+    job = client.query(query, job_config=bigquery.QueryJobConfig(query_parameters=parameters))
+    job.result()
+    return getattr(job, "num_dml_affected_rows", None)
 
 
 def validate_write_disposition(value: str | None) -> str:

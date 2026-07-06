@@ -9,9 +9,12 @@ import pytest
 from pipelines.common.bigquery import (
     BigQueryWriteConfig,
     build_bigquery_write_config,
+    build_silver_delete_query,
     build_bigquery_write_transform,
+    cleanup_silver_rows_for_source_date,
     validate_bigquery_table_reference,
     validate_create_disposition,
+    validate_silver_write_mode,
     validate_write_disposition,
 )
 from pipelines.dataflow_bronze_to_silver import (
@@ -76,6 +79,95 @@ def test_bigquery_write_disposition_defaults_and_validation() -> None:
 
     with pytest.raises(ValueError, match="create-disposition"):
         validate_create_disposition("bad_value")
+
+
+def test_silver_write_mode_defaults_to_replace_by_source_date() -> None:
+    assert validate_silver_write_mode(None) == "replace_by_source_date"
+    assert validate_silver_write_mode("append") == "append"
+    assert validate_silver_write_mode("REPLACE_BY_SOURCE_DATE") == "replace_by_source_date"
+
+    with pytest.raises(ValueError, match="SILVER_WRITE_MODE"):
+        validate_silver_write_mode("truncate")
+
+
+def test_build_silver_delete_query_scopes_cleanup_by_source_and_date() -> None:
+    query, parameters = build_silver_delete_query(
+        output_table="test-project:silver.presupuesto_mef",
+        extraction_date="2026-07-02",
+        source_system="mef",
+        source_dataset="presupuesto",
+    )
+
+    assert query == (
+        "DELETE FROM `test-project.silver.presupuesto_mef` "
+        "WHERE extraction_date = @extraction_date "
+        "AND source_system = @source_system "
+        "AND source_dataset = @source_dataset"
+    )
+    assert [param.name for param in parameters] == [
+        "extraction_date",
+        "source_system",
+        "source_dataset",
+    ]
+    assert [param.value for param in parameters] == [
+        "2026-07-02",
+        "mef",
+        "presupuesto",
+    ]
+
+
+@pytest.mark.parametrize(
+    "kwargs, expected_message",
+    [
+        ({"output_table": None}, "output-table"),
+        ({"extraction_date": None}, "BRONZE_EXTRACTION_DATE"),
+        ({"source_system": ""}, "SOURCE_SYSTEM"),
+        ({"source_dataset": " "}, "SOURCE_DATASET"),
+    ],
+)
+def test_build_silver_delete_query_requires_full_filters(
+    kwargs: dict[str, str | None],
+    expected_message: str,
+) -> None:
+    values = {
+        "output_table": "test-project:silver.presupuesto_mef",
+        "extraction_date": "2026-07-02",
+        "source_system": "mef",
+        "source_dataset": "presupuesto",
+    }
+    values.update(kwargs)
+
+    with pytest.raises(ValueError, match=expected_message):
+        build_silver_delete_query(**values)
+
+
+def test_cleanup_silver_rows_executes_scoped_delete() -> None:
+    captured: dict[str, object] = {}
+
+    class FakeJob:
+        num_dml_affected_rows = 12
+
+        def result(self) -> None:
+            captured["waited"] = True
+
+    class FakeClient:
+        def query(self, query: str, job_config: object) -> FakeJob:
+            captured["query"] = query
+            captured["job_config"] = job_config
+            return FakeJob()
+
+    deleted_rows = cleanup_silver_rows_for_source_date(
+        output_table="test-project:silver.presupuesto_mef",
+        extraction_date="2026-07-02",
+        source_system="mef",
+        source_dataset="presupuesto",
+        client=FakeClient(),
+    )
+
+    assert deleted_rows == 12
+    assert "DELETE FROM `test-project.silver.presupuesto_mef`" in str(captured["query"])
+    assert "extraction_date = @extraction_date" in str(captured["query"])
+    assert captured["waited"] is True
 
 
 def test_build_bigquery_write_transform_uses_validated_config(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -251,9 +343,16 @@ def test_no_dry_run_configures_bigquery_sink(
         captured["config"] = config
         return beam.Map(lambda record: record)
 
+    def fail_if_cleanup_called(*args: object, **kwargs: object) -> None:
+        raise AssertionError("Silver cleanup no debe ejecutarse en modo append")
+
     monkeypatch.setattr(
         "pipelines.dataflow_bronze_to_silver.build_bigquery_write_transform",
         fake_build_sink,
+    )
+    monkeypatch.setattr(
+        "pipelines.dataflow_bronze_to_silver.cleanup_silver_rows_for_source_date",
+        fail_if_cleanup_called,
     )
 
     run(
@@ -276,6 +375,8 @@ def test_no_dry_run_configures_bigquery_sink(
             "WRITE_TRUNCATE",
             "--create-disposition",
             "CREATE_IF_NEEDED",
+            "--silver-write-mode",
+            "append",
             "--runner",
             "DirectRunner",
         ]
@@ -288,6 +389,124 @@ def test_no_dry_run_configures_bigquery_sink(
     assert config.write_disposition == "WRITE_TRUNCATE"
     assert config.create_disposition == "CREATE_IF_NEEDED"
     assert config.custom_gcs_temp_location == "gs://test-bucket/temp"
+
+
+def test_replace_by_source_date_cleans_up_before_bigquery_write(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_file = tmp_path / "data.csv"
+    input_file.write_text(
+        "source_row_id,id_convocatoria,codigo_anual,description_conv,modalidad,programa,vacantes\n"
+        "1,10,2026-01,Beca Especial,ACADEMICA,BECA CENTENARIO,12\n",
+        encoding="utf-8",
+    )
+
+    events: list[tuple[str, dict[str, object]]] = []
+
+    def fake_cleanup(**kwargs: object) -> int:
+        events.append(("cleanup", kwargs))
+        return 7
+
+    def fake_build_sink(config: BigQueryWriteConfig) -> beam.PTransform:
+        events.append(("write", {"write_disposition": config.write_disposition}))
+        return beam.Map(lambda record: record)
+
+    monkeypatch.setattr(
+        "pipelines.dataflow_bronze_to_silver.cleanup_silver_rows_for_source_date",
+        fake_cleanup,
+    )
+    monkeypatch.setattr(
+        "pipelines.dataflow_bronze_to_silver.build_bigquery_write_transform",
+        fake_build_sink,
+    )
+
+    run(
+        [
+            "--source-system",
+            "pronabec",
+            "--source-dataset",
+            "convocatorias",
+            "--extraction-date",
+            "2026-07-02",
+            "--input-path",
+            str(input_file),
+            "--input-format",
+            "csv",
+            "--output-table",
+            "test-project:silver.pronabec_convocatorias",
+            "--temp-location",
+            "gs://test-bucket/temp",
+            "--runner",
+            "DirectRunner",
+            "--disable-dlq",
+        ]
+    )
+
+    assert events[0] == (
+        "cleanup",
+        {
+            "output_table": "test-project:silver.pronabec_convocatorias",
+            "extraction_date": "2026-07-02",
+            "source_system": "pronabec",
+            "source_dataset": "convocatorias",
+            "project_id": "test-project",
+        },
+    )
+    assert events[1] == ("write", {"write_disposition": "WRITE_APPEND"})
+
+
+def test_repeated_same_source_date_runs_cleanup_each_time(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_file = tmp_path / "data.csv"
+    input_file.write_text(
+        "source_row_id,id_convocatoria,codigo_anual,description_conv,modalidad,programa,vacantes\n"
+        "1,10,2026-01,Beca Especial,ACADEMICA,BECA CENTENARIO,12\n",
+        encoding="utf-8",
+    )
+
+    cleanup_calls: list[dict[str, object]] = []
+
+    def fake_cleanup(**kwargs: object) -> int:
+        cleanup_calls.append(kwargs)
+        return 1
+
+    monkeypatch.setattr(
+        "pipelines.dataflow_bronze_to_silver.cleanup_silver_rows_for_source_date",
+        fake_cleanup,
+    )
+    monkeypatch.setattr(
+        "pipelines.dataflow_bronze_to_silver.build_bigquery_write_transform",
+        lambda config: beam.Map(lambda record: record),
+    )
+
+    argv = [
+        "--source-system",
+        "pronabec",
+        "--source-dataset",
+        "convocatorias",
+        "--extraction-date",
+        "2026-07-02",
+        "--input-path",
+        str(input_file),
+        "--input-format",
+        "csv",
+        "--output-table",
+        "test-project:silver.pronabec_convocatorias",
+        "--temp-location",
+        "gs://test-bucket/temp",
+        "--runner",
+        "DirectRunner",
+        "--disable-dlq",
+    ]
+
+    run(argv)
+    run(argv)
+
+    assert len(cleanup_calls) == 2
+    assert cleanup_calls[0] == cleanup_calls[1]
 
 
 @pytest.mark.parametrize(

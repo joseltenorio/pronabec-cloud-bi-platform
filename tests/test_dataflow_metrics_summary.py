@@ -30,6 +30,10 @@ def mock_bigquery_sink(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         "pipelines.dataflow_bronze_to_silver.build_bigquery_write_transform",
         fake_build_sink,
     )
+    monkeypatch.setattr(
+        "pipelines.dataflow_bronze_to_silver.cleanup_silver_rows_for_source_date",
+        lambda **kwargs: 0,
+    )
     return captured
 
 

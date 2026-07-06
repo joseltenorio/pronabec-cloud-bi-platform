@@ -16,7 +16,12 @@ from typing import Any
 import apache_beam as beam
 from apache_beam.options.pipeline_options import PipelineOptions
 
-from pipelines.common.bigquery import build_bigquery_write_config, build_bigquery_write_transform
+from pipelines.common.bigquery import (
+    build_bigquery_write_config,
+    build_bigquery_write_transform,
+    cleanup_silver_rows_for_source_date,
+    validate_silver_write_mode,
+)
 from pipelines.common.logging import setup_structured_logger, log_event
 from pipelines.transforms.pronabec_reports import REPORT_SPECS, transform_pronabec_report_record
 from pipelines.transforms.base import add_technical_metadata
@@ -282,6 +287,12 @@ def parse_arguments(argv: list[str] | None = None) -> tuple[argparse.Namespace, 
         help="Disposicion de creacion para BigQuery.",
     )
     parser.add_argument(
+        "--silver-write-mode",
+        required=False,
+        default=None,
+        help="Modo de escritura Silver: replace_by_source_date o append.",
+    )
+    parser.add_argument(
         "--runner",
         required=False,
         default="DirectRunner",
@@ -402,6 +413,7 @@ def resolve_runtime_arguments(args: argparse.Namespace) -> argparse.Namespace:
         "input_path": "INPUT_PATH",
         "output_table": "OUTPUT_TABLE",
         "pipeline_run_id": "PIPELINE_RUN_ID",
+        "silver_write_mode": "SILVER_WRITE_MODE",
         "service_account_email": "DATAFLOW_SERVICE_ACCOUNT",
         "sdk_container_image": "DATAFLOW_SDK_CONTAINER_IMAGE",
     }
@@ -426,6 +438,8 @@ def resolve_runtime_arguments(args: argparse.Namespace) -> argparse.Namespace:
         value = getattr(args, field, None)
         if isinstance(value, str):
             setattr(args, field, expand_env_placeholders(value))
+
+    args.silver_write_mode = validate_silver_write_mode(getattr(args, "silver_write_mode", None))
 
     return args
 
@@ -473,6 +487,7 @@ def validate_arguments(args: argparse.Namespace) -> None:
             create_disposition=args.create_disposition,
             custom_gcs_temp_location=args.temp_location,
         )
+    args.silver_write_mode = validate_silver_write_mode(getattr(args, "silver_write_mode", None))
 
     # 3. Validar runner
     if args.runner not in ("DirectRunner", "DataflowRunner"):
@@ -826,6 +841,39 @@ def run(argv: list[str] | None = None) -> None:
                 create_disposition=args.create_disposition,
                 custom_gcs_temp_location=args.temp_location,
             )
+            if args.silver_write_mode == "replace_by_source_date":
+                cleanup_project_id = args.project
+                if not cleanup_project_id and args.output_table and ":" in args.output_table:
+                    cleanup_project_id = args.output_table.split(":", 1)[0]
+                deleted_rows = cleanup_silver_rows_for_source_date(
+                    output_table=args.output_table,
+                    extraction_date=args.extraction_date,
+                    source_system=args.source_system,
+                    source_dataset=args.source_dataset,
+                    project_id=cleanup_project_id,
+                )
+                log_event(
+                    logger,
+                    "INFO",
+                    "Limpieza idempotente Silver completada antes de WRITE_APPEND",
+                    output_table=bq_config.output_table,
+                    source_system=args.source_system,
+                    source_dataset=args.source_dataset,
+                    extraction_date=args.extraction_date,
+                    deleted_rows=deleted_rows,
+                    silver_write_mode=args.silver_write_mode,
+                )
+            else:
+                log_event(
+                    logger,
+                    "INFO",
+                    "Limpieza idempotente Silver omitida por modo append",
+                    output_table=bq_config.output_table,
+                    source_system=args.source_system,
+                    source_dataset=args.source_dataset,
+                    extraction_date=args.extraction_date,
+                    silver_write_mode=args.silver_write_mode,
+                )
             log_event(
                 logger,
                 "INFO",

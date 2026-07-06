@@ -42,6 +42,7 @@ def test_direct_runner_accepts_minimal_local_config() -> None:
     
     # No debería lanzar ninguna excepción al validar
     validate_arguments(args)
+    assert args.silver_write_mode == "replace_by_source_date"
     assert args.runner == "DirectRunner"
     assert args.dry_run is True
 
@@ -103,6 +104,50 @@ def test_dataflow_runner_passes_with_full_cloud_config() -> None:
     
     # Debería validar sin excepciones
     validate_arguments(args)
+
+
+@pytest.mark.parametrize(
+    "source_system, source_dataset, input_format, output_table",
+    [
+        ("pronabec", "convocatorias", "jsonl", "test-project:silver.pronabec_convocatorias"),
+        ("mef", "presupuesto", "csv", "test-project:silver.presupuesto_mef"),
+        (
+            "pronabec_reports",
+            "report_beca18_region_postulacion_2025",
+            "csv",
+            "test-project:silver.pronabec_report_beca18_region_postulacion_2025",
+        ),
+    ],
+)
+def test_silver_launchers_default_to_replace_by_source_date(
+    source_system: str,
+    source_dataset: str,
+    input_format: str,
+    output_table: str,
+) -> None:
+    argv = [
+        "--source-system",
+        source_system,
+        "--source-dataset",
+        source_dataset,
+        "--extraction-date",
+        "2026-07-02",
+        "--input-path",
+        "gs://bucket/bronze/input/data.csv",
+        "--input-format",
+        input_format,
+        "--output-table",
+        output_table,
+        "--runner",
+        "DirectRunner",
+        "--temp-location",
+        "gs://bucket/temp",
+    ]
+    args, _ = parse_arguments(argv)
+
+    validate_arguments(args)
+
+    assert args.silver_write_mode == "replace_by_source_date"
 
 
 def test_dataflow_runner_requires_service_account_email() -> None:
@@ -349,6 +394,7 @@ def test_runtime_arguments_resolve_cloud_run_environment(monkeypatch) -> None:
     monkeypatch.setenv("INPUT_PATH", "gs://bucket/bronze/report_dataset/data.csv")
     monkeypatch.setenv("OUTPUT_TABLE", "project:silver.report_dataset")
     monkeypatch.setenv("PIPELINE_RUN_ID", "manual__2026-06-28")
+    monkeypatch.setenv("SILVER_WRITE_MODE", "append")
 
     argv = [
         "--source-system", "pronabec_reports",
@@ -369,6 +415,7 @@ def test_runtime_arguments_resolve_cloud_run_environment(monkeypatch) -> None:
     assert resolved.input_path == "gs://bucket/bronze/report_dataset/data.csv"
     assert resolved.output_table == "project:silver.report_dataset"
     assert resolved.pipeline_run_id == "manual__2026-06-28"
+    assert resolved.silver_write_mode == "append"
     assert resolved.summary_output_path == "gs://bucket/audit/report_dataset_2026-06-28.json"
     validate_arguments(resolved)
 
