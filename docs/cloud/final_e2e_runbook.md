@@ -63,7 +63,7 @@ Composer paraleliza launchers de Cloud Run/Dataflow con `max_active_runs=1` y `m
 
 Durante la validacion E2E, el DAG es manual-only (`schedule_interval=None`). Esto evita que, al despausar Composer, se cree un scheduled run antiguo que bloquee la corrida manual correcta por `max_active_runs=1`.
 
-Las tasks Cloud Run no usan `gcloud run jobs execute --wait`. Composer lanza el job con `--async`, loggea stdout/stderr del launch, resuelve el execution name desde la salida o con `gcloud run jobs executions list`, y hace polling explicito con logs periodicos de estado. Esto evita que el launch quede bloqueado varios minutos y termine por timeout antes de comenzar el polling.
+Las tasks Cloud Run no usan `gcloud run jobs execute --wait` ni invocan `gcloud` con `subprocess`. Composer usa Cloud Run v2 REST API con `google.auth` y `AuthorizedSession`: lanza el job con `jobs:run`, envia env vars por overrides y hace polling del long-running operation. Esto evita que el launch quede bloqueado en el CLI antes de comenzar el polling.
 
 Trigger recomendado para la corrida validada:
 
@@ -84,10 +84,11 @@ BRONZE_EXTRACTION_DATE=2026-07-02
 PIPELINE_RUN_ID=manual_20260702
 Launching Cloud Run job asynchronously...
 Cloud Run launch command completed.
-Resolved Cloud Run execution: <execution-name>
-Polling Cloud Run execution...
-Cloud Run execution=<execution-name> job=<job-name> elapsed=<seconds> running=<n> succeeded=<n> failed=<n>
-Cloud Run execution succeeded.
+Launching Cloud Run job through REST API. job=<job-name>
+Cloud Run operation: <operation-name>
+Cloud Run operation=<operation-name> job=<job-name> elapsed=<seconds> done=<true|false>
+Cloud Run operation completed successfully.
+Cloud Run execution: <execution-name>
 ```
 
 ## 5. Ejecucion manual con gcloud

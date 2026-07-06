@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-import json
-import re
-import subprocess
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
+import google.auth
 from airflow import DAG
 from airflow.models.param import Param
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
 from airflow.utils.task_group import TaskGroup
+from google.auth.transport.requests import AuthorizedSession
 
 from pipelines.common.orchestration_config import (
     build_bq_table_ref,
@@ -174,198 +173,72 @@ def _is_enabled(value: bool | str) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "y"}
 
 
-def _run_gcloud(command: list[str], timeout_seconds: int = 120) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(
-        command,
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=timeout_seconds,
-    )
-    if result.returncode != 0:
-        print("gcloud command failed:", " ".join(command))
-        if result.stdout:
-            print("stdout:")
-            print(result.stdout)
-        if result.stderr:
-            print("stderr:")
-            print(result.stderr)
-        raise RuntimeError(f"gcloud command failed with return code {result.returncode}")
-    return result
+def _authorized_session() -> AuthorizedSession:
+    credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+    return AuthorizedSession(credentials)
 
 
-def _parse_timestamp(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    normalized = value.replace("Z", "+00:00")
-    try:
-        parsed = datetime.fromisoformat(normalized)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+def _cloud_run_job_url(project_id: str, region: str, job_name: str) -> str:
+    return f"https://run.googleapis.com/v2/projects/{project_id}/locations/{region}/jobs/{job_name}:run"
 
 
-def _execution_name_from_text(text: str, job_name: str) -> str | None:
-    execution_path_match = re.search(rf"(?:executions/)?({re.escape(job_name)}-[A-Za-z0-9-]+)", text)
-    if execution_path_match:
-        return execution_path_match.group(1)
+def _cloud_run_operation_url(operation_name: str) -> str:
+    return f"https://run.googleapis.com/v2/{operation_name}"
+
+
+def _request_json(method: str, session: AuthorizedSession, url: str, **kwargs) -> dict:
+    response = getattr(session, method)(url, **kwargs)
+    if response.status_code >= 400:
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = response.text
+        raise RuntimeError(f"Cloud Run API request failed method={method} url={url} payload={payload!r}")
+    if not response.text:
+        return {}
+    return response.json()
+
+
+def _env_overrides(env_vars: dict[str, str]) -> dict:
+    return {
+        "overrides": {
+            "containerOverrides": [
+                {
+                    "env": [
+                        {"name": key, "value": value}
+                        for key, value in env_vars.items()
+                    ]
+                }
+            ]
+        }
+    }
+
+
+def _extract_execution_name(operation: dict) -> str | None:
+    response = operation.get("response") or {}
+    metadata = operation.get("metadata") or {}
+    for candidate in (
+        response.get("name"),
+        response.get("execution"),
+        response.get("executionName"),
+        metadata.get("target"),
+    ):
+        if isinstance(candidate, str) and "/executions/" in candidate:
+            return candidate.split("/")[-1]
+        if isinstance(candidate, str) and candidate:
+            return candidate.split("/")[-1]
     return None
 
 
-def _find_execution_name_in_json(value: object, job_name: str) -> str | None:
-    if isinstance(value, dict):
-        for key in ("name", "execution", "executionName"):
-            candidate = value.get(key)
-            if isinstance(candidate, str):
-                execution_name = _execution_name_from_text(candidate, job_name)
-                if execution_name:
-                    return execution_name
-        for nested in value.values():
-            execution_name = _find_execution_name_in_json(nested, job_name)
-            if execution_name:
-                return execution_name
-    elif isinstance(value, list):
-        for nested in value:
-            execution_name = _find_execution_name_in_json(nested, job_name)
-            if execution_name:
-                return execution_name
-    elif isinstance(value, str):
-        return _execution_name_from_text(value, job_name)
-    return None
-
-
-def _list_recent_executions_for_job(job_name: str, project_id: str, region: str) -> list[dict]:
-    result = _run_gcloud(
-        [
-            "gcloud",
-            "run",
-            "jobs",
-            "executions",
-            "list",
-            "--job",
-            job_name,
-            "--project",
-            project_id,
-            "--region",
-            region,
-            "--format=json",
-            "--limit",
-            "10",
-        ],
-        timeout_seconds=60,
-    )
-    if not result.stdout.strip():
-        return []
-    return json.loads(result.stdout)
-
-
-def _execution_creation_timestamp(execution: dict) -> datetime | None:
-    metadata = execution.get("metadata", {})
-    return _parse_timestamp(
-        metadata.get("creationTimestamp")
-        or execution.get("createTime")
-        or execution.get("creationTimestamp")
-    )
-
-
-def _execution_name(execution: dict) -> str | None:
-    metadata = execution.get("metadata", {})
-    candidate = metadata.get("name") or execution.get("name")
-    if isinstance(candidate, str):
-        return candidate.split("/")[-1]
-    return None
-
-
-def _resolve_execution_name_from_launch(
-    job_name: str,
-    project_id: str,
-    region: str,
-    launch_started_at: datetime,
-    stdout: str,
-    stderr: str,
-) -> str:
-    for payload in (stdout, stderr):
-        if payload.strip():
-            try:
-                parsed = json.loads(payload)
-            except json.JSONDecodeError:
-                parsed = None
-            if parsed is not None:
-                execution_name = _find_execution_name_in_json(parsed, job_name)
-                if execution_name:
-                    return execution_name
-
-            execution_name = _execution_name_from_text(payload, job_name)
-            if execution_name:
-                return execution_name
-
-    tolerance_start = launch_started_at - timedelta(minutes=2)
-    candidates = _list_recent_executions_for_job(job_name, project_id, region)
-    recent_candidates = []
-    for execution in candidates:
-        created_at = _execution_creation_timestamp(execution)
-        execution_name = _execution_name(execution)
-        if execution_name and (created_at is None or created_at >= tolerance_start):
-            recent_candidates.append((created_at or datetime.min.replace(tzinfo=timezone.utc), execution_name))
-
-    if recent_candidates:
-        recent_candidates.sort(key=lambda item: item[0], reverse=True)
-        return recent_candidates[0][1]
-
+def _raise_operation_error(operation: dict, job_name: str) -> None:
+    error = operation.get("error")
+    if not error:
+        return
     raise RuntimeError(
-        "Could not resolve Cloud Run execution name after async launch. "
-        f"job={job_name} stdout={stdout!r} stderr={stderr!r} candidates={candidates!r}"
+        "Cloud Run operation failed "
+        f"job={job_name} code={error.get('code')} "
+        f"message={error.get('message')} details={error.get('details')}"
     )
-
-
-def _condition_summary(execution: dict) -> str:
-    conditions = execution.get("status", {}).get("conditions") or execution.get("conditions") or []
-    summary = []
-    for condition in conditions:
-        condition_type = condition.get("type")
-        status = condition.get("status")
-        reason = condition.get("reason")
-        if condition_type:
-            value = f"{condition_type}={status}"
-            if reason:
-                value = f"{value}:{reason}"
-            summary.append(value)
-    return ";".join(summary) or "none"
-
-
-def _condition_is_true(execution: dict, *condition_types: str) -> bool:
-    expected = {condition_type.lower() for condition_type in condition_types}
-    conditions = execution.get("status", {}).get("conditions") or execution.get("conditions") or []
-    return any(
-        str(condition.get("type", "")).lower() in expected
-        and str(condition.get("status", "")).lower() == "true"
-        for condition in conditions
-    )
-
-
-def _execution_counts(execution: dict) -> tuple[int, int, int, int]:
-    status = execution.get("status", {})
-    task_count = int(status.get("taskCount") or execution.get("taskCount") or 0)
-    running_count = int(status.get("runningCount") or execution.get("runningCount") or 0)
-    succeeded_count = int(status.get("succeededCount") or execution.get("succeededCount") or 0)
-    failed_count = int(status.get("failedCount") or execution.get("failedCount") or 0)
-    return task_count, running_count, succeeded_count, failed_count
-
-
-def _execution_succeeded(execution: dict) -> bool:
-    task_count, _, succeeded_count, failed_count = _execution_counts(execution)
-    if failed_count > 0:
-        return False
-    if task_count > 0 and succeeded_count >= task_count:
-        return True
-    return _condition_is_true(execution, "Completed", "Succeeded")
-
-
-def _execution_failed(execution: dict) -> bool:
-    _, _, _, failed_count = _execution_counts(execution)
-    return failed_count > 0 or _condition_is_true(execution, "Failed", "Cancelled")
 
 
 def run_cloud_run_job_with_polling(
@@ -382,87 +255,50 @@ def run_cloud_run_job_with_polling(
         return
 
     joined_env_vars = ",".join(f"{key}={value}" for key, value in env_vars.items())
-    print(f"Launching Cloud Run job asynchronously job={job_name} project={project_id} region={region}")
+    print(f"Launching Cloud Run job through REST API. job={job_name} project={project_id} region={region}")
     print(f"Cloud Run env vars: {joined_env_vars}")
 
-    launch_started_at = datetime.now(timezone.utc)
-    execute_result = _run_gcloud(
-        [
-            "gcloud",
-            "run",
-            "jobs",
-            "execute",
-            job_name,
-            "--project",
-            project_id,
-            "--region",
-            region,
-            "--update-env-vars",
-            joined_env_vars,
-            "--async",
-            "--format=json",
-        ],
-        timeout_seconds=60,
+    session = _authorized_session()
+    operation = _request_json(
+        "post",
+        session,
+        _cloud_run_job_url(project_id, region, job_name),
+        json=_env_overrides(env_vars),
+        timeout=60,
     )
-    print("Cloud Run launch command completed.")
-    print(f"stdout: {execute_result.stdout}")
-    print(f"stderr: {execute_result.stderr}")
+    operation_name = operation.get("name")
+    if not operation_name:
+        raise RuntimeError(f"Cloud Run run API did not return operation name. response={operation!r}")
+    print(f"Cloud Run operation: {operation_name}")
 
-    execution_name = _resolve_execution_name_from_launch(
-        job_name=job_name,
-        project_id=project_id,
-        region=region,
-        launch_started_at=launch_started_at,
-        stdout=execute_result.stdout,
-        stderr=execute_result.stderr,
-    )
-    print(f"Resolved Cloud Run execution: {execution_name}")
-    print(f"Polling Cloud Run execution: {execution_name}")
     started_at = time.monotonic()
     while True:
         elapsed = int(time.monotonic() - started_at)
         if timeout_seconds is not None and elapsed > timeout_seconds:
             raise TimeoutError(
-                f"Timed out waiting for Cloud Run execution={execution_name} job={job_name} "
+                f"Timed out waiting for Cloud Run operation={operation_name} job={job_name} "
                 f"after {elapsed} seconds."
             )
 
-        describe_result = _run_gcloud(
-            [
-                "gcloud",
-                "run",
-                "jobs",
-                "executions",
-                "describe",
-                execution_name,
-                "--project",
-                project_id,
-                "--region",
-                region,
-                "--format=json",
-            ],
-            timeout_seconds=60,
+        operation = _request_json(
+            "get",
+            session,
+            _cloud_run_operation_url(operation_name),
+            timeout=60,
         )
-        execution = json.loads(describe_result.stdout)
-        task_count, running_count, succeeded_count, failed_count = _execution_counts(execution)
-        condition_summary = _condition_summary(execution)
         print(
-            "Cloud Run execution="
-            f"{execution_name} job={job_name} elapsed={elapsed} "
-            f"running={running_count} succeeded={succeeded_count} failed={failed_count} "
-            f"taskCount={task_count} condition={condition_summary}"
+            f"Cloud Run operation={operation_name} job={job_name} "
+            f"elapsed={elapsed} done={operation.get('done', False)}"
         )
 
-        if _execution_succeeded(execution):
-            print(f"Cloud Run execution succeeded: {execution_name}")
+        if operation.get("done"):
+            _raise_operation_error(operation, job_name)
+            print("Cloud Run operation completed successfully.")
+            execution_name = _extract_execution_name(operation)
+            if execution_name:
+                print(f"Cloud Run execution: {execution_name}")
             return
-        if _execution_failed(execution):
-            raise RuntimeError(
-                f"Cloud Run execution failed: execution={execution_name} "
-                f"job={job_name} condition={condition_summary}"
-            )
 
-        print(f"Polling Cloud Run execution... execution={execution_name}")
         time.sleep(poll_interval_seconds)
 
 
@@ -492,6 +328,7 @@ def cloud_run_job_operator(
             "timeout_seconds": timeout_seconds,
         },
         retries=0,
+        execution_timeout=timedelta(seconds=timeout_seconds + 600),
     )
 
 
@@ -528,7 +365,6 @@ default_args = {
     "depends_on_past": False,
     "retries": ORCHESTRATION_CONFIG["dag"]["retries"],
     "retry_delay": timedelta(minutes=ORCHESTRATION_CONFIG["dag"]["retry_delay_minutes"]),
-    "execution_timeout": timedelta(hours=2),
 }
 
 

@@ -158,28 +158,28 @@ El DAG principal usa `pronabec-discovery-job`, `pronabec-build-plan-job`, `prona
 
 ## Ejecucion robusta de Cloud Run Jobs
 
-Composer no usa `gcloud run jobs execute --wait` dentro de `BashOperator`. Ese patron puede quedarse sin output mientras `gcloud` espera, perder heartbeat en Airflow y provocar retries que lancen ejecuciones duplicadas.
+Composer no usa `gcloud run jobs execute --wait` ni `subprocess` dentro del DAG. Ese patron puede quedarse sin output mientras `gcloud` espera, perder heartbeat en Airflow y provocar retries que lancen ejecuciones duplicadas.
 
 Cada task Cloud Run usa un `PythonOperator` con `run_cloud_run_job_with_polling`. El operador:
 
 ```text
-1. lanza el Cloud Run Job con `--async`, sin esperar a que termine;
-2. loggea stdout/stderr del launch;
-3. resuelve el nombre de la execution desde stdout/stderr o desde `executions list`;
-4. consulta `gcloud run jobs executions describe` en JSON;
-5. imprime estado periodico con running/succeeded/failed;
-6. falla solo si Cloud Run reporta failed/cancelled o si se supera el timeout.
+1. obtiene credenciales con `google.auth.default`;
+2. usa `AuthorizedSession` contra Cloud Run v2 REST API;
+3. lanza el Cloud Run Job con `POST /v2/projects/{project}/locations/{region}/jobs/{job}:run`;
+4. envia env vars por `overrides.containerOverrides.env`;
+5. hace polling del long-running operation;
+6. falla si la operation termina con error o si se supera el timeout.
 ```
 
 Los logs de Composer deben mostrar:
 
 ```text
-Launching Cloud Run job asynchronously...
-Cloud Run launch command completed.
-Resolved Cloud Run execution: <execution-name>
-Polling Cloud Run execution...
-Cloud Run execution=<execution-name> job=<job-name> elapsed=<seconds> running=<n> succeeded=<n> failed=<n>
-Cloud Run execution succeeded.
+Launching Cloud Run job through REST API. job=<job-name>
+Cloud Run env vars: ...
+Cloud Run operation: <operation-name>
+Cloud Run operation=<operation-name> job=<job-name> elapsed=<seconds> done=<true|false>
+Cloud Run operation completed successfully.
+Cloud Run execution: <execution-name>
 ```
 
 ## Debug operativo

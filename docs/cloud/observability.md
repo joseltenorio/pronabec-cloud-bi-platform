@@ -132,20 +132,21 @@ La combinación de Cloud Logging, summary JSON y DLQ permite rastrear una ejecuc
 
 ## Cloud Composer
 
-Composer registra la orquestación de dependencias y la ejecución de comandos `gcloud run jobs execute`. Su responsabilidad observacional es mostrar orden de ejecución, estados de tareas, reintentos y fallos de coordinación.
+Composer registra la orquestación de dependencias y las llamadas a Cloud Run v2 REST API usadas para lanzar jobs. Su responsabilidad observacional es mostrar orden de ejecución, estados de tareas, reintentos y fallos de coordinación.
 
 En el DAG principal, las ramas Bronze independientes (`pronabec_api_bronze`, `mef_bronze` y `pronabec_reports_bronze`) pueden verse ejecutando en paralelo. `validate_bronze_manifests` debe quedar como barrera antes de Silver. Luego las ramas Silver/Dataflow (`pronabec_api_silver`, `mef_silver` y `pronabec_reports_silver`) tambien pueden ejecutarse en paralelo, y `publish_gold_views` solo debe arrancar cuando esas tres ramas concluyen.
 
 El paralelismo visible en Composer corresponde a launchers Cloud Run/Dataflow. La cantidad de workers dentro de cada Dataflow job se observa y ajusta desde Dataflow, no desde el grafo de tareas Composer.
 
-Las tasks Cloud Run del DAG no dependen de `gcloud run jobs execute --wait`. El operador lanza la execution con `--async`, registra stdout/stderr, resuelve el nombre de execution desde la salida o desde `executions list`, y hace polling explicito. En logs de Composer, el `execution_name` es la llave para correlacionar:
+Las tasks Cloud Run del DAG no dependen de `gcloud run jobs execute --wait` ni de `subprocess`. El operador usa `AuthorizedSession`, lanza el job con Cloud Run v2 REST API y hace polling del long-running operation. En logs de Composer, `operation_name` y, cuando aparece, `execution_name` son las llaves para correlacionar:
 
 ```text
-Resolved Cloud Run execution: <execution-name>
-Cloud Run execution=<execution-name> job=<job-name> elapsed=<seconds> running=<n> succeeded=<n> failed=<n>
+Cloud Run operation: <operation-name>
+Cloud Run operation=<operation-name> job=<job-name> elapsed=<seconds> done=<true|false>
+Cloud Run execution: <execution-name>
 ```
 
-Si Composer marca una task como failed, primero revise si Cloud Run reporto `failedCount > 0`, condicion `Failed=True`, condicion `Cancelled=True` o timeout de polling. Si Cloud Run fue exitoso pero Airflow fallo, conserve como evidencia el task log completo, el `execution_name`, el JSON de `gcloud run jobs executions describe` y los logs de Cloud Run/Dataflow asociados.
+Si Composer marca una task como failed, primero revise si la operation devolvio `error.code`, `error.message` o si hubo timeout de polling. Si Cloud Run fue exitoso pero Airflow fallo, conserve como evidencia el task log completo, el `operation_name`, el `execution_name` si fue emitido y los logs de Cloud Run/Dataflow asociados.
 
 Composer no concentra la lógica de procesamiento ni reemplaza los logs emitidos por Cloud Run Jobs y Dataflow.
 

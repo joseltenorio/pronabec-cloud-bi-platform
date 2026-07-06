@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 
@@ -340,36 +338,68 @@ def test_dag_uses_cloud_run_polling_helper_instead_of_bash_wait() -> None:
     assert "run_cloud_run_job_with_polling" in content
     assert "PythonOperator" in content
     assert "BashOperator" not in content
+    assert "subprocess" not in content
+    assert "gcloud" not in content
     assert "--wait" not in content
+    assert "--async" not in content
+    assert "AuthorizedSession" in content
+    assert "google.auth.default" in content
+    assert '"overrides"' in content
+    assert '"containerOverrides"' in content
     assert "retries=0" in content
+    assert "execution_timeout=timedelta(seconds=timeout_seconds + 600)" in content
 
 
-def test_cloud_run_polling_helper_succeeds(monkeypatch, capsys) -> None:
-    calls = []
-    timeouts = []
+class _FakeResponse:
+    def __init__(self, payload: dict | None = None, status_code: int = 200, text: str | None = None) -> None:
+        self.payload = payload or {}
+        self.status_code = status_code
+        self.text = json.dumps(self.payload) if text is None else text
 
-    def fake_run(command, **kwargs):
-        calls.append(command)
-        timeouts.append(kwargs["timeout"])
-        if "execute" in command:
-            return SimpleNamespace(returncode=0, stdout="test-job-abc\n", stderr="")
-        return SimpleNamespace(
-            returncode=0,
-            stdout=json.dumps(
-                {
-                    "status": {
-                        "taskCount": 1,
-                        "runningCount": 0,
-                        "succeededCount": 1,
-                        "failedCount": 0,
-                        "conditions": [{"type": "Completed", "status": "True"}],
-                    }
-                }
-            ),
-            stderr="",
-        )
+    def json(self) -> dict:
+        return self.payload
 
-    monkeypatch.setattr(dag_mod.subprocess, "run", fake_run)
+
+class _FakeSession:
+    def __init__(self, post_payload: dict, get_payloads: list[dict]) -> None:
+        self.post_payload = post_payload
+        self.get_payloads = get_payloads
+        self.post_calls = []
+        self.get_calls = []
+
+    def post(self, url: str, **kwargs) -> _FakeResponse:
+        self.post_calls.append((url, kwargs))
+        return _FakeResponse(self.post_payload)
+
+    def get(self, url: str, **kwargs) -> _FakeResponse:
+        self.get_calls.append((url, kwargs))
+        return _FakeResponse(self.get_payloads.pop(0))
+
+
+def _patch_api_session(monkeypatch, session: _FakeSession) -> None:
+    monkeypatch.setattr(dag_mod.google.auth, "default", lambda scopes: ("credentials", "project"))
+    monkeypatch.setattr(dag_mod, "AuthorizedSession", lambda credentials: session)
+
+
+def test_cloud_run_api_polling_helper_succeeds(monkeypatch, capsys) -> None:
+    session = _FakeSession(
+        post_payload={"name": "projects/project/locations/us-central1/operations/op-1"},
+        get_payloads=[
+            {"name": "projects/project/locations/us-central1/operations/op-1", "done": False},
+            {
+                "name": "projects/project/locations/us-central1/operations/op-1",
+                "done": True,
+                "response": {
+                    "name": (
+                        "projects/project/locations/us-central1/jobs/test-job/"
+                        "executions/test-job-execution"
+                    )
+                },
+            },
+        ],
+    )
+    _patch_api_session(monkeypatch, session)
+    monkeypatch.setattr(dag_mod.time, "sleep", lambda _: None)
 
     dag_mod.run_cloud_run_job_with_polling(
         job_name="test-job",
@@ -381,111 +411,31 @@ def test_cloud_run_polling_helper_succeeds(monkeypatch, capsys) -> None:
     )
 
     output = capsys.readouterr().out
-    assert "Launching Cloud Run job asynchronously" in output
-    assert "Cloud Run launch command completed." in output
-    assert "Resolved Cloud Run execution: test-job-abc" in output
-    assert "Polling Cloud Run execution: test-job-abc" in output
-    assert "Cloud Run execution succeeded: test-job-abc" in output
-    assert any("execute" in command for command in calls)
-    assert any("--async" in command for command in calls)
-    assert all("--wait" not in command for command in calls)
-    assert 180 not in timeouts
+    assert "Launching Cloud Run job through REST API." in output
+    assert "Cloud Run operation: projects/project/locations/us-central1/operations/op-1" in output
+    assert "Cloud Run operation completed successfully." in output
+    assert "Cloud Run execution: test-job-execution" in output
+    assert session.post_calls[0][0] == "https://run.googleapis.com/v2/projects/project/locations/us-central1/jobs/test-job:run"
+    post_body = session.post_calls[0][1]["json"]
+    assert post_body["overrides"]["containerOverrides"][0]["env"] == [
+        {"name": "BRONZE_EXTRACTION_DATE", "value": "2026-07-02"},
+        {"name": "PIPELINE_RUN_ID", "value": "manual_20260702"},
+    ]
+    assert session.get_calls
 
 
-def test_cloud_run_polling_helper_uses_execution_name_from_launch_json(monkeypatch) -> None:
-    calls = []
-
-    def fake_run(command, **kwargs):
-        calls.append(command)
-        if "execute" in command:
-            return SimpleNamespace(
-                returncode=0,
-                stdout=json.dumps(
-                    {
-                        "metadata": {
-                            "name": (
-                                "projects/project/locations/us-central1/jobs/test-job/"
-                                "executions/test-job-json"
-                            )
-                        }
-                    }
-                ),
-                stderr="",
-            )
-        return SimpleNamespace(
-            returncode=0,
-            stdout=json.dumps({"status": {"taskCount": 1, "succeededCount": 1, "failedCount": 0}}),
-            stderr="",
-        )
-
-    monkeypatch.setattr(dag_mod.subprocess, "run", fake_run)
-
-    dag_mod.run_cloud_run_job_with_polling(
-        job_name="test-job",
-        project_id="project",
-        region="us-central1",
-        env_vars={"BRONZE_EXTRACTION_DATE": "2026-07-02", "PIPELINE_RUN_ID": "manual_20260702"},
-        poll_interval_seconds=1,
-        timeout_seconds=30,
+def test_cloud_run_api_polling_helper_fails_on_operation_error(monkeypatch) -> None:
+    session = _FakeSession(
+        post_payload={"name": "operations/op-error"},
+        get_payloads=[
+            {
+                "name": "operations/op-error",
+                "done": True,
+                "error": {"code": 13, "message": "job failed", "details": [{"reason": "FAILED"}]},
+            }
+        ],
     )
-
-    assert any("describe" in command and "test-job-json" in command for command in calls)
-    assert not any("list" in command for command in calls)
-
-
-def test_cloud_run_polling_helper_falls_back_to_execution_list(monkeypatch) -> None:
-    calls = []
-    creation_timestamp = datetime.now(timezone.utc).isoformat()
-
-    def fake_run(command, **kwargs):
-        calls.append(command)
-        if "execute" in command:
-            return SimpleNamespace(returncode=0, stdout="", stderr="")
-        if "list" in command:
-            return SimpleNamespace(
-                returncode=0,
-                stdout=json.dumps(
-                    [
-                        {
-                            "metadata": {
-                                "name": "test-job-listed",
-                                "creationTimestamp": creation_timestamp,
-                            }
-                        }
-                    ]
-                ),
-                stderr="",
-            )
-        return SimpleNamespace(
-            returncode=0,
-            stdout=json.dumps({"status": {"taskCount": 1, "succeededCount": 1, "failedCount": 0}}),
-            stderr="",
-        )
-
-    monkeypatch.setattr(dag_mod.subprocess, "run", fake_run)
-
-    dag_mod.run_cloud_run_job_with_polling(
-        job_name="test-job",
-        project_id="project",
-        region="us-central1",
-        env_vars={"BRONZE_EXTRACTION_DATE": "2026-07-02", "PIPELINE_RUN_ID": "manual_20260702"},
-        poll_interval_seconds=1,
-        timeout_seconds=30,
-    )
-
-    assert any("list" in command for command in calls)
-    assert any("describe" in command and "test-job-listed" in command for command in calls)
-
-
-def test_cloud_run_polling_helper_error_includes_launch_output_when_execution_missing(monkeypatch) -> None:
-    def fake_run(command, **kwargs):
-        if "execute" in command:
-            return SimpleNamespace(returncode=0, stdout="launch stdout", stderr="launch stderr")
-        if "list" in command:
-            return SimpleNamespace(returncode=0, stdout="[]", stderr="")
-        raise AssertionError("describe should not run without execution name")
-
-    monkeypatch.setattr(dag_mod.subprocess, "run", fake_run)
+    _patch_api_session(monkeypatch, session)
 
     try:
         dag_mod.run_cloud_run_job_with_polling(
@@ -498,53 +448,20 @@ def test_cloud_run_polling_helper_error_includes_launch_output_when_execution_mi
         )
     except RuntimeError as exc:
         message = str(exc)
-        assert "Could not resolve Cloud Run execution name" in message
-        assert "launch stdout" in message
-        assert "launch stderr" in message
+        assert "Cloud Run operation failed" in message
+        assert "code=13" in message
+        assert "job failed" in message
     else:
-        raise AssertionError("Expected RuntimeError when execution name cannot be resolved")
+        raise AssertionError("Expected RuntimeError for Cloud Run operation error")
 
 
-def test_cloud_run_polling_helper_fails_on_failed_count(monkeypatch) -> None:
-    def fake_run(command, **kwargs):
-        if "execute" in command:
-            return SimpleNamespace(returncode=0, stdout="test-job-failed\n", stderr="")
-        return SimpleNamespace(
-            returncode=0,
-            stdout=json.dumps({"status": {"taskCount": 1, "succeededCount": 0, "failedCount": 1}}),
-            stderr="",
-        )
-
-    monkeypatch.setattr(dag_mod.subprocess, "run", fake_run)
-
-    try:
-        dag_mod.run_cloud_run_job_with_polling(
-            job_name="test-job",
-            project_id="project",
-            region="us-central1",
-            env_vars={"BRONZE_EXTRACTION_DATE": "2026-07-02", "PIPELINE_RUN_ID": "manual_20260702"},
-            poll_interval_seconds=1,
-            timeout_seconds=30,
-        )
-    except RuntimeError as exc:
-        assert "Cloud Run execution failed" in str(exc)
-    else:
-        raise AssertionError("Expected RuntimeError for failed Cloud Run execution")
-
-
-def test_cloud_run_polling_helper_times_out(monkeypatch) -> None:
+def test_cloud_run_api_polling_helper_times_out(monkeypatch) -> None:
+    session = _FakeSession(
+        post_payload={"name": "operations/op-running"},
+        get_payloads=[{"name": "operations/op-running", "done": False}],
+    )
+    _patch_api_session(monkeypatch, session)
     monotonic_values = iter([0, 0, 31])
-
-    def fake_run(command, **kwargs):
-        if "execute" in command:
-            return SimpleNamespace(returncode=0, stdout="test-job-running\n", stderr="")
-        return SimpleNamespace(
-            returncode=0,
-            stdout=json.dumps({"status": {"taskCount": 1, "runningCount": 1, "failedCount": 0}}),
-            stderr="",
-        )
-
-    monkeypatch.setattr(dag_mod.subprocess, "run", fake_run)
     monkeypatch.setattr(dag_mod.time, "monotonic", lambda: next(monotonic_values))
     monkeypatch.setattr(dag_mod.time, "sleep", lambda _: None)
 
@@ -558,16 +475,17 @@ def test_cloud_run_polling_helper_times_out(monkeypatch) -> None:
             timeout_seconds=30,
         )
     except TimeoutError as exc:
-        assert "Timed out waiting for Cloud Run execution" in str(exc)
+        assert "Timed out waiting for Cloud Run operation" in str(exc)
     else:
-        raise AssertionError("Expected TimeoutError for long running Cloud Run execution")
+        raise AssertionError("Expected TimeoutError for long running Cloud Run operation")
 
 
-def test_gcloud_failure_prints_stdout_and_stderr(monkeypatch, capsys) -> None:
-    def fake_run(command, **kwargs):
-        return SimpleNamespace(returncode=1, stdout="bad stdout", stderr="bad stderr")
+def test_cloud_run_api_request_error_is_clear(monkeypatch) -> None:
+    class ErrorSession:
+        def post(self, url: str, **kwargs) -> _FakeResponse:
+            return _FakeResponse({"error": {"message": "forbidden"}}, status_code=403)
 
-    monkeypatch.setattr(dag_mod.subprocess, "run", fake_run)
+    _patch_api_session(monkeypatch, ErrorSession())
 
     try:
         dag_mod.run_cloud_run_job_with_polling(
@@ -578,9 +496,8 @@ def test_gcloud_failure_prints_stdout_and_stderr(monkeypatch, capsys) -> None:
             poll_interval_seconds=1,
             timeout_seconds=30,
         )
-    except RuntimeError:
-        output = capsys.readouterr().out
-        assert "bad stdout" in output
-        assert "bad stderr" in output
+    except RuntimeError as exc:
+        assert "Cloud Run API request failed" in str(exc)
+        assert "forbidden" in str(exc)
     else:
-        raise AssertionError("Expected RuntimeError for gcloud failure")
+        raise AssertionError("Expected RuntimeError for Cloud Run API request error")
