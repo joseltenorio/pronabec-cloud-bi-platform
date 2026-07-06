@@ -437,7 +437,7 @@ def run_cloud_run_job_with_polling(
     print(f"Cloud Run env vars: {joined_env_vars}")
 
     session = _authorized_session()
-    launch_started_at = datetime.now(timezone.utc)
+
     operation = _request_json(
         "post",
         session,
@@ -445,87 +445,48 @@ def run_cloud_run_job_with_polling(
         json=_env_overrides(env_vars),
         timeout=60,
     )
+
     operation_name = operation.get("name")
     if not operation_name:
         raise RuntimeError(f"Cloud Run run API did not return operation name. response={operation!r}")
+
     print(f"Cloud Run operation: {operation_name}")
 
-    execution_resource_name = _resolve_execution_resource_name(
-        session,
-        project_id,
-        region,
-        job_name,
-        operation,
-        launch_started_at,
-    )
-    if execution_resource_name:
-        print(f"Resolved Cloud Run execution: {_short_resource_name(execution_resource_name)}")
-
     started_at = time.monotonic()
+
     while True:
         elapsed = int(time.monotonic() - started_at)
+
         if timeout_seconds is not None and elapsed > timeout_seconds:
             raise TimeoutError(
-                f"Timed out waiting for Cloud Run execution job={job_name} operation={operation_name} "
-                f"after {elapsed} seconds."
+                f"Timed out waiting for Cloud Run operation={operation_name} "
+                f"job={job_name} after {elapsed} seconds."
             )
 
-        if execution_resource_name is None:
-            operation = _request_json(
-                "get",
-                session,
-                _cloud_run_operation_url(operation_name),
-                timeout=60,
-            )
+        operation = _request_json(
+            "get",
+            session,
+            _cloud_run_operation_url(operation_name),
+            timeout=60,
+        )
+
+        done = operation.get("done", False)
+
+        print(
+            f"Cloud Run operation={operation_name} job={job_name} "
+            f"elapsed={elapsed} done={done}"
+        )
+
+        if done:
             _raise_operation_error(operation, job_name)
-            print(
-                f"Cloud Run operation={operation_name} job={job_name} "
-                f"elapsed={elapsed} done={operation.get('done', False)}"
-            )
-            execution_resource_name = _resolve_execution_resource_name(
-                session,
-                project_id,
-                region,
-                job_name,
-                operation,
-                launch_started_at,
-            )
-            if execution_resource_name:
-                print(f"Resolved Cloud Run execution: {_short_resource_name(execution_resource_name)}")
-            elif operation.get("done"):
-                print(
-                    "Cloud Run operation completed successfully but execution could not be resolved "
-                    "unambiguously"
-                )
-                _log_bigquery_success_evidence(env_vars, project_id)
-                return
-            else:
-                print(f"Waiting for Cloud Run execution for job={job_name} operation={operation_name}")
 
-        if execution_resource_name is not None:
-            execution = _request_json(
-                "get",
-                session,
-                _cloud_run_resource_url(execution_resource_name),
-                timeout=60,
-            )
-            task_count, running_count, succeeded_count, failed_count = _execution_counts(execution)
-            condition_summary = _condition_summary(execution)
-            execution_name = _short_resource_name(execution_resource_name)
-            print(
-                f"Cloud Run execution={execution_name} job={job_name} elapsed={elapsed} "
-                f"running={running_count} succeeded={succeeded_count} failed={failed_count} "
-                f"taskCount={task_count} condition={condition_summary}"
-            )
-            if _execution_succeeded(execution):
-                print(f"Cloud Run execution succeeded: {execution_name}")
-                _log_bigquery_success_evidence(env_vars, project_id)
-                return
-            if _execution_failed(execution):
-                raise RuntimeError(
-                    f"Cloud Run execution failed: execution={execution_name} "
-                    f"job={job_name} condition={condition_summary}"
-                )
+            print("Cloud Run operation completed successfully.")
+
+            execution_resource_name = _extract_execution_resource_name(operation)
+            if execution_resource_name:
+                print(f"Cloud Run execution: {_short_resource_name(execution_resource_name)}")
+
+            return
 
         time.sleep(poll_interval_seconds)
 
