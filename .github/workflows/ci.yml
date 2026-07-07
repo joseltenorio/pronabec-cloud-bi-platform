@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  GCP_PROJECT_ID: pronabec-cloud-bi-platform
+  GCS_BUCKET_NAME: pronabec-cloud-bi-platform-lake-1030103187284
+  BQ_LOCATION: US
+  DISABLE_DOTENV: "1"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+
+      - name: Ruff
+        run: python -m ruff check .
+
+      - name: Validate Bash syntax
+        run: bash -n scripts/*.sh
+
+      - name: Generate temporary BigQuery DDL
+        run: |
+          python tools/generate_bigquery_ddl.py \
+            --project-id "$GCP_PROJECT_ID" \
+            --bucket "$GCS_BUCKET_NAME"
+
+      - name: Pytest
+        run: python -m pytest -q
+
+      - name: Verify generated SQL is not tracked
+        run: |
+          if git ls-files --error-unmatch build/generated >/dev/null 2>&1; then
+            echo "build/generated must not be tracked." >&2
+            exit 1
+          fi
