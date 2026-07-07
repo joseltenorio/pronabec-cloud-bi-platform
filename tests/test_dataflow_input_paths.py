@@ -157,3 +157,21 @@ def test_mef_deploy_keeps_year_wildcard_for_partitioned_inputs() -> None:
     content = deploy_script.read_text(encoding="utf-8")
 
     assert "bronze/mef/presupuesto/extraction_date=\\${BRONZE_EXTRACTION_DATE}/year=*/data.csv" in content
+
+
+def test_minedu_concrete_input_path_is_valid() -> None:
+    args, _ = parse_arguments(
+        [
+            "--source-system", "minedu_escale",
+            "--source-dataset", "minedu_matricula_secundaria_departamental",
+            "--extraction-date", "2026-07-08",
+            "--input-path", "gs://bucket/bronze/minedu/escale_matricula_secundaria/extraction_date=2026-07-08/data.csv",
+            "--input-format", "csv",
+            "--output-table", "project:silver.minedu_matricula_secundaria_departamental",
+            "--runner", "DirectRunner",
+            "--dry-run",
+        ]
+    )
+
+    validate_arguments(args)
+    assert args.source_dataset == "minedu_matricula_secundaria_departamental"
