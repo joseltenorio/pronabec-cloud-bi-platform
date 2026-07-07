@@ -1,0 +1,124 @@
+name: Manual GCP Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_bigquery:
+        description: Deploy BigQuery SQL
+        required: true
+        default: false
+        type: boolean
+      deploy_images:
+        description: Build and push container images
+        required: true
+        default: false
+        type: boolean
+      deploy_jobs:
+        description: Deploy Cloud Run Jobs
+        required: true
+        default: false
+        type: boolean
+      deploy_composer:
+        description: Upload Composer DAG and variables
+        required: true
+        default: false
+        type: boolean
+      validate_composer:
+        description: List Composer DAG import errors
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_PROJECT_ID: pronabec-cloud-bi-platform
+  GCP_REGION: us-central1
+  GCS_BUCKET_NAME: pronabec-cloud-bi-platform-lake-1030103187284
+  GCS_BUCKET: pronabec-cloud-bi-platform-lake-1030103187284
+  CLOUD_RUN_REGION: us-central1
+  COMPOSER_LOCATION: us-central1
+  COMPOSER_ENVIRONMENT_NAME: pronabec-composer
+  BQ_BRONZE_DATASET: bronze
+  BQ_SILVER_DATASET: silver
+  BQ_GOLD_DATASET: gold
+  BQ_AUDIT_DATASET: audit
+  BQ_ML_DATASET: ml
+  BQ_LOCATION: US
+  CLOUD_RUN_IMAGE: us-central1-docker.pkg.dev/pronabec-cloud-bi-platform/project-cloud-bi/pronabec-cloud-bi-platform:latest
+  DATAFLOW_WORKER_IMAGE: us-central1-docker.pkg.dev/pronabec-cloud-bi-platform/project-cloud-bi/pronabec-dataflow-worker:latest
+  DATAFLOW_SDK_CONTAINER_IMAGE: us-central1-docker.pkg.dev/pronabec-cloud-bi-platform/project-cloud-bi/pronabec-dataflow-worker:latest
+  DATAFLOW_TEMP_LOCATION: gs://pronabec-cloud-bi-platform-lake-1030103187284/dataflow/temp
+  DATAFLOW_STAGING_LOCATION: gs://pronabec-cloud-bi-platform-lake-1030103187284/dataflow/staging
+  DATAFLOW_SERVICE_ACCOUNT: pronabec-dataflow-sa@pronabec-cloud-bi-platform.iam.gserviceaccount.com
+  CLOUD_RUN_SERVICE_ACCOUNT: pronabec-cloud-run-sa@pronabec-cloud-bi-platform.iam.gserviceaccount.com
+  MEF_SOURCE_MODE: consulta_amigable
+  MEF_START_YEAR: "2012"
+  MEF_END_YEAR: "2026"
+  MEF_TEXT_FILTER: PRONABEC
+  MEF_PRONABEC_EXECUTORA_CODE: 117-1438
+  DISABLE_DOTENV: "1"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+
+      - name: Pre-deploy validation
+        run: |
+          python -m ruff check .
+          bash -n scripts/*.sh
+          python -m pytest -q
+
+      - name: Deploy BigQuery
+        if: ${{ inputs.deploy_bigquery }}
+        run: ./scripts/deploy_bigquery_sql.sh
+
+      - name: Build and push images
+        if: ${{ inputs.deploy_images }}
+        run: |
+          ./scripts/build_and_push_image.sh
+          ./scripts/build_and_push_dataflow_worker_image.sh
+
+      - name: Deploy Cloud Run Jobs
+        if: ${{ inputs.deploy_jobs }}
+        run: ./scripts/deploy_cloud_run_jobs.sh
+
+      - name: Deploy Composer DAG and variables
+        if: ${{ inputs.deploy_composer }}
+        run: |
+          ./scripts/upload_composer_dag.sh
+          ./scripts/configure_airflow_variables.sh
+
+      - name: Validate Composer import errors
+        if: ${{ inputs.validate_composer }}
+        run: |
+          gcloud composer environments run "$COMPOSER_ENVIRONMENT_NAME" \
+            --location "$COMPOSER_LOCATION" \
+            --project "$GCP_PROJECT_ID" \
+            dags list-import-errors
