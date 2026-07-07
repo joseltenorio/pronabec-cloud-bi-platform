@@ -80,6 +80,14 @@ def _validate_range(
         raise ValueError(f"{field_name} debe estar entre {min_value} y {max_value}.")
 
 
+def _source_field(
+    record: dict[str, Any],
+    field_name: str,
+    default: str | None = None,
+) -> str | None:
+    return clean_text_basic(record.get(field_name)) or default
+
+
 def _base_record(record: dict[str, Any]) -> dict[str, Any]:
     return {
         "anio": _parse_required_year(record),
@@ -156,21 +164,53 @@ def transform_inei_pobreza_departamental(
 def transform_inei_internet_acceso_region(
     record: dict[str, Any],
     context: dict[str, Any],
-) -> dict[str, Any]:
+) -> dict[str, Any] | list[dict[str, Any]]:
     dataset_name = "inei_internet_acceso_region"
-    transformed = _base_record(record)
-    transformed["internet_acceso_pct"] = _parse_optional_numeric(
-        record,
-        "internet_acceso_pct",
-    )
-    _validate_range(transformed["internet_acceso_pct"], "internet_acceso_pct", 0, 100)
-    for field_name in ("source_name", "source_period", "source_type", "metric"):
-        transformed[field_name] = clean_text_basic(record.get(field_name))
-    transformed.update(_metadata(dataset_name, context))
-    return transformed
+    if "anio" in record or "internet_acceso_pct" in record:
+        transformed = _base_record(record)
+        transformed["internet_acceso_pct"] = _parse_optional_numeric(
+            record,
+            "internet_acceso_pct",
+        )
+        _validate_range(transformed["internet_acceso_pct"], "internet_acceso_pct", 0, 100)
+        for field_name in ("source_name", "source_period", "source_type", "metric"):
+            transformed[field_name] = clean_text_basic(record.get(field_name))
+        transformed.update(_metadata(dataset_name, context))
+        return transformed
+
+    region = _parse_required_region(record)
+    year_columns = sorted(field_name for field_name in record if field_name.isdigit())
+    if not year_columns:
+        raise ValueError("inei_internet_acceso_region requiere columnas anio/internet_acceso_pct o columnas anuales.")
+
+    source_period = _source_field(record, "source_period") or f"{year_columns[0]}-{year_columns[-1]}"
+    transformed_rows: list[dict[str, Any]] = []
+    for year_column in year_columns:
+        if _is_blank(record.get(year_column)):
+            continue
+        internet_pct = _parse_optional_numeric(record, year_column)
+        _validate_range(internet_pct, "internet_acceso_pct", 0, 100)
+        transformed = {
+            "anio": int(year_column),
+            "region": region,
+            "internet_acceso_pct": internet_pct,
+            "source_name": _source_field(record, "source_name", "INEI"),
+            "source_period": source_period,
+            "source_type": _source_field(record, "source_type", "manual_csv"),
+            "metric": _source_field(record, "metric", "internet_acceso_pct"),
+        }
+        transformed.update(_metadata(dataset_name, context))
+        transformed_rows.append(transformed)
+
+    if not transformed_rows:
+        raise ValueError("inei_internet_acceso_region no contiene valores anuales de internet.")
+    return transformed_rows
 
 
-INEI_TRANSFORMS: dict[str, Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]] = {
+INEI_TRANSFORMS: dict[
+    str,
+    Callable[[dict[str, Any], dict[str, Any]], dict[str, Any] | list[dict[str, Any]]],
+] = {
     "inei_population_youth_region": transform_inei_population_youth_region,
     "inei_demographic_indicators_region": transform_inei_demographic_indicators_region,
     "inei_pobreza_departamental": transform_inei_pobreza_departamental,
@@ -182,7 +222,7 @@ def transform_inei_report_record(
     dataset_name: str,
     record: dict[str, Any],
     context: dict[str, Any],
-) -> dict[str, Any]:
+) -> dict[str, Any] | list[dict[str, Any]]:
     transform = INEI_TRANSFORMS.get(dataset_name)
     if transform is None:
         supported = ", ".join(sorted(INEI_TRANSFORMS))

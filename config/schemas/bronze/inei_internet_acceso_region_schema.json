@@ -1,9 +1,17 @@
 [
-  { "name": "anio", "type": "STRING", "mode": "NULLABLE" },
   { "name": "region", "type": "STRING", "mode": "NULLABLE" },
-  { "name": "internet_acceso_pct", "type": "STRING", "mode": "NULLABLE" },
-  { "name": "source_name", "type": "STRING", "mode": "NULLABLE" },
-  { "name": "source_period", "type": "STRING", "mode": "NULLABLE" },
-  { "name": "source_type", "type": "STRING", "mode": "NULLABLE" },
-  { "name": "metric", "type": "STRING", "mode": "NULLABLE" }
+  { "name": "internet_acceso_pct_2012", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "internet_acceso_pct_2013", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "internet_acceso_pct_2014", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "internet_acceso_pct_2015", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "internet_acceso_pct_2016", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "internet_acceso_pct_2017", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "internet_acceso_pct_2018", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "internet_acceso_pct_2019", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "internet_acceso_pct_2020", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "internet_acceso_pct_2021", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "internet_acceso_pct_2022", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "internet_acceso_pct_2023", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "internet_acceso_pct_2024", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "internet_acceso_pct_2025", "type": "STRING", "mode": "NULLABLE" }
 ]
