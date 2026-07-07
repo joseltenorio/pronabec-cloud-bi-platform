@@ -141,6 +141,11 @@ def test_deduce_source_metadata():
     assert sys == "mef"
     assert ds == "presupuesto"
 
+    # Caso INEI
+    sys, ds = deduce_source_metadata("inei_population_youth_region")
+    assert sys == "inei_reports"
+    assert ds == "inei_population_youth_region"
+
     # Caso desconocido
     sys, ds = deduce_source_metadata("tabla_desconocida")
     assert sys == "unknown"

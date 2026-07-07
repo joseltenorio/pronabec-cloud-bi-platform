@@ -14,7 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SQL_FILE_PATH = PROJECT_ROOT / "sql" / "quality" / "data_quality_checks.sql"
 SILVER_SCHEMAS_DIR = PROJECT_ROOT / "config" / "schemas" / "silver"
 GOLD_DDL_PATH = PROJECT_ROOT / "sql" / "ddl" / "create_gold_views.sql"
-EXPECTED_QUALITY_CHECKS = 62
+EXPECTED_QUALITY_CHECKS = 70
 QUALITY_OUTPUT_COLUMNS = {
     "check_id",
     "layer",
@@ -306,7 +306,11 @@ def test_required_tables_are_covered():
         "pronabec_report_beca18_universitarios_universidad_anual",
         "presupuesto_mef",
         "presupuesto_mef_temporal",
-        "presupuesto_mef_hierarchy"
+        "presupuesto_mef_hierarchy",
+        "inei_population_youth_region",
+        "inei_demographic_indicators_region",
+        "inei_pobreza_departamental",
+        "inei_internet_acceso_region",
     }
     
     for t in required_tables:
@@ -503,6 +507,31 @@ def test_pronabec_ubigeo_postulacion_allows_known_foreign_province_nulls():
     assert _extract_literal_alias(query, "severity") == "ERROR"
     assert "PROVINCIA IS NULL OR TRIM(PROVINCIA) = ''" in normalized
     assert "NOT IN ('CHILE', 'COLOMBIA', 'MEXICO')" in normalized
+
+
+def test_inei_quality_checks_are_present_and_parameterized():
+    content = SQL_FILE_PATH.read_text(encoding="utf-8")
+
+    expected_checks = [
+        "silver_inei_population_youth_region_required_ranges",
+        "silver_inei_population_youth_region_duplicates",
+        "silver_inei_demographic_indicators_region_required_ranges",
+        "silver_inei_demographic_indicators_region_duplicates",
+        "silver_inei_pobreza_departamental_required_ranges",
+        "silver_inei_pobreza_departamental_duplicates",
+        "silver_inei_internet_acceso_region_required_ranges",
+        "silver_inei_internet_acceso_region_duplicates",
+    ]
+    for check_id in expected_checks:
+        assert check_id in content
+
+    for table in [
+        "inei_population_youth_region",
+        "inei_demographic_indicators_region",
+        "inei_pobreza_departamental",
+        "inei_internet_acceso_region",
+    ]:
+        assert f"`{{project_id}}.{{silver_dataset}}.{table}`" in content
 
 
 def test_silver_checks_use_declared_schema_columns_for_simple_predicates():

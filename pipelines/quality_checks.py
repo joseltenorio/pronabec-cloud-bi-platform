@@ -57,6 +57,9 @@ def deduce_source_metadata(table_name: str) -> tuple[str, str]:
         else:
             return "mef", table_name.replace("presupuesto_mef_", "presupuesto_")
 
+    if table_name.startswith("inei_"):
+        return "inei_reports", table_name
+
     return "unknown", "unknown"
 
 
