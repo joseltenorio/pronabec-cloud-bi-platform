@@ -29,7 +29,7 @@ def test_bronze_manifest_validation_is_deployable_and_orchestrated():
     assert "execution_timeout=timedelta(seconds=timeout_seconds + 600)" in dag_content
     assert "schedule_interval=None" in dag_content
     assert "dag_run.conf.get('pipeline_run_id', run_id)" in dag_content
-    assert "silver_parallel = [pronabec_api_silver, mef_silver, pronabec_reports_silver, inei_reports_silver]" in dag_content
+    assert "silver_parallel = [pronabec_api_silver, mef_silver, pronabec_reports_silver, inei_reports_silver, minedu_escale_silver]" in dag_content
     assert "validate_bronze_manifests >> silver_parallel" in dag_content
     assert "silver_parallel >> publish_gold_views" in dag_content
 
