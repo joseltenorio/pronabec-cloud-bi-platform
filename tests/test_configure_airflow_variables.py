@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-SCRIPT_PATH = Path("scripts/configure_airflow_variables.ps1")
+SCRIPT_PATH = Path("scripts/configure_airflow_variables.sh")
 
 
 def test_configure_airflow_variables_script_exists():
@@ -78,14 +78,16 @@ def test_configure_airflow_variables_omits_legacy_pronabec_jobs():
         assert variable not in content
 
 
-def test_configure_airflow_variables_checks_gcloud_exit_code():
+def test_configure_airflow_variables_uses_strict_bash_and_variables_set():
     content = SCRIPT_PATH.read_text(encoding="utf-8")
 
-    assert "$LASTEXITCODE -ne 0" in content
-    assert "Falló configuración de Airflow Variable" in content
+    assert "set -euo pipefail" in content
+    assert 'variables set -- "$key" "$value"' in content
+
+
 def test_configure_airflow_variables_sets_dataflow_worker_image() -> None:
     content = SCRIPT_PATH.read_text(encoding="utf-8")
 
-    assert "$DataflowSdkContainerImage = $env:DATAFLOW_SDK_CONTAINER_IMAGE" in content
-    assert 'Assert-RequiredValue -Name "DataflowSdkContainerImage"' in content
-    assert '"dataflow_sdk_container_image" = $DataflowSdkContainerImage' in content
+    assert "DATAFLOW_SDK_CONTAINER_IMAGE" in content
+    assert "require_env DATAFLOW_SDK_CONTAINER_IMAGE" in content
+    assert 'set_airflow_variable dataflow_sdk_container_image "$DATAFLOW_SDK_CONTAINER_IMAGE"' in content

@@ -737,13 +737,13 @@ def test_stage_gcs_uses_tempfile_without_repo_tmp(
 
 
 def test_deploy_script_stage_reports_job_avoids_shell_literals() -> None:
-    script = Path("scripts/deploy_cloud_run_jobs.ps1").read_text(encoding="utf-8")
-    start = script.index("-JobName $PronabecReportsStageJobName")
-    end = script.index("Upsert-CloudRunJob `", start + 1)
+    script = Path("scripts/deploy_cloud_run_jobs.sh").read_text(encoding="utf-8")
+    start = script.index("ARGS_REPORTS_STAGE")
+    end = script.index("ARGS_BRONZE_VALIDATION")
     stage_job_block = script[start:end]
 
-    assert "`${SOURCE_SUBSET}" not in stage_job_block
-    assert "`${BRONZE_EXTRACTION_DATE}" not in stage_job_block
+    assert "\\${SOURCE_SUBSET}" not in stage_job_block
+    assert "\\${BRONZE_EXTRACTION_DATE}" not in stage_job_block
     assert "--overwrite" in stage_job_block
     assert "GCS_BUCKET_NAME" in script
     assert "PRONABEC_REPORTS_LANDING_PREFIX" in script
