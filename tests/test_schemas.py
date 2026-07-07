@@ -165,12 +165,15 @@ def test_bigquery_ddl_generator_writes_bronze_and_silver_sql(tmp_path: Path) -> 
     assert "gs://test-bucket-name/bronze/pronabec_reports/report_beca18_universitarios_carrera_anual/extraction_date=2026-06-17/data.csv" in bronze_sql
     assert "test-project-id.bronze.inei_population_youth_region_raw" in bronze_sql
     assert "gs://test-bucket-name/bronze/inei_reports/inei_population_youth_region/extraction_date=2026-06-17/data.csv" in bronze_sql
+    assert "test-project-id.bronze.minedu_matricula_secundaria_departamental_raw" in bronze_sql
+    assert "gs://test-bucket-name/bronze/minedu/escale_matricula_secundaria/extraction_date=2026-06-17/data.csv" in bronze_sql
     assert "CREATE OR REPLACE TABLE" in silver_sql
     assert "test-project-id.silver.pronabec_convocatorias" in silver_sql
     assert "vacantes INTEGER" in silver_sql
     assert "test-project-id.silver.pronabec_report_beca18_universitarios_universidad_anual" in silver_sql
     assert "test-project-id.silver.pronabec_report_beca18_universitarios_carrera_anual" in silver_sql
     assert "test-project-id.silver.inei_population_youth_region" in silver_sql
+    assert "test-project-id.silver.minedu_matricula_secundaria_departamental" in silver_sql
 
     # Validate approved MEF Silver tables are generated
     approved_silver_tables = [
@@ -604,6 +607,15 @@ def test_render_bronze_table_fallback_behavior() -> None:
         bronze_extraction_date=None,
     )
     assert "gs://test-bucket/bronze/inei_reports/inei_population_youth_region/extraction_date=*/data.csv" in inei_ddl
+
+    minedu_ddl = render_bronze_table(
+        dataset="minedu_matricula_secundaria_departamental",
+        schema=[{"name": "col1", "type": "STRING", "mode": "NULLABLE"}],
+        project_id="test-project",
+        bucket="test-bucket",
+        bronze_extraction_date=None,
+    )
+    assert "gs://test-bucket/bronze/minedu/escale_matricula_secundaria/extraction_date=*/data.csv" in minedu_ddl
 
     # 3. MEF
     import pytest
