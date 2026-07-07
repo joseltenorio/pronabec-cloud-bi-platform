@@ -41,9 +41,11 @@ PRONABEC_FINALIZE_DATASET_JOB_NAME_VALUE="${PRONABEC_FINALIZE_DATASET_JOB_NAME:-
 MEF_EXTRACT_JOB_NAME_VALUE="${MEF_EXTRACT_JOB_NAME:-mef-extract-job}"
 PRONABEC_REPORTS_STAGE_JOB_NAME_VALUE="${PRONABEC_REPORTS_STAGE_JOB_NAME:-pronabec-stage-reports-job}"
 INEI_REPORTS_STAGE_JOB_NAME_VALUE="${INEI_REPORTS_STAGE_JOB_NAME:-inei-stage-reports-job}"
+MINEDU_ESCALE_EXTRACT_JOB_NAME_VALUE="${MINEDU_ESCALE_EXTRACT_JOB_NAME:-minedu-escale-extract-job}"
 BRONZE_MANIFEST_VALIDATION_JOB_NAME_VALUE="${BRONZE_MANIFEST_VALIDATION_JOB_NAME:-bronze-manifest-validation-job}"
 DATAFLOW_PRONABEC_REPORT_JOB_NAME_VALUE="${DATAFLOW_PRONABEC_REPORT_JOB_NAME:-dataflow-pronabec-report-job}"
 DATAFLOW_INEI_REPORT_JOB_NAME_VALUE="${DATAFLOW_INEI_REPORT_JOB_NAME:-dataflow-inei-report-job}"
+DATAFLOW_MINEDU_ESCALE_JOB_NAME_VALUE="${DATAFLOW_MINEDU_ESCALE_JOB_NAME:-dataflow-minedu-escale-job}"
 DATAFLOW_PRONABEC_CONVOCATORIAS_JOB_NAME_VALUE="${DATAFLOW_PRONABEC_CONVOCATORIAS_JOB_NAME:-dataflow-pronabec-convocatorias-job}"
 DATAFLOW_PRONABEC_UBIGEO_POSTULACION_JOB_NAME_VALUE="${DATAFLOW_PRONABEC_UBIGEO_POSTULACION_JOB_NAME:-dataflow-pronabec-ubigeo-postulacion-job}"
 DATAFLOW_PRONABEC_BECARIOS_PAIS_ESTUDIO_JOB_NAME_VALUE="${DATAFLOW_PRONABEC_BECARIOS_PAIS_ESTUDIO_JOB_NAME:-dataflow-pronabec-becarios-pais-estudio-job}"
@@ -61,6 +63,8 @@ DATAFLOW_MEF_HIERARCHY_JOB_NAME_VALUE="${DATAFLOW_MEF_HIERARCHY_JOB_NAME:-datafl
 GOLD_PUBLISH_JOB_NAME_VALUE="${GOLD_PUBLISH_JOB_NAME:-gold-publish-job}"
 GOLD_VALIDATE_JOB_NAME_VALUE="${GOLD_VALIDATE_JOB_NAME:-gold-validate-job}"
 QUALITY_CHECKS_JOB_NAME_VALUE="${QUALITY_CHECKS_JOB_NAME:-quality-checks-job}"
+MINEDU_ESCALE_START_YEAR_VALUE="${MINEDU_ESCALE_START_YEAR:-2012}"
+MINEDU_ESCALE_END_YEAR_VALUE="${MINEDU_ESCALE_END_YEAR:-2025}"
 
 require_env GCP_PROJECT_ID
 require_env COMPOSER_ENVIRONMENT_NAME
@@ -95,9 +99,11 @@ set_airflow_variable pronabec_finalize_dataset_job_name "$PRONABEC_FINALIZE_DATA
 set_airflow_variable mef_extract_job_name "$MEF_EXTRACT_JOB_NAME_VALUE"
 set_airflow_variable pronabec_reports_stage_job_name "$PRONABEC_REPORTS_STAGE_JOB_NAME_VALUE"
 set_airflow_variable inei_reports_stage_job_name "$INEI_REPORTS_STAGE_JOB_NAME_VALUE"
+set_airflow_variable minedu_escale_extract_job_name "$MINEDU_ESCALE_EXTRACT_JOB_NAME_VALUE"
 set_airflow_variable bronze_manifest_validation_job_name "$BRONZE_MANIFEST_VALIDATION_JOB_NAME_VALUE"
 set_airflow_variable dataflow_pronabec_report_job_name "$DATAFLOW_PRONABEC_REPORT_JOB_NAME_VALUE"
 set_airflow_variable dataflow_inei_report_job_name "$DATAFLOW_INEI_REPORT_JOB_NAME_VALUE"
+set_airflow_variable dataflow_minedu_escale_job_name "$DATAFLOW_MINEDU_ESCALE_JOB_NAME_VALUE"
 set_airflow_variable dataflow_pronabec_convocatorias_job_name "$DATAFLOW_PRONABEC_CONVOCATORIAS_JOB_NAME_VALUE"
 set_airflow_variable dataflow_pronabec_ubigeo_postulacion_job_name "$DATAFLOW_PRONABEC_UBIGEO_POSTULACION_JOB_NAME_VALUE"
 set_airflow_variable dataflow_pronabec_becarios_pais_estudio_job_name "$DATAFLOW_PRONABEC_BECARIOS_PAIS_ESTUDIO_JOB_NAME_VALUE"
@@ -115,5 +121,7 @@ set_airflow_variable dataflow_mef_hierarchy_job_name "$DATAFLOW_MEF_HIERARCHY_JO
 set_airflow_variable gold_publish_job_name "$GOLD_PUBLISH_JOB_NAME_VALUE"
 set_airflow_variable gold_validate_job_name "$GOLD_VALIDATE_JOB_NAME_VALUE"
 set_airflow_variable quality_checks_job_name "$QUALITY_CHECKS_JOB_NAME_VALUE"
+set_airflow_variable minedu_escale_start_year "$MINEDU_ESCALE_START_YEAR_VALUE"
+set_airflow_variable minedu_escale_end_year "$MINEDU_ESCALE_END_YEAR_VALUE"
 
 log "Airflow Variables configured successfully."
