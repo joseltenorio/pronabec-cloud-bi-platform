@@ -136,6 +136,7 @@ def test_configure_airflow_variables_uses_composer_variables_set():
         "bq_bronze_dataset",
         "pronabec_discovery_job_name",
         "dataflow_pronabec_report_job_name",
+        "dataflow_inei_report_job_name",
         "quality_checks_job_name",
     ]:
         assert variable_name in content

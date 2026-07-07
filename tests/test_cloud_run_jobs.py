@@ -64,6 +64,17 @@ def test_selected_mef_jobs_are_defined():
         assert job_name in content, f"Falta el job MEF esperado: {job_name}"
 
 
+def test_inei_jobs_are_defined():
+    content = _read_deploy_script()
+
+    assert "INEI_REPORTS_STAGE_JOB_NAME" in content
+    assert "DATAFLOW_INEI_REPORT_JOB_NAME" in content
+    assert "inei-stage-reports-job" in content
+    assert "dataflow-inei-report-job" in content
+    assert "INEI_REPORTS_LANDING_PREFIX=${INEI_REPORTS_LANDING_PREFIX}" in content
+    assert "INEI_REPORTS_BRONZE_PREFIX=${INEI_REPORTS_BRONZE_PREFIX}" in content
+
+
 def test_mef_extract_job_has_complete_runtime_configuration():
     content = _read_deploy_script()
 
@@ -210,6 +221,18 @@ def test_pronabec_reports_stage_job_runs_as_module():
     assert "tools/stage_pronabec_manual_reports.py" not in stage_section
     assert "PRONABEC_REPORTS_LANDING_PREFIX=${PRONABEC_REPORTS_LANDING_PREFIX}" in content
     assert "PRONABEC_REPORTS_BRONZE_PREFIX=${PRONABEC_REPORTS_BRONZE_PREFIX}" in content
+
+
+def test_inei_stage_and_dataflow_jobs_are_parameterized():
+    content = _read_deploy_script()
+    stage_section = _section_between(content, "ARGS_INEI_STAGE", "ARGS_BRONZE_VALIDATION")
+    dataflow_section = _section_between(content, "ENV_DF_INEI_REPORT", "ARGS_QUALITY")
+
+    assert "-m tools.stage_inei_reports --strict --overwrite" in stage_section
+    assert "--source-system \"\\${SOURCE_SYSTEM}\"" in dataflow_section
+    assert "SOURCE_SYSTEM=inei_reports" in dataflow_section
+    assert "BRONZE_INPUT_PATH=gs://" in dataflow_section
+    assert "BQ_OUTPUT_TABLE=" in dataflow_section
 
 
 def test_pronabec_finalize_job_does_not_hardcode_source_dataset():
