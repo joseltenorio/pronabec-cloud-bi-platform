@@ -24,6 +24,7 @@ from pipelines.common.bigquery import (
 )
 from pipelines.common.logging import setup_structured_logger, log_event
 from pipelines.transforms.inei_reports import transform_inei_report_record
+from pipelines.transforms.minedu import transform_minedu_matricula_secundaria_departamental
 from pipelines.transforms.pronabec_reports import REPORT_SPECS, transform_pronabec_report_record
 from pipelines.transforms.base import add_technical_metadata
 from pipelines.transforms.mef import transform_mef_record
@@ -656,6 +657,17 @@ def transform_bronze_record(
     if source_system == "inei_reports":
         return transform_inei_report_record(
             source_dataset,
+            record,
+            {
+                "extraction_date": extraction_date,
+                "ingestion_timestamp": ingestion_timestamp,
+                "pipeline_run_id": pipeline_run_id,
+            },
+        )
+    if source_system == "minedu_escale":
+        if source_dataset != "minedu_matricula_secundaria_departamental":
+            raise ValueError(f"Unsupported MINEDU ESCALE dataset '{source_dataset}'.")
+        return transform_minedu_matricula_secundaria_departamental(
             record,
             {
                 "extraction_date": extraction_date,

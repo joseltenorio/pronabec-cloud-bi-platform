@@ -23,6 +23,7 @@ from pipelines.dataflow_bronze_to_silver import (
     validate_arguments,
 )
 from pipelines.transforms.mef import transform_mef_record
+from pipelines.transforms.minedu import transform_minedu_matricula_secundaria_departamental
 from pipelines.transforms.pronabec import transform_pronabec_record
 from pipelines.transforms.pronabec_reports import transform_pronabec_report_record
 
@@ -551,6 +552,25 @@ def test_repeated_same_source_date_runs_cleanup_each_time(
             },
             "presupuesto_mef_schema.json",
         ),
+        (
+            transform_minedu_matricula_secundaria_departamental,
+            "",
+            {
+                "anio": "2025",
+                "codigo_departamento": "25",
+                "region": "UCAYALI",
+                "nivel_educativo": "SECUNDARIA",
+                "grado": "QUINTO_GRADO",
+                "matricula_total": "100",
+                "matricula_publica": "80",
+                "matricula_privada": "20",
+                "matricula_urbana": "70",
+                "matricula_rural": "30",
+                "matricula_masculino": "50",
+                "matricula_femenino": "50",
+            },
+            "minedu_matricula_secundaria_departamental_schema.json",
+        ),
     ],
 )
 def test_transformed_records_match_silver_schema(
@@ -569,6 +589,8 @@ def test_transformed_records_match_silver_schema(
         outputs = transform(source_dataset, record, context)
         assert outputs
         output = outputs[0]
+    elif transform is transform_minedu_matricula_secundaria_departamental:
+        output = transform(record, context)
     else:
         output = transform(source_dataset, record, context)
 

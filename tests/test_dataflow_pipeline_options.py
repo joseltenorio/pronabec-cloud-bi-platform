@@ -112,6 +112,12 @@ def test_dataflow_runner_passes_with_full_cloud_config() -> None:
         ("pronabec", "convocatorias", "jsonl", "test-project:silver.pronabec_convocatorias"),
         ("mef", "presupuesto", "csv", "test-project:silver.presupuesto_mef"),
         (
+            "minedu_escale",
+            "minedu_matricula_secundaria_departamental",
+            "csv",
+            "test-project:silver.minedu_matricula_secundaria_departamental",
+        ),
+        (
             "pronabec_reports",
             "report_beca18_region_postulacion_2025",
             "csv",
