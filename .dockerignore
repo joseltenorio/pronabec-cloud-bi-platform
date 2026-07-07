@@ -22,6 +22,8 @@ secrets
 config/gcp-key.json
 config/gcp.local.yaml
 config/secrets.yaml
+pronabec_env.sh
+pronabec_env.*
 
 data
 logs

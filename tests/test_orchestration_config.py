@@ -40,6 +40,7 @@ def test_load_orchestration_config_reads_manifest() -> None:
     assert config["runtime"]["dataflow_sdk_container_image_var"] == "dataflow_sdk_container_image"
     assert config["datasets"]["pronabec_reports"]["landing_path_template"] == "landing/pronabec_reports/{source_subset}"
     assert config["datasets"]["pronabec_reports"]["bronze_path_template"] == "bronze/pronabec_reports/{dataset}/extraction_date={extraction_date}/data.csv"
+    assert config["datasets"]["minedu_escale"]["bronze_path_template"] == "bronze/minedu/escale_matricula_secundaria/extraction_date={extraction_date}/data.csv"
 
 
 def test_validate_orchestration_config_accepts_current_manifest() -> None:
@@ -60,6 +61,8 @@ def test_resolve_airflow_var_name_reads_runtime_and_jobs() -> None:
     assert resolve_airflow_var_name(config, "pronabec_build_plan_job_name_var") == "pronabec_build_plan_job_name"
     assert resolve_airflow_var_name(config, "pronabec_run_plan_job_name_var") == "pronabec_run_plan_job_name"
     assert resolve_airflow_var_name(config, "pronabec_finalize_dataset_job_name_var") == "pronabec_finalize_dataset_job_name"
+    assert resolve_airflow_var_name(config, "minedu_escale_extract_job_name_var") == "minedu_escale_extract_job_name"
+    assert resolve_airflow_var_name(config, "minedu_escale_dataflow_job_name_var") == "dataflow_minedu_escale_job_name"
     assert (
         resolve_airflow_var_name(config, "bronze_manifest_validation_job_name_var")
         == "bronze_manifest_validation_job_name"
