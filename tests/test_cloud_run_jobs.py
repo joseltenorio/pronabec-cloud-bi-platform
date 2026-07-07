@@ -6,7 +6,7 @@ import re
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEPLOY_SCRIPT_PATH = REPO_ROOT / "scripts" / "deploy_cloud_run_jobs.sh"
 ENV_EXAMPLE_PATH = REPO_ROOT / ".env.example"
-GCP_EXAMPLE_PATH = REPO_ROOT / "config" / "gcp.example.yaml"
+DEPLOY_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "deploy.yml"
 
 
 def _read_deploy_script() -> str:
@@ -356,7 +356,7 @@ def test_non_dataflow_jobs_do_not_receive_sdk_container_arg():
 
 def test_dataflow_service_account_is_documented_in_examples():
     env_example = ENV_EXAMPLE_PATH.read_text(encoding="utf-8")
-    gcp_example = GCP_EXAMPLE_PATH.read_text(encoding="utf-8")
+    deploy_workflow = DEPLOY_WORKFLOW_PATH.read_text(encoding="utf-8")
 
     expected_service_account = (
         "DATAFLOW_SERVICE_ACCOUNT=pronabec-dataflow-sa@"
@@ -372,11 +372,10 @@ def test_dataflow_service_account_is_documented_in_examples():
     ) in env_example
     assert "DATAFLOW_WORKER_IMAGE_NAME=pronabec-dataflow-worker" in env_example
     assert "DATAFLOW_WORKER_IMAGE_TAG=latest" in env_example
-    assert "service_account: pronabec-dataflow-sa@pronabec-cloud-bi-platform.iam.gserviceaccount.com" in gcp_example
-    assert (
-        "sdk_container_image: us-central1-docker.pkg.dev/your-gcp-project-id/"
-        "pronabec-containers/pronabec-dataflow-worker:latest"
-    ) in gcp_example
+    assert "CLOUD_RUN_JOBS_SERVICE_ACCOUNT: pronabec-cloud-run-jobs@pronabec-cloud-bi-platform.iam.gserviceaccount.com" in deploy_workflow
+    assert "CLOUD_RUN_SERVICE_ACCOUNT: pronabec-cloud-run-jobs@pronabec-cloud-bi-platform.iam.gserviceaccount.com" in deploy_workflow
+    assert "pronabec-cloud-run-sa@" not in deploy_workflow
+    assert "pronabec-cloudrun-sa@" not in deploy_workflow
 
 
 def test_pyproject_packages_pipeline_modules():
