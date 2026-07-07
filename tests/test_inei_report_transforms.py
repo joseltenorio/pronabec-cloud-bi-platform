@@ -124,6 +124,28 @@ def test_internet_parses_percentage_and_preserves_source_fields() -> None:
     assert_metadata(row, "inei_internet_acceso_region")
 
 
+def test_internet_wide_source_row_expands_year_columns_to_silver_rows() -> None:
+    rows = transform_inei_internet_acceso_region(
+        {
+            "region": "Amazonas",
+            "2012": "18.2",
+            "2013": "16.8",
+            "2025": "67.7",
+        },
+        CONTEXT,
+    )
+
+    assert isinstance(rows, list)
+    assert [row["anio"] for row in rows] == [2012, 2013, 2025]
+    assert rows[0]["region"] == "Amazonas"
+    assert rows[0]["internet_acceso_pct"] == 18.2
+    assert rows[0]["source_name"] == "INEI"
+    assert rows[0]["source_period"] == "2012-2025"
+    assert rows[0]["source_type"] == "manual_csv"
+    assert rows[0]["metric"] == "internet_acceso_pct"
+    assert_metadata(rows[0], "inei_internet_acceso_region")
+
+
 @pytest.mark.parametrize(
     ("dataset", "record"),
     [
@@ -171,7 +193,7 @@ def test_dispatcher_fails_unknown_dataset() -> None:
 
 def test_dataflow_hook_routes_inei_reports() -> None:
     rows = transform_bronze_records(
-        {"anio": "2025", "region": "Lima", "internet_acceso_pct": "73"},
+        {"region": "Lima", "2024": "71", "2025": "73"},
         source_system="inei_reports",
         source_dataset="inei_internet_acceso_region",
         extraction_date="2026-07-07",
@@ -181,4 +203,5 @@ def test_dataflow_hook_routes_inei_reports() -> None:
 
     assert rows[0]["source_system"] == "INEI"
     assert rows[0]["source_dataset"] == "inei_internet_acceso_region"
-    assert rows[0]["internet_acceso_pct"] == 73.0
+    assert [row["anio"] for row in rows] == [2024, 2025]
+    assert rows[1]["internet_acceso_pct"] == 73.0

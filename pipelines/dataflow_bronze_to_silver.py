@@ -692,6 +692,17 @@ def transform_bronze_records(
                 "pipeline_run_id": pipeline_run_id,
             },
         )
+    if source_system == "inei_reports":
+        transformed = transform_inei_report_record(
+            source_dataset,
+            record,
+            {
+                "extraction_date": extraction_date,
+                "ingestion_timestamp": ingestion_timestamp,
+                "pipeline_run_id": pipeline_run_id,
+            },
+        )
+        return transformed if isinstance(transformed, list) else [transformed]
     transformed = transform_bronze_record(
         record,
         source_system=source_system,

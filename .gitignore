@@ -23,6 +23,8 @@ config/gcp-key.json
 gcp.local.yaml
 credentials/
 secrets/
+pronabec_env.sh
+pronabec_env.*
 
 # Local logs
 logs/
@@ -60,5 +62,3 @@ Thumbs.db
 # IDE settings
 .vscode/
 .idea/
-
-pronabec_env.sh
