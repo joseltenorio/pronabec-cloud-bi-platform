@@ -107,6 +107,24 @@ def test_inei_path_templates_are_correct() -> None:
     )
 
 
+def test_minedu_path_templates_are_correct() -> None:
+    assert dag_mod.MINEDU_ITEMS == [
+        {
+            "source_dataset": "minedu_matricula_secundaria_departamental",
+            "job_name": "dataflow-minedu-escale-job",
+            "job_name_var": "dataflow_minedu_escale_job_name",
+        }
+    ]
+    assert (
+        dag_mod.build_minedu_bronze_uri()
+        == "gs://{{ var.value.gcs_bucket_name }}/bronze/minedu/escale_matricula_secundaria/extraction_date={{ dag_run.conf.get('extraction_date') or ds }}/data.csv"
+    )
+    assert (
+        dag_mod.build_minedu_output_table()
+        == "{{ var.value.gcp_project_id }}:{{ var.value.bq_silver_dataset }}.minedu_matricula_secundaria_departamental"
+    )
+
+
 def test_dag_contains_gold_publication_and_validation_tasks() -> None:
     content = _read_dag_source()
 
@@ -165,11 +183,12 @@ def test_bronze_manifest_validation_runs_after_bronze_tasks() -> None:
     assert 'TaskGroup(group_id="mef_bronze")' in content
     assert 'TaskGroup(group_id="pronabec_reports_bronze")' in content
     assert 'TaskGroup(group_id="inei_reports_bronze")' in content
+    assert 'TaskGroup(group_id="minedu_escale_bronze")' in content
     assert "discover_pronabec_datasets >> build_pronabec_extraction_plan >> run_pronabec_extraction_plan" in content
     assert "run_pronabec_extraction_plan >> pronabec_finalize_tasks" in content
     assert "chain_tasks(pronabec_finalize_tasks)" in content
     assert "chain_tasks(report_stage_tasks)" in content
-    assert "bronze_parallel = [pronabec_api_bronze, mef_bronze, pronabec_reports_bronze, inei_reports_bronze]" in content
+    assert "bronze_parallel = [pronabec_api_bronze, mef_bronze, pronabec_reports_bronze, inei_reports_bronze, minedu_escale_bronze]" in content
     assert "init_run >> bronze_parallel" in content
     assert "bronze_parallel >> validate_bronze_manifests" in content
     assert "extract_mef >> validate_bronze_manifests" not in content
@@ -183,7 +202,8 @@ def test_bronze_manifest_validation_runs_before_silver_tasks() -> None:
     assert 'TaskGroup(group_id="mef_silver")' in content
     assert 'TaskGroup(group_id="pronabec_reports_silver")' in content
     assert 'TaskGroup(group_id="inei_reports_silver")' in content
-    assert "silver_parallel = [pronabec_api_silver, mef_silver, pronabec_reports_silver, inei_reports_silver]" in content
+    assert 'TaskGroup(group_id="minedu_escale_silver")' in content
+    assert "silver_parallel = [pronabec_api_silver, mef_silver, pronabec_reports_silver, inei_reports_silver, minedu_escale_silver]" in content
     assert "validate_bronze_manifests >> silver_parallel" in content
     assert "silver_parallel >> publish_gold_views" in content
 
@@ -287,8 +307,10 @@ def test_dag_keeps_existing_non_pronabec_sections() -> None:
     assert "mef_tasks" in content
     assert "stage_pronabec_reports_" in content
     assert "stage_inei_reports" in content
+    assert "extract_minedu_escale" in content
     assert "report_tasks" in content
     assert "inei_tasks" in content
+    assert "minedu_tasks" in content
     assert "publish_gold_views" in content
     assert "validate_gold_contracts" in content
     assert "run_quality_checks" in content
@@ -353,6 +375,21 @@ def test_dag_contains_inei_staging_and_dataflow_tasks() -> None:
     assert '"SOURCE_SYSTEM": "inei_reports"' in content
     assert '"BRONZE_INPUT_PATH": build_inei_bronze_uri(source_dataset)' in content
     assert '"BQ_OUTPUT_TABLE": build_inei_output_table(source_dataset)' in content
+
+
+def test_dag_contains_minedu_branch_and_job_vars() -> None:
+    content = _read_dag_source()
+
+    assert "MINEDU_ESCALE_EXTRACT_JOB" in content
+    assert "DATAFLOW_MINEDU_ESCALE_JOB" in content
+    assert "minedu-escale-extract-job" in content
+    assert "dataflow-minedu-escale-job" in content
+    assert "MINEDU_ESCALE_START_YEAR" in content
+    assert "MINEDU_ESCALE_END_YEAR" in content
+    assert '"SOURCE_SYSTEM": "minedu_escale"' in content
+    assert '"SOURCE_DATASET": item["source_dataset"]' in content
+    assert '"INPUT_PATH": build_minedu_bronze_uri()' in content
+    assert '"OUTPUT_TABLE": build_minedu_output_table()' in content
 
 
 def test_distinct_cloud_run_job_silver_groups_stay_parallel() -> None:

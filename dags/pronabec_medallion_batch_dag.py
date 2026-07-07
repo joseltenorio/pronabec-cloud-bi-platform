@@ -68,6 +68,11 @@ INEI_REPORT_DATASETS = [
     for item in ORCHESTRATION_CONFIG["datasets"]["inei_reports"]["items"]
     if item.get("source_dataset")
 ]
+MINEDU_ITEMS = [
+    item
+    for item in ORCHESTRATION_CONFIG["datasets"]["minedu_escale"]["items"]
+    if item.get("source_dataset")
+]
 
 
 def airflow_var_template(var_name: str, default: str | None = None) -> str:
@@ -139,6 +144,14 @@ DATAFLOW_INEI_REPORT_JOB = airflow_var_template(
     resolve_airflow_var_name(ORCHESTRATION_CONFIG, "inei_reports_dataflow_job_name_var"),
     "dataflow-inei-report-job",
 )
+MINEDU_ESCALE_EXTRACT_JOB = airflow_var_template(
+    resolve_airflow_var_name(ORCHESTRATION_CONFIG, "minedu_escale_extract_job_name_var"),
+    "minedu-escale-extract-job",
+)
+DATAFLOW_MINEDU_ESCALE_JOB = airflow_var_template(
+    resolve_airflow_var_name(ORCHESTRATION_CONFIG, "minedu_escale_dataflow_job_name_var"),
+    "dataflow-minedu-escale-job",
+)
 GOLD_PUBLISH_JOB = airflow_var_template(
     resolve_airflow_var_name(ORCHESTRATION_CONFIG, "gold_publish_job_name_var"),
     "gold-publish-job",
@@ -162,14 +175,18 @@ RUN_PRONABEC_FINALIZE = "{{ dag_run.conf.get('run_pronabec', true) and dag_run.c
 RUN_MEF = "{{ dag_run.conf.get('run_mef', true) }}"
 RUN_PRONABEC_REPORTS_STAGING = "{{ dag_run.conf.get('run_pronabec_reports_staging', true) }}"
 RUN_INEI_REPORTS_STAGING = "{{ dag_run.conf.get('run_inei_reports_staging', true) }}"
+RUN_MINEDU_ESCALE = "{{ dag_run.conf.get('run_minedu_escale', true) }}"
 RUN_BRONZE_MANIFEST_VALIDATION = "{{ dag_run.conf.get('run_bronze_manifest_validation', true) }}"
 RUN_DATAFLOW_PRONABEC = "{{ dag_run.conf.get('run_dataflow_pronabec', true) }}"
 RUN_DATAFLOW_MEF = "{{ dag_run.conf.get('run_dataflow_mef', true) }}"
 RUN_DATAFLOW_REPORTS = "{{ dag_run.conf.get('run_dataflow_reports', true) }}"
 RUN_DATAFLOW_INEI = "{{ dag_run.conf.get('run_dataflow_inei', true) }}"
+RUN_DATAFLOW_MINEDU = "{{ dag_run.conf.get('run_dataflow_minedu', true) }}"
 RUN_GOLD_PUBLISH = "{{ dag_run.conf.get('run_gold_publish', true) }}"
 RUN_GOLD_VALIDATION = "{{ dag_run.conf.get('run_gold_validation', true) }}"
 RUN_QUALITY = "{{ dag_run.conf.get('run_quality', true) }}"
+MINEDU_ESCALE_START_YEAR = airflow_var_template("minedu_escale_start_year", "2012")
+MINEDU_ESCALE_END_YEAR = airflow_var_template("minedu_escale_end_year", "2025")
 
 
 def cloud_run_execute_command(
@@ -578,6 +595,19 @@ def build_inei_output_table(dataset: str) -> str:
     return build_bq_table_ref(PROJECT_ID, SILVER_DATASET, dataset)
 
 
+def build_minedu_bronze_uri() -> str:
+    template = ORCHESTRATION_CONFIG["datasets"]["minedu_escale"]["bronze_path_template"]
+    return f"gs://{BUCKET_NAME}/{render_gcs_path(template, extraction_date=EXTRACTION_DATE)}"
+
+
+def build_minedu_output_table() -> str:
+    return build_bq_table_ref(
+        PROJECT_ID,
+        SILVER_DATASET,
+        "minedu_matricula_secundaria_departamental",
+    )
+
+
 default_args = {
     "owner": "data-engineering",
     "depends_on_past": False,
@@ -610,11 +640,13 @@ with DAG(
         "run_mef": Param(default=True, type="boolean"),
         "run_pronabec_reports_staging": Param(default=True, type="boolean"),
         "run_inei_reports_staging": Param(default=True, type="boolean"),
+        "run_minedu_escale": Param(default=True, type="boolean"),
         "run_bronze_manifest_validation": Param(default=True, type="boolean"),
         "run_dataflow_pronabec": Param(default=True, type="boolean"),
         "run_dataflow_mef": Param(default=True, type="boolean"),
         "run_dataflow_reports": Param(default=True, type="boolean"),
         "run_dataflow_inei": Param(default=True, type="boolean"),
+        "run_dataflow_minedu": Param(default=True, type="boolean"),
         "run_gold_publish": Param(default=True, type="boolean"),
         "run_gold_validation": Param(default=True, type="boolean"),
         "run_quality": Param(default=True, type="boolean"),
@@ -694,6 +726,18 @@ with DAG(
             job_name=INEI_REPORTS_STAGE_JOB,
             enabled_expression=RUN_INEI_REPORTS_STAGING,
             timeout_seconds=3600,
+        )
+
+    with TaskGroup(group_id="minedu_escale_bronze") as minedu_escale_bronze:
+        extract_minedu_escale = cloud_run_job_operator(
+            task_id="extract_minedu_escale",
+            job_name=MINEDU_ESCALE_EXTRACT_JOB,
+            enabled_expression=RUN_MINEDU_ESCALE,
+            timeout_seconds=7200,
+            extra_env_vars={
+                "MINEDU_ESCALE_START_YEAR": MINEDU_ESCALE_START_YEAR,
+                "MINEDU_ESCALE_END_YEAR": MINEDU_ESCALE_END_YEAR,
+            },
         )
 
     validate_bronze_manifests = cloud_run_job_operator(
@@ -793,6 +837,27 @@ with DAG(
             )
         chain_tasks(inei_tasks)
 
+    with TaskGroup(group_id="minedu_escale_silver") as minedu_escale_silver:
+        minedu_tasks = []
+        for item in MINEDU_ITEMS:
+            minedu_tasks.append(
+                cloud_run_job_operator(
+                    task_id=f"dataflow_{item['source_dataset']}",
+                    job_name=DATAFLOW_MINEDU_ESCALE_JOB,
+                    enabled_expression=RUN_DATAFLOW_MINEDU,
+                    timeout_seconds=7200,
+                    extra_env_vars={
+                        "SOURCE_SYSTEM": "minedu_escale",
+                        "SOURCE_DATASET": item["source_dataset"],
+                        "INPUT_PATH": build_minedu_bronze_uri(),
+                        "OUTPUT_TABLE": build_minedu_output_table(),
+                        "INPUT_FORMAT": "csv",
+                        "DATAFLOW_SDK_CONTAINER_IMAGE": DATAFLOW_SDK_CONTAINER_IMAGE,
+                    },
+                )
+            )
+        chain_tasks(minedu_tasks)
+
     publish_gold_views = cloud_run_job_operator(
         task_id="publish_gold_views",
         job_name=GOLD_PUBLISH_JOB,
@@ -816,11 +881,11 @@ with DAG(
 
     finish_run = EmptyOperator(task_id="finish_run")
 
-    bronze_parallel = [pronabec_api_bronze, mef_bronze, pronabec_reports_bronze, inei_reports_bronze]
+    bronze_parallel = [pronabec_api_bronze, mef_bronze, pronabec_reports_bronze, inei_reports_bronze, minedu_escale_bronze]
     init_run >> bronze_parallel
     bronze_parallel >> validate_bronze_manifests
 
-    silver_parallel = [pronabec_api_silver, mef_silver, pronabec_reports_silver, inei_reports_silver]
+    silver_parallel = [pronabec_api_silver, mef_silver, pronabec_reports_silver, inei_reports_silver, minedu_escale_silver]
     validate_bronze_manifests >> silver_parallel
     silver_parallel >> publish_gold_views
     publish_gold_views >> validate_gold_contracts >> run_quality_checks >> finish_run
