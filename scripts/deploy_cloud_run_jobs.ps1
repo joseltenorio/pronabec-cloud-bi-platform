@@ -731,6 +731,8 @@ Upsert-CloudRunJob `
         $GoldDataset,
         "--audit-dataset",
         $AuditDataset,
+        "--extraction-date",
+        "`${BRONZE_EXTRACTION_DATE}",
         "--pipeline-run-id",
         "`${PIPELINE_RUN_ID}",
         "--fail-on-error"

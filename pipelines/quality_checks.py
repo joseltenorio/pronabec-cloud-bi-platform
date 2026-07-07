@@ -23,6 +23,9 @@ from pipelines.common.logging import log_event, setup_structured_logger
 # Configuración del logger estructurado
 logger = setup_structured_logger("quality_checks")
 ENV_PLACEHOLDER_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+CURRENT_RUN_FILTER_SQL = (
+    "extraction_date = @extraction_date AND pipeline_run_id = @pipeline_run_id"
+)
 
 
 def deduce_source_metadata(table_name: str) -> tuple[str, str]:
@@ -70,6 +73,49 @@ def expand_env_placeholders(value: str | None) -> str | None:
         return env_value
 
     return ENV_PLACEHOLDER_PATTERN.sub(replace, value)
+
+
+def resolve_extraction_date(cli_value: str | None) -> str | None:
+    """Resolve extraction_date from CLI first, then BRONZE_EXTRACTION_DATE."""
+    expanded_cli_value = expand_env_placeholders(cli_value)
+    if expanded_cli_value and expanded_cli_value.strip():
+        return expanded_cli_value.strip()
+
+    env_value = os.getenv("BRONZE_EXTRACTION_DATE")
+    if env_value and env_value.strip():
+        return env_value.strip()
+
+    return None
+
+
+def scope_silver_query_to_current_run(
+    rendered_query: str,
+    project_id: str,
+    silver_dataset: str,
+) -> str:
+    """Scope direct Silver table references to the current extraction/run pair."""
+    silver_table_pattern = re.compile(
+        rf"`{re.escape(project_id)}\.{re.escape(silver_dataset)}\.([A-Za-z0-9_]+)`"
+    )
+
+    def replace_table_ref(match: re.Match[str]) -> str:
+        table_ref = match.group(0)
+        return f"(SELECT * FROM {table_ref} WHERE {CURRENT_RUN_FILTER_SQL})"
+
+    return silver_table_pattern.sub(replace_table_ref, rendered_query)
+
+
+def build_current_run_query_job_config(
+    extraction_date: str,
+    pipeline_run_id: str,
+) -> bigquery.QueryJobConfig:
+    """Build BigQuery parameters used by current-run Silver checks."""
+    return bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("extraction_date", "DATE", extraction_date),
+            bigquery.ScalarQueryParameter("pipeline_run_id", "STRING", pipeline_run_id),
+        ]
+    )
 
 
 def _legacy_split_sql_queries(sql_content: str) -> list[str]:
@@ -241,6 +287,7 @@ def run_quality_checks(
     audit_dataset: str,
     checks_file: str,
     pipeline_run_id: str,
+    extraction_date: str | None = None,
     dry_run: bool = False,
     fail_on_error: bool = False,
 ) -> int:
@@ -270,6 +317,7 @@ def run_quality_checks(
         audit_dataset=audit_dataset,
         checks_file=checks_file,
         pipeline_run_id=pipeline_run_id,
+        extraction_date=extraction_date,
         dry_run=dry_run
     )
 
@@ -334,6 +382,8 @@ def run_quality_checks(
             severity = severity_match.group(1)
 
         source_system, source_dataset = deduce_source_metadata(table_name)
+        query_to_execute = rendered_query
+        query_job_config = None
 
         if dry_run:
             log_event(
@@ -356,10 +406,48 @@ def run_quality_checks(
             })
             continue
 
+        if layer == "silver":
+            if not extraction_date:
+                details = (
+                    "Los checks Silver current_run requieren --extraction-date "
+                    "o la variable BRONZE_EXTRACTION_DATE."
+                )
+                log_event(
+                    logger,
+                    "ERROR",
+                    details,
+                    check_id=check_id,
+                    table_name=table_name,
+                    pipeline_run_id=pipeline_run_id,
+                )
+                had_error_failures = True
+                results.append({
+                    "check_id": check_id,
+                    "layer": layer,
+                    "table_name": table_name,
+                    "severity": "ERROR",
+                    "passed": False,
+                    "failed_rows": 1,
+                    "details": details,
+                    "source_system": source_system,
+                    "source_dataset": source_dataset
+                })
+                continue
+
+            query_to_execute = scope_silver_query_to_current_run(
+                rendered_query=rendered_query,
+                project_id=project_id,
+                silver_dataset=silver_dataset,
+            )
+            query_job_config = build_current_run_query_job_config(
+                extraction_date=extraction_date,
+                pipeline_run_id=pipeline_run_id,
+            )
+
         # Ejecutar en BigQuery
         log_event(logger, "INFO", f"Ejecutando check [{check_id}] ({idx + 1}/{len(queries)})...")
         try:
-            query_job = client.query(rendered_query)
+            query_job = client.query(query_to_execute, job_config=query_job_config)
             rows = list(query_job.result())
 
             if not rows:
@@ -497,6 +585,11 @@ def main() -> None:
         help="Identificador de la ejecución del pipeline para trazabilidad."
     )
     parser.add_argument(
+        "--extraction-date",
+        default=None,
+        help="Fecha de extracción usada para acotar checks Silver current_run."
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Si se especifica, solo simula y formatea las consultas sin ejecutar BigQuery."
@@ -509,6 +602,7 @@ def main() -> None:
 
     args = parser.parse_args()
     pipeline_run_id = expand_env_placeholders(args.pipeline_run_id)
+    extraction_date = resolve_extraction_date(args.extraction_date)
 
     exit_code = run_quality_checks(
         project_id=args.project_id,
@@ -517,6 +611,7 @@ def main() -> None:
         audit_dataset=args.audit_dataset,
         checks_file=args.checks_file,
         pipeline_run_id=pipeline_run_id or "",
+        extraction_date=extraction_date,
         dry_run=args.dry_run,
         fail_on_error=args.fail_on_error
     )

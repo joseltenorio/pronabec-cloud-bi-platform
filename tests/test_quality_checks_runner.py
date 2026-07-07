@@ -6,15 +6,19 @@ de consultas, el manejo de excepciones y la persistencia en la tabla Audit utili
 
 from __future__ import annotations
 
+from datetime import date
 import re
 from pathlib import Path
 import pytest
 
 from pipelines.quality_checks import (
+    build_current_run_query_job_config,
     deduce_source_metadata,
     expand_env_placeholders,
     main,
+    resolve_extraction_date,
     run_quality_checks,
+    scope_silver_query_to_current_run,
     split_sql_queries,
 )
 
@@ -52,16 +56,18 @@ class MockBigQueryClient:
     def __init__(self, project=None):
         self.project = project
         self.queries_run = []
+        self.query_job_configs = []
         self.insert_calls = []
         self.mock_rows_by_query = {}  # Mapeo de subcadena SQL -> lista de dicts
         self.insert_errors = []
         self.query_exception = None
 
-    def query(self, query_text):
+    def query(self, query_text, job_config=None):
         if self.query_exception:
             raise self.query_exception
 
         self.queries_run.append(query_text)
+        self.query_job_configs.append(job_config)
 
         # Buscar si hay una fila mockeada específica para esta query
         matched_rows = None
@@ -289,6 +295,36 @@ def test_quality_checks_cli_requires_project_id(monkeypatch, capsys):
     assert "the following arguments are required: --project-id" in captured.err
 
 
+def test_quality_checks_cli_accepts_extraction_date(tmp_path, monkeypatch):
+    checks_file = tmp_path / "checks.sql"
+    checks_file.write_text(
+        "SELECT 'check_dry_run' AS check_id, 'silver' AS layer, "
+        "'pronabec_convocatorias' AS table_name, 'ERROR' AS severity, "
+        "0 AS failed_rows, TRUE AS passed, 'Ok' AS details;",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "quality_checks.py",
+            "--project-id",
+            "test-project",
+            "--checks-file",
+            str(checks_file),
+            "--pipeline-run-id",
+            "manual_20260706_operation_polling_01",
+            "--extraction-date",
+            "2026-07-06",
+            "--dry-run",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        main()
+
+    assert excinfo.value.code == 0
+
+
 def test_quality_checks_expands_pipeline_run_id_env_placeholder(monkeypatch):
     monkeypatch.setenv("PIPELINE_RUN_ID", "manual_20260702")
 
@@ -300,6 +336,52 @@ def test_quality_checks_rejects_missing_pipeline_run_id_env_placeholder(monkeypa
 
     with pytest.raises(ValueError, match="Variable de entorno requerida no definida: PIPELINE_RUN_ID"):
         expand_env_placeholders("${PIPELINE_RUN_ID}")
+
+
+def test_quality_checks_resolves_extraction_date_from_cli_before_env(monkeypatch):
+    monkeypatch.setenv("BRONZE_EXTRACTION_DATE", "2026-07-05")
+
+    assert resolve_extraction_date("2026-07-06") == "2026-07-06"
+
+
+def test_quality_checks_resolves_extraction_date_from_env(monkeypatch):
+    monkeypatch.setenv("BRONZE_EXTRACTION_DATE", "2026-07-06")
+
+    assert resolve_extraction_date(None) == "2026-07-06"
+
+
+def test_current_run_query_job_config_uses_extraction_date_and_pipeline_run_id():
+    job_config = build_current_run_query_job_config(
+        extraction_date="2026-07-06",
+        pipeline_run_id="manual_20260706_operation_polling_01",
+    )
+
+    params = {param.name: param.value for param in job_config.query_parameters}
+    assert params == {
+        "extraction_date": date(2026, 7, 6),
+        "pipeline_run_id": "manual_20260706_operation_polling_01",
+    }
+
+
+def test_scope_silver_query_to_current_run_wraps_silver_table_reference():
+    query = (
+        "SELECT COUNT(*) FROM "
+        "`test-project.silver_ds.pronabec_report_beca18_universitarios_carrera_anual`"
+    )
+
+    scoped_query = scope_silver_query_to_current_run(
+        rendered_query=query,
+        project_id="test-project",
+        silver_dataset="silver_ds",
+    )
+
+    normalized = " ".join(scoped_query.split())
+    assert (
+        "FROM (SELECT * FROM "
+        "`test-project.silver_ds.pronabec_report_beca18_universitarios_carrera_anual` "
+        "WHERE extraction_date = @extraction_date "
+        "AND pipeline_run_id = @pipeline_run_id)"
+    ) in normalized
 
 
 def test_runner_successful_execution(tmp_path, monkeypatch):
@@ -320,6 +402,7 @@ def test_runner_successful_execution(tmp_path, monkeypatch):
         audit_dataset="audit_ds",
         checks_file=str(checks_file),
         pipeline_run_id="run-success",
+        extraction_date="2026-07-06",
         dry_run=False,
         fail_on_error=False
     )
@@ -346,6 +429,226 @@ def test_runner_successful_execution(tmp_path, monkeypatch):
     assert row["query_file"] == "checks.sql"
     assert row["source_system"] == "pronabec"
     assert row["source_dataset"] == "convocatorias"
+
+
+def test_runner_requires_extraction_date_for_silver_current_run(tmp_path, monkeypatch):
+    checks_file = tmp_path / "checks.sql"
+    checks_file.write_text(
+        "SELECT 'check_requires_date' AS check_id, 'silver' AS layer, "
+        "'pronabec_convocatorias' AS table_name, 'ERROR' AS severity, "
+        "0 AS failed_rows, TRUE AS passed, 'Ok' AS details;",
+        encoding="utf-8",
+    )
+
+    mock_client = MockBigQueryClient()
+    monkeypatch.setattr("google.cloud.bigquery.Client", lambda project: mock_client)
+
+    exit_code = run_quality_checks(
+        project_id="test-project",
+        silver_dataset="silver_ds",
+        gold_dataset="gold_ds",
+        audit_dataset="audit_ds",
+        checks_file=str(checks_file),
+        pipeline_run_id="run-without-date",
+        dry_run=False,
+        fail_on_error=False,
+    )
+
+    assert exit_code == 1
+    assert mock_client.queries_run == []
+    assert len(mock_client.insert_calls) == 1
+    _, rows = mock_client.insert_calls[0]
+    assert rows[0]["check_id"] == "check_requires_date"
+    assert rows[0]["passed"] is False
+    assert "--extraction-date" in rows[0]["details"]
+
+
+def test_runner_scopes_universitarios_duplicate_checks_to_current_run(tmp_path, monkeypatch):
+    checks_file = tmp_path / "checks.sql"
+    checks_file.write_text(
+        """
+        SELECT
+          'silver_pronabec_report_beca18_universitarios_carrera_anual_duplicates' AS check_id,
+          'silver' AS layer,
+          'pronabec_report_beca18_universitarios_carrera_anual' AS table_name,
+          'ERROR' AS severity,
+          dup_cnt AS failed_rows,
+          (dup_cnt = 0) AS passed,
+          'Ok' AS details
+        FROM (
+          SELECT COUNT(*) AS dup_cnt
+          FROM (
+            SELECT carrera_estudio, ano_convocatoria, extraction_date
+            FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_universitarios_carrera_anual`
+            GROUP BY carrera_estudio, ano_convocatoria, extraction_date
+            HAVING COUNT(*) > 1
+          )
+        );
+        SELECT
+          'silver_pronabec_report_beca18_universitarios_universidad_anual_duplicates' AS check_id,
+          'silver' AS layer,
+          'pronabec_report_beca18_universitarios_universidad_anual' AS table_name,
+          'ERROR' AS severity,
+          dup_cnt AS failed_rows,
+          (dup_cnt = 0) AS passed,
+          'Ok' AS details
+        FROM (
+          SELECT COUNT(*) AS dup_cnt
+          FROM (
+            SELECT universidad, ano_convocatoria, extraction_date
+            FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_universitarios_universidad_anual`
+            GROUP BY universidad, ano_convocatoria, extraction_date
+            HAVING COUNT(*) > 1
+          )
+        );
+        """,
+        encoding="utf-8",
+    )
+
+    mock_client = MockBigQueryClient()
+    monkeypatch.setattr("google.cloud.bigquery.Client", lambda project: mock_client)
+
+    exit_code = run_quality_checks(
+        project_id="test-project",
+        silver_dataset="silver_ds",
+        gold_dataset="gold_ds",
+        audit_dataset="audit_ds",
+        checks_file=str(checks_file),
+        pipeline_run_id="manual_20260706_operation_polling_01",
+        extraction_date="2026-07-06",
+        dry_run=False,
+        fail_on_error=True,
+    )
+
+    assert exit_code == 0
+    assert len(mock_client.queries_run) == 2
+    for query_text, job_config in zip(mock_client.queries_run, mock_client.query_job_configs):
+        normalized = " ".join(query_text.split())
+        assert "WHERE extraction_date = @extraction_date AND pipeline_run_id = @pipeline_run_id" in normalized
+        params = {param.name: param.value for param in job_config.query_parameters}
+        assert params == {
+            "extraction_date": date(2026, 7, 6),
+            "pipeline_run_id": "manual_20260706_operation_polling_01",
+        }
+
+
+def test_historical_duplicates_do_not_fail_current_run_when_scoped(tmp_path, monkeypatch):
+    checks_file = tmp_path / "checks.sql"
+    checks_file.write_text(
+        "SELECT 'silver_pronabec_report_beca18_universitarios_carrera_anual_duplicates' AS check_id, "
+        "'silver' AS layer, "
+        "'pronabec_report_beca18_universitarios_carrera_anual' AS table_name, "
+        "'ERROR' AS severity, dup_cnt AS failed_rows, (dup_cnt = 0) AS passed, 'Ok' AS details "
+        "FROM (SELECT COUNT(*) AS dup_cnt FROM ("
+        "SELECT carrera_estudio, ano_convocatoria, extraction_date "
+        "FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_universitarios_carrera_anual` "
+        "GROUP BY carrera_estudio, ano_convocatoria, extraction_date HAVING COUNT(*) > 1));",
+        encoding="utf-8",
+    )
+
+    mock_client = MockBigQueryClient()
+    mock_client.mock_rows_by_query["@extraction_date"] = [{
+        "check_id": "silver_pronabec_report_beca18_universitarios_carrera_anual_duplicates",
+        "layer": "silver",
+        "table_name": "pronabec_report_beca18_universitarios_carrera_anual",
+        "severity": "ERROR",
+        "passed": True,
+        "failed_rows": 0,
+        "details": "Current run sin duplicados",
+    }]
+    monkeypatch.setattr("google.cloud.bigquery.Client", lambda project: mock_client)
+
+    exit_code = run_quality_checks(
+        project_id="test-project",
+        silver_dataset="silver_ds",
+        gold_dataset="gold_ds",
+        audit_dataset="audit_ds",
+        checks_file=str(checks_file),
+        pipeline_run_id="manual_20260706_operation_polling_01",
+        extraction_date="2026-07-06",
+        dry_run=False,
+        fail_on_error=True,
+    )
+
+    assert exit_code == 0
+    assert "@extraction_date" in mock_client.queries_run[0]
+    assert "@pipeline_run_id" in mock_client.queries_run[0]
+
+
+def test_current_run_duplicates_still_fail_with_fail_on_error(tmp_path, monkeypatch):
+    checks_file = tmp_path / "checks.sql"
+    checks_file.write_text(
+        "SELECT 'silver_pronabec_report_beca18_universitarios_universidad_anual_duplicates' AS check_id, "
+        "'silver' AS layer, "
+        "'pronabec_report_beca18_universitarios_universidad_anual' AS table_name, "
+        "'ERROR' AS severity, dup_cnt AS failed_rows, (dup_cnt = 0) AS passed, 'Ok' AS details "
+        "FROM (SELECT COUNT(*) AS dup_cnt FROM ("
+        "SELECT universidad, ano_convocatoria, extraction_date "
+        "FROM `{project_id}.{silver_dataset}.pronabec_report_beca18_universitarios_universidad_anual` "
+        "GROUP BY universidad, ano_convocatoria, extraction_date HAVING COUNT(*) > 1));",
+        encoding="utf-8",
+    )
+
+    mock_client = MockBigQueryClient()
+    mock_client.mock_rows_by_query["@extraction_date"] = [{
+        "check_id": "silver_pronabec_report_beca18_universitarios_universidad_anual_duplicates",
+        "layer": "silver",
+        "table_name": "pronabec_report_beca18_universitarios_universidad_anual",
+        "severity": "ERROR",
+        "passed": False,
+        "failed_rows": 1,
+        "details": "Current run con duplicados",
+    }]
+    monkeypatch.setattr("google.cloud.bigquery.Client", lambda project: mock_client)
+
+    exit_code = run_quality_checks(
+        project_id="test-project",
+        silver_dataset="silver_ds",
+        gold_dataset="gold_ds",
+        audit_dataset="audit_ds",
+        checks_file=str(checks_file),
+        pipeline_run_id="manual_20260706_operation_polling_01",
+        extraction_date="2026-07-06",
+        dry_run=False,
+        fail_on_error=True,
+    )
+
+    assert exit_code == 1
+    assert len(mock_client.insert_calls) == 1
+    _, rows = mock_client.insert_calls[0]
+    assert rows[0]["check_id"] == "silver_pronabec_report_beca18_universitarios_universidad_anual_duplicates"
+    assert rows[0]["passed"] is False
+    assert rows[0]["failed_rows"] == 1
+
+
+def test_gold_checks_remain_global_without_extraction_date(tmp_path, monkeypatch):
+    checks_file = tmp_path / "checks.sql"
+    checks_file.write_text(
+        "SELECT 'gold_check' AS check_id, 'gold' AS layer, "
+        "'vw_pronabec_resumen_ejecutivo' AS table_name, 'ERROR' AS severity, "
+        "0 AS failed_rows, TRUE AS passed, 'Ok' AS details "
+        "FROM `{project_id}.{gold_dataset}.vw_pronabec_resumen_ejecutivo`;",
+        encoding="utf-8",
+    )
+
+    mock_client = MockBigQueryClient()
+    monkeypatch.setattr("google.cloud.bigquery.Client", lambda project: mock_client)
+
+    exit_code = run_quality_checks(
+        project_id="test-project",
+        silver_dataset="silver_ds",
+        gold_dataset="gold_ds",
+        audit_dataset="audit_ds",
+        checks_file=str(checks_file),
+        pipeline_run_id="run-gold",
+        dry_run=False,
+        fail_on_error=True,
+    )
+
+    assert exit_code == 0
+    assert len(mock_client.queries_run) == 1
+    assert "@extraction_date" not in mock_client.queries_run[0]
+    assert mock_client.query_job_configs[0] is None
 
 
 def test_runner_failed_check(tmp_path, monkeypatch):
@@ -377,6 +680,7 @@ def test_runner_failed_check(tmp_path, monkeypatch):
         audit_dataset="audit_ds",
         checks_file=str(checks_file),
         pipeline_run_id="run-failed",
+        extraction_date="2026-07-06",
         dry_run=False,
         fail_on_error=False
     )
@@ -423,6 +727,7 @@ def test_runner_warning_failure_returns_zero_and_is_persisted(tmp_path, monkeypa
         audit_dataset="audit_ds",
         checks_file=str(checks_file),
         pipeline_run_id="run-warning",
+        extraction_date="2026-07-06",
         dry_run=False,
         fail_on_error=True,
     )
@@ -480,6 +785,7 @@ def test_runner_persists_warning_and_error_but_returns_one_for_error(tmp_path, m
         audit_dataset="audit_ds",
         checks_file=str(checks_file),
         pipeline_run_id="run-mixed",
+        extraction_date="2026-07-06",
         dry_run=False,
         fail_on_error=True,
     )
@@ -512,6 +818,7 @@ def test_runner_sql_exception_fail_on_error_false(tmp_path, monkeypatch):
         audit_dataset="audit_ds",
         checks_file=str(checks_file),
         pipeline_run_id="run-exception",
+        extraction_date="2026-07-06",
         dry_run=False,
         fail_on_error=False
     )
@@ -548,6 +855,7 @@ def test_runner_sql_exception_fail_on_error_true(tmp_path, monkeypatch):
             audit_dataset="audit_ds",
             checks_file=str(checks_file),
             pipeline_run_id="run-exception",
+            extraction_date="2026-07-06",
             dry_run=False,
             fail_on_error=True
         )
@@ -571,6 +879,7 @@ def test_runner_placeholders_are_interpolated(tmp_path, monkeypatch):
         audit_dataset="my_audit_dataset",
         checks_file=str(checks_file),
         pipeline_run_id="run-placeholders",
+        extraction_date="2026-07-06",
         dry_run=False,
         fail_on_error=False
     )

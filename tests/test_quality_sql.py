@@ -7,7 +7,7 @@ import json
 import re
 from pathlib import Path
 
-from pipelines.quality_checks import split_sql_queries
+from pipelines.quality_checks import scope_silver_query_to_current_run, split_sql_queries
 
 # Obtener la ruta raíz del proyecto
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -311,6 +311,38 @@ def test_required_tables_are_covered():
     
     for t in required_tables:
         assert t in covered_tables, f"La tabla requerida '{t}' no tiene cobertura de calidad de datos en el archivo SQL."
+
+
+def test_universitarios_duplicate_checks_are_scoped_to_current_run_by_runner():
+    duplicate_checks = {
+        "silver_pronabec_report_beca18_universitarios_carrera_anual_duplicates":
+            "pronabec_report_beca18_universitarios_carrera_anual",
+        "silver_pronabec_report_beca18_universitarios_universidad_anual_duplicates":
+            "pronabec_report_beca18_universitarios_universidad_anual",
+    }
+
+    for check_id, table_name in duplicate_checks.items():
+        query = next(query for query in get_queries() if check_id in query)
+        rendered_query = query.format(
+            project_id="test-project",
+            silver_dataset="silver_ds",
+            gold_dataset="gold_ds",
+            audit_dataset="audit_ds",
+        )
+        scoped_query = scope_silver_query_to_current_run(
+            rendered_query=rendered_query,
+            project_id="test-project",
+            silver_dataset="silver_ds",
+        )
+        normalized = " ".join(scoped_query.split())
+
+        assert f"`test-project.silver_ds.{table_name}`" in scoped_query
+        assert (
+            "FROM (SELECT * FROM "
+            f"`test-project.silver_ds.{table_name}` "
+            "WHERE extraction_date = @extraction_date "
+            "AND pipeline_run_id = @pipeline_run_id)"
+        ) in normalized
 
 
 def test_pes_2025_coverage():
