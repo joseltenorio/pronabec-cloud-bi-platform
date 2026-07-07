@@ -54,6 +54,16 @@ def test_deploy_bigquery_invokes_generate_bigquery_ddl_python_tool():
     assert "tools/generate_bigquery_ddl.py" in content
 
 
+def test_generate_bigquery_ddl_script_supports_ci_and_deploy_modes():
+    content = _read("scripts/generate_bigquery_ddl.sh")
+
+    assert "--ci" in content
+    assert "--deploy" in content
+    assert "--generation-mode" in content
+    assert '"$GENERATION_MODE"' in content
+    assert "BRONZE_EXTRACTION_DATE is required in deploy generation mode" in content
+
+
 def test_deploy_cloud_run_jobs_references_main_and_dataflow_images():
     content = _read("scripts/deploy_cloud_run_jobs.sh")
 
@@ -96,3 +106,19 @@ def test_configure_airflow_variables_uses_composer_variables_set():
         "quality_checks_job_name",
     ]:
         assert variable_name in content
+
+
+def test_ci_workflow_uses_static_ddl_generation_without_hardcoded_date():
+    content = _read(".github/workflows/ci.yml")
+
+    assert "./scripts/generate_bigquery_ddl.sh --ci" in content
+    assert "--bronze-extraction-date" not in content
+    assert "2026-07-06" not in content
+
+
+def test_deploy_workflow_exposes_optional_bronze_extraction_date():
+    content = _read(".github/workflows/deploy.yml")
+
+    assert "bronze_extraction_date:" in content
+    assert 'default: ""' in content
+    assert "export BRONZE_EXTRACTION_DATE" in content

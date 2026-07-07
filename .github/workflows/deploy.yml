@@ -28,6 +28,11 @@ on:
         required: true
         default: false
         type: boolean
+      bronze_extraction_date:
+        description: Optional Bronze extraction date for BigQuery external tables. Use YYYY-MM-DD or latest.
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -97,7 +102,11 @@ jobs:
 
       - name: Deploy BigQuery
         if: ${{ inputs.deploy_bigquery }}
-        run: ./scripts/deploy_bigquery_sql.sh
+        run: |
+          if [[ -n "${{ inputs.bronze_extraction_date }}" ]]; then
+            export BRONZE_EXTRACTION_DATE="${{ inputs.bronze_extraction_date }}"
+          fi
+          ./scripts/deploy_bigquery_sql.sh
 
       - name: Build and push images
         if: ${{ inputs.deploy_images }}

@@ -193,6 +193,43 @@ def test_bigquery_ddl_generator_writes_bronze_and_silver_sql(tmp_path: Path) -> 
     for table in rejected_silver_tables:
         assert f"silver.{table}" not in silver_sql
 
+
+def test_bigquery_ddl_generator_ci_mode_does_not_require_bronze_date(tmp_path: Path) -> None:
+    output_dir = tmp_path / "generated" / "sql"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "tools/generate_bigquery_ddl.py",
+            "--project-id",
+            "test-project-id",
+            "--bucket",
+            "test-bucket-name",
+            "--generation-mode",
+            "ci",
+            "--output-dir",
+            str(output_dir),
+        ],
+        cwd=PROJECT_ROOT,
+        env=env_without_ddl_config(),
+        check=True,
+    )
+
+    bronze_sql = (output_dir / "create_bronze_external_tables.sql").read_text(
+        encoding="utf-8"
+    )
+    silver_sql = (output_dir / "create_silver_tables.sql").read_text(
+        encoding="utf-8"
+    )
+
+    assert "test-project-id.silver.presupuesto_mef_actividad" in silver_sql
+    assert (
+        "gs://test-bucket-name/bronze/mef/presupuesto_actividad/"
+        "extraction_date=${BRONZE_EXTRACTION_DATE}/year=*/data.csv"
+    ) in bronze_sql
+    assert "extraction_date=*/year=*/data.csv" not in bronze_sql
+
+
 def test_bigquery_ddl_generator_uses_environment_config(tmp_path: Path) -> None:
     output_dir = tmp_path / "generated" / "sql"
     env = {
@@ -563,6 +600,20 @@ def test_render_bronze_table_fallback_behavior() -> None:
         )
     assert "requires --bronze-extraction-date to be BigQuery-compatible" in str(excinfo.value)
 
+    ci_mef_ddl = render_bronze_table(
+        dataset="presupuesto_mef_actividad",
+        schema=[{"name": "col1", "type": "STRING", "mode": "NULLABLE"}],
+        project_id="test-project",
+        bucket="test-bucket",
+        bronze_extraction_date=None,
+        generation_mode="ci",
+    )
+    assert (
+        "gs://test-bucket/bronze/mef/presupuesto_actividad/"
+        "extraction_date=${BRONZE_EXTRACTION_DATE}/year=*/data.csv"
+    ) in ci_mef_ddl
+    assert "extraction_date=*/year=*/data.csv" not in ci_mef_ddl
+
 
 
 def test_mef_external_table_generation_fails_without_date(tmp_path: Path) -> None:
@@ -587,4 +638,4 @@ def test_mef_external_table_generation_fails_without_date(tmp_path: Path) -> Non
     )
 
     assert result.returncode != 0
-    assert "requires --bronze-extraction-date to be BigQuery-compatible" in result.stderr
+    assert "requires --bronze-extraction-date to be BigQuery-compatible" in result.stderr
