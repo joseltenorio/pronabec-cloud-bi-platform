@@ -1,0 +1,10 @@
+[
+  { "name": "anio", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "region", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "tasa_bruta_natalidad", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "tasa_global_fecundidad", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "esperanza_vida_nacer", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "tasa_mortalidad_infantil", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "tasa_migracion_neta", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "tasa_crecimiento_total_pct", "type": "STRING", "mode": "NULLABLE" }
+]

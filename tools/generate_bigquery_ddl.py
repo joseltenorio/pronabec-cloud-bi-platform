@@ -184,6 +184,15 @@ def render_bronze_table(
   uris = ['{source_uri}'],
   skip_leading_rows = 1
 )"""
+    elif dataset.startswith("inei_"):
+        table_name = f"{project_id}.bronze.{dataset}_raw"
+        date_folder = f"extraction_date={bronze_extraction_date}" if bronze_extraction_date else "extraction_date=*"
+        source_uri = f"gs://{bucket}/bronze/inei_reports/{dataset}/{date_folder}/data.csv"
+        options = f"""OPTIONS (
+  format = 'CSV',
+  uris = ['{source_uri}'],
+  skip_leading_rows = 1
+)"""
     else:
         table_name = f"{project_id}.bronze.pronabec_{dataset}_raw"
         date_folder = f"extraction_date={bronze_extraction_date}" if bronze_extraction_date else "extraction_date=*"

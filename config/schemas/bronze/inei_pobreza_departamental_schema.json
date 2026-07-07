@@ -1,0 +1,9 @@
+[
+  { "name": "anio", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "region", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "pobreza_monetaria_pct", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "source_name", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "source_period", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "source_type", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "metric", "type": "STRING", "mode": "NULLABLE" }
+]
