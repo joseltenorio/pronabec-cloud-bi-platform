@@ -262,6 +262,18 @@ def test_gcs_paths_consistency_with_ddl(tmp_path: Path) -> None:
 
             expected = pipeline_settings["gcs_paths"]["inei_reports_bronze_csv"].format(dataset=dataset_name, extraction_date=ext_date)
             assert relative_path == expected, f"DDL path '{relative_path}' mismatch with pipeline.yaml expected '{expected}'"
+        elif "bronze/minedu/" in relative_path:
+            match = re.match(
+                r"bronze/minedu/escale_matricula_secundaria/extraction_date=(\d{4}-\d{2}-\d{2}|\*)/data\.csv",
+                relative_path,
+            )
+            assert match, f"DDL MINEDU path structure is invalid: {relative_path}"
+            ext_date = match.group(1)
+
+            expected = pipeline_settings["gcs_paths"]["minedu_escale_bronze"].format(
+                extraction_date=ext_date
+            )
+            assert relative_path == expected, f"DDL path '{relative_path}' mismatch with pipeline.yaml expected '{expected}'"
         else:
             pytest.fail(f"Unknown bronze folder in external table DDL: {relative_path}")
 
