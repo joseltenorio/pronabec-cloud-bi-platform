@@ -32,6 +32,7 @@ def test_dag_uses_declarative_configuration() -> None:
     assert dag_mod.ORCHESTRATION_CONFIG["dag"]["id"] == "pronabec_medallion_batch"
     assert dag_mod.ORCHESTRATION_CONFIG["datasets"]["pronabec_reports"]["landing_path_template"] == "landing/pronabec_reports/{source_subset}"
     assert dag_mod.ORCHESTRATION_CONFIG["datasets"]["pronabec_reports"]["bronze_path_template"] == "bronze/pronabec_reports/{dataset}/extraction_date={extraction_date}/data.csv"
+    assert dag_mod.ORCHESTRATION_CONFIG["datasets"]["inei_reports"]["bronze_path_template"] == "bronze/inei_reports/{dataset}/extraction_date={extraction_date}/data.csv"
     assert "resolve_repo_root" in content
     assert 'candidate / "config" / "orchestration.yaml"' in content
     assert 'candidate / "config" / "endpoints.yaml"' in content
@@ -86,6 +87,23 @@ def test_reports_path_templates_are_correct() -> None:
     assert (
         dag_mod.build_report_bronze_uri("report_beca18_becas_otorgadas_modalidad_anual")
         == "gs://{{ var.value.gcs_bucket_name }}/bronze/pronabec_reports/report_beca18_becas_otorgadas_modalidad_anual/extraction_date={{ dag_run.conf.get('extraction_date') or ds }}/data.csv"
+    )
+
+
+def test_inei_path_templates_are_correct() -> None:
+    assert dag_mod.INEI_REPORT_DATASETS == [
+        "inei_population_youth_region",
+        "inei_demographic_indicators_region",
+        "inei_pobreza_departamental",
+        "inei_internet_acceso_region",
+    ]
+    assert (
+        dag_mod.build_inei_bronze_uri("inei_population_youth_region")
+        == "gs://{{ var.value.gcs_bucket_name }}/bronze/inei_reports/inei_population_youth_region/extraction_date={{ dag_run.conf.get('extraction_date') or ds }}/data.csv"
+    )
+    assert (
+        dag_mod.build_inei_output_table("inei_population_youth_region")
+        == "{{ var.value.gcp_project_id }}:{{ var.value.bq_silver_dataset }}.inei_population_youth_region"
     )
 
 
@@ -146,11 +164,12 @@ def test_bronze_manifest_validation_runs_after_bronze_tasks() -> None:
     assert 'TaskGroup(group_id="pronabec_api_bronze")' in content
     assert 'TaskGroup(group_id="mef_bronze")' in content
     assert 'TaskGroup(group_id="pronabec_reports_bronze")' in content
+    assert 'TaskGroup(group_id="inei_reports_bronze")' in content
     assert "discover_pronabec_datasets >> build_pronabec_extraction_plan >> run_pronabec_extraction_plan" in content
     assert "run_pronabec_extraction_plan >> pronabec_finalize_tasks" in content
     assert "chain_tasks(pronabec_finalize_tasks)" in content
     assert "chain_tasks(report_stage_tasks)" in content
-    assert "bronze_parallel = [pronabec_api_bronze, mef_bronze, pronabec_reports_bronze]" in content
+    assert "bronze_parallel = [pronabec_api_bronze, mef_bronze, pronabec_reports_bronze, inei_reports_bronze]" in content
     assert "init_run >> bronze_parallel" in content
     assert "bronze_parallel >> validate_bronze_manifests" in content
     assert "extract_mef >> validate_bronze_manifests" not in content
@@ -163,7 +182,8 @@ def test_bronze_manifest_validation_runs_before_silver_tasks() -> None:
     assert 'TaskGroup(group_id="pronabec_api_silver")' in content
     assert 'TaskGroup(group_id="mef_silver")' in content
     assert 'TaskGroup(group_id="pronabec_reports_silver")' in content
-    assert "silver_parallel = [pronabec_api_silver, mef_silver, pronabec_reports_silver]" in content
+    assert 'TaskGroup(group_id="inei_reports_silver")' in content
+    assert "silver_parallel = [pronabec_api_silver, mef_silver, pronabec_reports_silver, inei_reports_silver]" in content
     assert "validate_bronze_manifests >> silver_parallel" in content
     assert "silver_parallel >> publish_gold_views" in content
 
@@ -266,7 +286,9 @@ def test_dag_keeps_existing_non_pronabec_sections() -> None:
     assert "extract_mef" in content
     assert "mef_tasks" in content
     assert "stage_pronabec_reports_" in content
+    assert "stage_inei_reports" in content
     assert "report_tasks" in content
+    assert "inei_tasks" in content
     assert "publish_gold_views" in content
     assert "validate_gold_contracts" in content
     assert "run_quality_checks" in content
@@ -311,6 +333,26 @@ def test_shared_cloud_run_job_groups_are_serialized() -> None:
     assert "chain_tasks(report_stage_tasks)" in content
     assert "chain_tasks(pronabec_finalize_tasks)" in content
     assert "chain_tasks(report_tasks)" in content
+    assert "chain_tasks(inei_tasks)" in content
+
+
+def test_dag_contains_inei_staging_and_dataflow_tasks() -> None:
+    content = _read_dag_source()
+
+    assert "INEI_REPORTS_STAGE_JOB" in content
+    assert "DATAFLOW_INEI_REPORT_JOB" in content
+    assert "inei-stage-reports-job" in content
+    assert "dataflow-inei-report-job" in content
+    assert 'task_id=f"dataflow_{source_dataset}"' in content
+    assert set(dag_mod.INEI_REPORT_DATASETS) == {
+        "inei_population_youth_region",
+        "inei_demographic_indicators_region",
+        "inei_pobreza_departamental",
+        "inei_internet_acceso_region",
+    }
+    assert '"SOURCE_SYSTEM": "inei_reports"' in content
+    assert '"BRONZE_INPUT_PATH": build_inei_bronze_uri(source_dataset)' in content
+    assert '"BQ_OUTPUT_TABLE": build_inei_output_table(source_dataset)' in content
 
 
 def test_distinct_cloud_run_job_silver_groups_stay_parallel() -> None:
