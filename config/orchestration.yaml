@@ -26,6 +26,8 @@ jobs:
   pronabec_reports_dataflow_job_name_var: dataflow_pronabec_report_job_name
   inei_reports_stage_job_name_var: inei_reports_stage_job_name
   inei_reports_dataflow_job_name_var: dataflow_inei_report_job_name
+  minedu_escale_extract_job_name_var: minedu_escale_extract_job_name
+  minedu_escale_dataflow_job_name_var: dataflow_minedu_escale_job_name
   bronze_manifest_validation_job_name_var: bronze_manifest_validation_job_name
   gold_publish_job_name_var: gold_publish_job_name
   gold_validate_job_name_var: gold_validate_job_name
@@ -262,6 +264,18 @@ datasets:
       - source_dataset: inei_demographic_indicators_region
       - source_dataset: inei_pobreza_departamental
       - source_dataset: inei_internet_acceso_region
+
+  minedu_escale:
+    enabled: true
+    source_system: minedu_escale
+    bronze_path_template: "bronze/minedu/escale_matricula_secundaria/extraction_date={extraction_date}/data.csv"
+    silver_table_template: "{project_id}:{silver_dataset}.minedu_matricula_secundaria_departamental"
+    extract_job_name_var: minedu_escale_extract_job_name
+    dataflow_job_name_var: dataflow_minedu_escale_job_name
+    items:
+      - source_dataset: minedu_matricula_secundaria_departamental
+        job_name: dataflow-minedu-escale-job
+        job_name_var: dataflow_minedu_escale_job_name
 
 gold:
   enabled: true

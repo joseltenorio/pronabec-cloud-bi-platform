@@ -54,3 +54,13 @@ def test_pronabec_report_datasets_remain_tabular() -> None:
     for dataset in datasets:
         assert dataset["name"].startswith("report_beca18_")
         assert dataset["file_name"].endswith(".csv")
+
+
+def test_minedu_escale_config_contains_expected_departments_and_years() -> None:
+    config = load_yaml_config(ENDPOINTS_PATH)
+    minedu = config["minedu_escale"]
+
+    assert minedu["base_url"] == "https://escale.minedu.gob.pe/magnitudes-portlet/reporte/cuadro"
+    assert minedu["departments"]["25"] == "UCAYALI"
+    assert minedu["yearly_tables"][2025]["anio_param"] == 39
+    assert minedu["yearly_tables"][2012]["cuadro"] == 217

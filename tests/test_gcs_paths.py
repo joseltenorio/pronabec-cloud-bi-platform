@@ -225,6 +225,17 @@ def test_build_mef_bronze_path() -> None:
     assert path == "bronze/mef/presupuesto/extraction_date=2026-06-10/data.csv"
 
 
+def test_build_minedu_escale_bronze_path_from_generic_builder() -> None:
+    from pipelines.common.config import build_gcs_path
+
+    path = build_gcs_path(
+        "bronze/minedu/escale_matricula_secundaria/extraction_date={extraction_date}/data.csv",
+        extraction_date="2026-07-08",
+    )
+
+    assert path == "bronze/minedu/escale_matricula_secundaria/extraction_date=2026-07-08/data.csv"
+
+
 def test_build_rejected_records_path() -> None:
     path = build_rejected_records_path(
         "dlq/{dataset}/extraction_date={extraction_date}/rejected_records.jsonl",

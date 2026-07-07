@@ -109,6 +109,8 @@ def test_get_pipeline_settings_reads_project_pipeline_config() -> None:
         "inei_pobreza_departamental",
         "inei_internet_acceso_region",
     ]
+    assert settings["config"]["minedu_escale"]["bronze_prefix"] == "bronze/minedu/escale_matricula_secundaria"
+    assert settings["gcs_paths"]["minedu_escale_bronze"] == "bronze/minedu/escale_matricula_secundaria/extraction_date={extraction_date}/data.csv"
 
 
 def test_get_pipeline_settings_reads_pronabec_reports_env_overrides(
