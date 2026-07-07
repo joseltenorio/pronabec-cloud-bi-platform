@@ -147,6 +147,7 @@ def get_pipeline_settings(config_path: str | Path = "config/pipeline.yaml") -> d
     )
     log_level = get_env_var(log_level_env_var, default="INFO", required=False)
     pronabec_reports_config = get_nested_value(config, "pronabec_reports", default={})
+    inei_reports_config = get_nested_value(config, "inei_reports", default={})
 
     reports_local_manual_dir = get_env_var(
         pronabec_reports_config.get(
@@ -194,6 +195,28 @@ def get_pipeline_settings(config_path: str | Path = "config/pipeline.yaml") -> d
         for subset in (reports_subsets_raw or "").split(",")
         if subset.strip()
     ]
+    inei_landing_prefix = get_env_var(
+        inei_reports_config.get(
+            "landing_prefix_env_var",
+            "INEI_REPORTS_LANDING_PREFIX",
+        ),
+        default=inei_reports_config.get(
+            "landing_prefix",
+            "landing/inei_reports",
+        ),
+        required=False,
+    )
+    inei_bronze_prefix = get_env_var(
+        inei_reports_config.get(
+            "bronze_prefix_env_var",
+            "INEI_REPORTS_BRONZE_PREFIX",
+        ),
+        default=inei_reports_config.get(
+            "bronze_prefix",
+            "bronze/inei_reports",
+        ),
+        required=False,
+    )
 
     return {
         "config": config,
@@ -210,6 +233,11 @@ def get_pipeline_settings(config_path: str | Path = "config/pipeline.yaml") -> d
             "landing_prefix": reports_landing_prefix,
             "bronze_prefix": reports_bronze_prefix,
             "subsets": reports_subsets,
+        },
+        "inei_reports": {
+            "landing_prefix": inei_landing_prefix,
+            "bronze_prefix": inei_bronze_prefix,
+            "datasets": inei_reports_config.get("datasets", []),
         },
     }
 
