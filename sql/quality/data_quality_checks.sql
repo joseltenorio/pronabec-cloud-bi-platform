@@ -1044,3 +1044,156 @@ FROM (
   FROM `{project_id}.{silver_dataset}.pronabec_becarios_pais_estudio`
   WHERE institucion IS NULL OR TRIM(institucion) = ''
 );
+
+-- Check: silver_inei_population_youth_region_required_ranges
+-- Tipo: Campos obligatorios y rangos regionales
+SELECT
+  'silver_inei_population_youth_region_required_ranges' AS check_id,
+  'silver' AS layer,
+  'inei_population_youth_region' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros INEI población con campos obligatorios nulos o poblaciones negativas'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.inei_population_youth_region`
+  WHERE anio IS NULL
+     OR region IS NULL OR TRIM(region) = ''
+     OR poblacion_15_24 < 0
+     OR poblacion_15_29 < 0
+);
+
+-- Check: silver_inei_population_youth_region_duplicates
+-- Tipo: Duplicados por año y región
+SELECT
+  'silver_inei_population_youth_region_duplicates' AS check_id,
+  'silver' AS layer,
+  'inei_population_youth_region' AS table_name,
+  'ERROR' AS severity,
+  dup_cnt AS failed_rows,
+  (dup_cnt = 0) AS passed,
+  IF(dup_cnt > 0, CONCAT('Se encontraron ', CAST(dup_cnt AS STRING), ' llaves duplicadas INEI población por año y región'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS dup_cnt
+  FROM (
+    SELECT anio, region
+    FROM `{project_id}.{silver_dataset}.inei_population_youth_region`
+    GROUP BY anio, region
+    HAVING COUNT(*) > 1
+  )
+);
+
+-- Check: silver_inei_demographic_indicators_region_required_ranges
+-- Tipo: Campos obligatorios y rangos demográficos
+SELECT
+  'silver_inei_demographic_indicators_region_required_ranges' AS check_id,
+  'silver' AS layer,
+  'inei_demographic_indicators_region' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros INEI demográficos con campos obligatorios nulos o esperanza de vida inválida'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.inei_demographic_indicators_region`
+  WHERE anio IS NULL
+     OR region IS NULL OR TRIM(region) = ''
+     OR esperanza_vida_nacer <= 0
+);
+
+-- Check: silver_inei_demographic_indicators_region_duplicates
+-- Tipo: Duplicados por año y región
+SELECT
+  'silver_inei_demographic_indicators_region_duplicates' AS check_id,
+  'silver' AS layer,
+  'inei_demographic_indicators_region' AS table_name,
+  'ERROR' AS severity,
+  dup_cnt AS failed_rows,
+  (dup_cnt = 0) AS passed,
+  IF(dup_cnt > 0, CONCAT('Se encontraron ', CAST(dup_cnt AS STRING), ' llaves duplicadas INEI demográficas por año y región'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS dup_cnt
+  FROM (
+    SELECT anio, region
+    FROM `{project_id}.{silver_dataset}.inei_demographic_indicators_region`
+    GROUP BY anio, region
+    HAVING COUNT(*) > 1
+  )
+);
+
+-- Check: silver_inei_pobreza_departamental_required_ranges
+-- Tipo: Campos obligatorios y rangos de pobreza
+SELECT
+  'silver_inei_pobreza_departamental_required_ranges' AS check_id,
+  'silver' AS layer,
+  'inei_pobreza_departamental' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros INEI pobreza con campos obligatorios nulos o porcentaje fuera de rango'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.inei_pobreza_departamental`
+  WHERE anio IS NULL
+     OR region IS NULL OR TRIM(region) = ''
+     OR pobreza_monetaria_pct NOT BETWEEN 0 AND 100
+);
+
+-- Check: silver_inei_pobreza_departamental_duplicates
+-- Tipo: Duplicados por año y región
+SELECT
+  'silver_inei_pobreza_departamental_duplicates' AS check_id,
+  'silver' AS layer,
+  'inei_pobreza_departamental' AS table_name,
+  'ERROR' AS severity,
+  dup_cnt AS failed_rows,
+  (dup_cnt = 0) AS passed,
+  IF(dup_cnt > 0, CONCAT('Se encontraron ', CAST(dup_cnt AS STRING), ' llaves duplicadas INEI pobreza por año y región'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS dup_cnt
+  FROM (
+    SELECT anio, region
+    FROM `{project_id}.{silver_dataset}.inei_pobreza_departamental`
+    GROUP BY anio, region
+    HAVING COUNT(*) > 1
+  )
+);
+
+-- Check: silver_inei_internet_acceso_region_required_ranges
+-- Tipo: Campos obligatorios y rangos de acceso a internet
+SELECT
+  'silver_inei_internet_acceso_region_required_ranges' AS check_id,
+  'silver' AS layer,
+  'inei_internet_acceso_region' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros INEI internet con campos obligatorios nulos o porcentaje fuera de rango'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{silver_dataset}.inei_internet_acceso_region`
+  WHERE anio IS NULL
+     OR region IS NULL OR TRIM(region) = ''
+     OR internet_acceso_pct NOT BETWEEN 0 AND 100
+);
+
+-- Check: silver_inei_internet_acceso_region_duplicates
+-- Tipo: Duplicados por año y región
+SELECT
+  'silver_inei_internet_acceso_region_duplicates' AS check_id,
+  'silver' AS layer,
+  'inei_internet_acceso_region' AS table_name,
+  'ERROR' AS severity,
+  dup_cnt AS failed_rows,
+  (dup_cnt = 0) AS passed,
+  IF(dup_cnt > 0, CONCAT('Se encontraron ', CAST(dup_cnt AS STRING), ' llaves duplicadas INEI internet por año y región'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS dup_cnt
+  FROM (
+    SELECT anio, region
+    FROM `{project_id}.{silver_dataset}.inei_internet_acceso_region`
+    GROUP BY anio, region
+    HAVING COUNT(*) > 1
+  )
+);
