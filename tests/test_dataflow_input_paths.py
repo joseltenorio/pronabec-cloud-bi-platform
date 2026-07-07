@@ -153,7 +153,7 @@ def test_mef_year_wildcard_input_path_is_valid() -> None:
 
 
 def test_mef_deploy_keeps_year_wildcard_for_partitioned_inputs() -> None:
-    deploy_script = Path("scripts/deploy_cloud_run_jobs.ps1")
+    deploy_script = Path("scripts/deploy_cloud_run_jobs.sh")
     content = deploy_script.read_text(encoding="utf-8")
 
-    assert "bronze/mef/presupuesto/extraction_date=`${BRONZE_EXTRACTION_DATE}/year=*/data.csv" in content
+    assert "bronze/mef/presupuesto/extraction_date=\\${BRONZE_EXTRACTION_DATE}/year=*/data.csv" in content

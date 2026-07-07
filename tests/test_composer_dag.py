@@ -123,10 +123,10 @@ def test_dag_is_manual_only_without_catchup() -> None:
 
 
 def test_composer_upload_script_syncs_support_files() -> None:
-    upload_script = Path(dag_mod.__file__).resolve().parents[1] / "scripts" / "upload_composer_dag.ps1"
+    upload_script = Path(dag_mod.__file__).resolve().parents[1] / "scripts" / "upload_composer_dag.sh"
     content = upload_script.read_text(encoding="utf-8")
 
-    assert "Sync-ComposerSupportFiles" in content
+    assert "Syncing tracked Composer support files" in content
     assert "git ls-files config pipelines" in content
 
 
