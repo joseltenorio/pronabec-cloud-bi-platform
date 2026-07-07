@@ -130,6 +130,7 @@ PRONABEC_RUN_PLAN_JOB_NAME="$(env_or PRONABEC_RUN_PLAN_JOB_NAME pronabec-run-pla
 PRONABEC_FINALIZE_DATASET_JOB_NAME="$(env_or PRONABEC_FINALIZE_DATASET_JOB_NAME pronabec-finalize-dataset-job)"
 MEF_EXTRACT_JOB_NAME="$(env_or MEF_EXTRACT_JOB_NAME mef-extract-job)"
 PRONABEC_REPORTS_STAGE_JOB_NAME="$(env_or PRONABEC_REPORTS_STAGE_JOB_NAME pronabec-stage-reports-job)"
+INEI_REPORTS_STAGE_JOB_NAME="$(env_or INEI_REPORTS_STAGE_JOB_NAME inei-stage-reports-job)"
 BRONZE_MANIFEST_VALIDATION_JOB_NAME="$(env_or BRONZE_MANIFEST_VALIDATION_JOB_NAME bronze-manifest-validation-job)"
 GOLD_PUBLISH_JOB_NAME="$(env_or GOLD_PUBLISH_JOB_NAME gold-publish-job)"
 GOLD_VALIDATE_JOB_NAME="$(env_or GOLD_VALIDATE_JOB_NAME gold-validate-job)"
@@ -150,9 +151,12 @@ DATAFLOW_MEF_GENERICA_JOB_NAME="$(env_or DATAFLOW_MEF_GENERICA_JOB_NAME dataflow
 DATAFLOW_MEF_GENERICA_TEMPORAL_JOB_NAME="$(env_or DATAFLOW_MEF_GENERICA_TEMPORAL_JOB_NAME dataflow-mef-generica-temporal-job)"
 DATAFLOW_MEF_HIERARCHY_JOB_NAME="$(env_or DATAFLOW_MEF_HIERARCHY_JOB_NAME dataflow-mef-hierarchy-job)"
 DATAFLOW_PRONABEC_REPORT_JOB_NAME="$(env_or DATAFLOW_PRONABEC_REPORT_JOB_NAME dataflow-pronabec-report-job)"
+DATAFLOW_INEI_REPORT_JOB_NAME="$(env_or DATAFLOW_INEI_REPORT_JOB_NAME dataflow-inei-report-job)"
 
 PRONABEC_REPORTS_LANDING_PREFIX="${PRONABEC_REPORTS_LANDING_PREFIX:-landing/pronabec_reports}"
 PRONABEC_REPORTS_BRONZE_PREFIX="${PRONABEC_REPORTS_BRONZE_PREFIX:-bronze/pronabec_reports}"
+INEI_REPORTS_LANDING_PREFIX="${INEI_REPORTS_LANDING_PREFIX:-landing/inei_reports}"
+INEI_REPORTS_BRONZE_PREFIX="${INEI_REPORTS_BRONZE_PREFIX:-bronze/inei_reports}"
 
 require_env PROJECT_ID
 require_env REGION
@@ -187,6 +191,8 @@ BASE_ENV_VARS=(
   "BQ_LOCATION=${BQ_LOCATION}"
   "PRONABEC_REPORTS_LANDING_PREFIX=${PRONABEC_REPORTS_LANDING_PREFIX}"
   "PRONABEC_REPORTS_BRONZE_PREFIX=${PRONABEC_REPORTS_BRONZE_PREFIX}"
+  "INEI_REPORTS_LANDING_PREFIX=${INEI_REPORTS_LANDING_PREFIX}"
+  "INEI_REPORTS_BRONZE_PREFIX=${INEI_REPORTS_BRONZE_PREFIX}"
   "PRONABEC_REQUEST_TIMEOUT_SECONDS=${PRONABEC_REQUEST_TIMEOUT_SECONDS:-180}"
   "PRONABEC_MAX_RETRIES=${PRONABEC_MAX_RETRIES:-5}"
   "PRONABEC_BACKOFF_BASE_SECONDS=${PRONABEC_BACKOFF_BASE_SECONDS:-10}"
@@ -245,6 +251,9 @@ upsert_cloud_run_job "$MEF_EXTRACT_JOB_NAME" "Extraccion batch MEF hacia Bronze"
 ARGS_REPORTS_STAGE=(-m tools.stage_pronabec_manual_reports --strict --overwrite)
 upsert_cloud_run_job "$PRONABEC_REPORTS_STAGE_JOB_NAME" "Staging PRONABEC reports desde GCS Landing hacia Bronze" ARGS_REPORTS_STAGE EMPTY_ENV
 
+ARGS_INEI_STAGE=(-m tools.stage_inei_reports --strict --overwrite)
+upsert_cloud_run_job "$INEI_REPORTS_STAGE_JOB_NAME" "Staging INEI regional reports desde GCS Landing hacia Bronze" ARGS_INEI_STAGE EMPTY_ENV
+
 ARGS_BRONZE_VALIDATION=(-m pipelines.validate_bronze_manifests)
 upsert_cloud_run_job "$BRONZE_MANIFEST_VALIDATION_JOB_NAME" "Validacion de manifests Bronze antes de promover a Silver" ARGS_BRONZE_VALIDATION EMPTY_ENV
 
@@ -299,6 +308,10 @@ upsert_cloud_run_job "$DATAFLOW_MEF_HIERARCHY_JOB_NAME" "Lanzador Dataflow MEF j
 ENV_DF_PRONABEC_REPORT=("${DATAFLOW_ENV_VARS[@]}" "SOURCE_DATASET=placeholder_dataset" "INPUT_PATH=gs://${BUCKET_NAME}/placeholder_path" "OUTPUT_TABLE=${PROJECT_ID}:${SILVER_DATASET}.placeholder_table")
 ARGS_DF_PRONABEC_REPORT=("${DATAFLOW_COMMON_ARGS[@]}" --source-system pronabec_reports --source-dataset "\${SOURCE_DATASET}" --input-path "\${INPUT_PATH}" --input-format csv --output-table "\${OUTPUT_TABLE}" --summary-output-path "gs://${BUCKET_NAME}/audit/processing_summary/\${SOURCE_DATASET}_\${BRONZE_EXTRACTION_DATE}.json")
 upsert_cloud_run_job "$DATAFLOW_PRONABEC_REPORT_JOB_NAME" "Lanzador Dataflow parametrizable para PRONABEC reports Bronze a Silver" ARGS_DF_PRONABEC_REPORT ENV_DF_PRONABEC_REPORT 7200
+
+ENV_DF_INEI_REPORT=("${DATAFLOW_ENV_VARS[@]}" "SOURCE_SYSTEM=inei_reports" "SOURCE_DATASET=inei_population_youth_region" "BRONZE_INPUT_PATH=gs://${BUCKET_NAME}/${INEI_REPORTS_BRONZE_PREFIX}/\${SOURCE_DATASET}/extraction_date=\${BRONZE_EXTRACTION_DATE}/data.csv" "BQ_OUTPUT_TABLE=${PROJECT_ID}:${SILVER_DATASET}.\${SOURCE_DATASET}")
+ARGS_DF_INEI_REPORT=("${DATAFLOW_COMMON_ARGS[@]}" --source-system "\${SOURCE_SYSTEM}" --source-dataset "\${SOURCE_DATASET}" --input-path "\${BRONZE_INPUT_PATH}" --input-format csv --output-table "\${BQ_OUTPUT_TABLE}" --summary-output-path "gs://${BUCKET_NAME}/audit/processing_summary/\${SOURCE_DATASET}_\${BRONZE_EXTRACTION_DATE}.json")
+upsert_cloud_run_job "$DATAFLOW_INEI_REPORT_JOB_NAME" "Lanzador Dataflow parametrizable para INEI regional reports Bronze a Silver" ARGS_DF_INEI_REPORT ENV_DF_INEI_REPORT 7200
 
 ARGS_QUALITY=(-m pipelines.quality_checks --project-id "$PROJECT_ID" --silver-dataset "$SILVER_DATASET" --gold-dataset "$GOLD_DATASET" --audit-dataset "$AUDIT_DATASET" --extraction-date "\${BRONZE_EXTRACTION_DATE}" --pipeline-run-id "\${PIPELINE_RUN_ID}" --fail-on-error)
 upsert_cloud_run_job "$QUALITY_CHECKS_JOB_NAME" "Ejecucion batch de controles de calidad BigQuery" ARGS_QUALITY EMPTY_ENV
