@@ -68,6 +68,15 @@ require_env CLOUD_RUN_REGION_VALUE
 require_env GCS_BUCKET_NAME_VALUE
 require_env DATAFLOW_SDK_CONTAINER_IMAGE
 
+./scripts/check_composer_environment.sh --allow-missing
+
+if ! gcloud composer environments describe "$COMPOSER_ENVIRONMENT_NAME" \
+  --location "$COMPOSER_LOCATION" \
+  --project "$GCP_PROJECT_ID" >/dev/null 2>&1; then
+  echo "Composer environment '$COMPOSER_ENVIRONMENT_NAME' does not exist. Create it first with scripts/create_composer_environment.sh or enable Create Composer environment in the manual deploy workflow." >&2
+  exit 1
+fi
+
 set_airflow_variable gcp_project_id "$GCP_PROJECT_ID"
 set_airflow_variable gcp_region "$GCP_REGION_VALUE"
 set_airflow_variable cloud_run_region "$CLOUD_RUN_REGION_VALUE"

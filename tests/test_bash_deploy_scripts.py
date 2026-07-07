@@ -4,6 +4,9 @@ from pathlib import Path
 
 
 EXPECTED_BASH_SCRIPTS = [
+    "scripts/check_composer_environment.sh",
+    "scripts/create_composer_environment.sh",
+    "scripts/delete_composer_environment.sh",
     "scripts/build_and_push_image.sh",
     "scripts/build_and_push_dataflow_worker_image.sh",
     "scripts/deploy_bigquery_sql.sh",
@@ -64,6 +67,32 @@ def test_generate_bigquery_ddl_script_supports_ci_and_deploy_modes():
     assert "BRONZE_EXTRACTION_DATE is required in deploy generation mode" in content
 
 
+def test_composer_lifecycle_scripts_validate_required_environment():
+    check_content = _read("scripts/check_composer_environment.sh")
+    create_content = _read("scripts/create_composer_environment.sh")
+    delete_content = _read("scripts/delete_composer_environment.sh")
+
+    for required in ["GCP_PROJECT_ID", "COMPOSER_LOCATION", "COMPOSER_ENVIRONMENT_NAME"]:
+        assert required in check_content
+    assert "--allow-missing" in check_content
+    assert "gcloud composer environments describe" in check_content
+
+    for required in [
+        "GCP_PROJECT_ID",
+        "COMPOSER_LOCATION",
+        "COMPOSER_ENVIRONMENT_NAME",
+        "COMPOSER_SERVICE_ACCOUNT",
+    ]:
+        assert required in create_content
+    assert "./scripts/check_composer_environment.sh --allow-missing" in create_content
+    assert "gcloud composer environments create" in create_content
+
+    for required in ["GCP_PROJECT_ID", "COMPOSER_LOCATION", "COMPOSER_ENVIRONMENT_NAME"]:
+        assert required in delete_content
+    assert "./scripts/check_composer_environment.sh --allow-missing" in delete_content
+    assert "gcloud composer environments delete" in delete_content
+
+
 def test_deploy_cloud_run_jobs_references_main_and_dataflow_images():
     content = _read("scripts/deploy_cloud_run_jobs.sh")
 
@@ -89,6 +118,8 @@ def test_upload_composer_dag_does_not_reference_forbidden_paths():
 def test_upload_composer_dag_resolves_dag_bucket_from_composer():
     content = _read("scripts/upload_composer_dag.sh")
 
+    assert "./scripts/check_composer_environment.sh --allow-missing" in content
+    assert "Composer environment '" in content
     assert 'gcloud composer environments describe "$COMPOSER_ENVIRONMENT_NAME"' in content
     assert '--format="value(config.dagGcsPrefix)"' in content
 
@@ -96,6 +127,8 @@ def test_upload_composer_dag_resolves_dag_bucket_from_composer():
 def test_configure_airflow_variables_uses_composer_variables_set():
     content = _read("scripts/configure_airflow_variables.sh")
 
+    assert "./scripts/check_composer_environment.sh --allow-missing" in content
+    assert "Composer environment '" in content
     assert 'variables set -- "$key" "$value"' in content
     for variable_name in [
         "gcp_project_id",
@@ -122,3 +155,9 @@ def test_deploy_workflow_exposes_optional_bronze_extraction_date():
     assert "bronze_extraction_date:" in content
     assert 'default: ""' in content
     assert "export BRONZE_EXTRACTION_DATE" in content
+    assert "create_composer_environment:" in content
+    assert "delete_composer_environment:" in content
+    assert "Cannot create and delete Composer in the same deployment run." in content
+    assert "Create Composer environment" in content
+    assert "Delete Composer environment" in content
+    assert "Validate Composer import errors" in content
