@@ -1,0 +1,10 @@
+[
+  { "name": "anio", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "region", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "poblacion_total", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "poblacion_15_24", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "poblacion_15_29", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "poblacion_17_24", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "poblacion_18_24", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "share_15_24_total", "type": "STRING", "mode": "NULLABLE" }
+]
