@@ -1,0 +1,18 @@
+[
+  { "name": "anio", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "codigo_departamento", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "region", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "nivel_educativo", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "grado", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "matricula_total", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "matricula_publica", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "matricula_privada", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "matricula_urbana", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "matricula_rural", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "matricula_masculino", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "matricula_femenino", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "source_url", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "extraction_date", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "ingestion_timestamp", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "pipeline_run_id", "type": "STRING", "mode": "NULLABLE" }
+]
