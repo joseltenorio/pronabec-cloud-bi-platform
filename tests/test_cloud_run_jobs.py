@@ -75,6 +75,19 @@ def test_inei_jobs_are_defined():
     assert "INEI_REPORTS_BRONZE_PREFIX=${INEI_REPORTS_BRONZE_PREFIX}" in content
 
 
+def test_minedu_jobs_are_defined() -> None:
+    content = _read_deploy_script()
+
+    assert "MINEDU_ESCALE_EXTRACT_JOB_NAME" in content
+    assert "DATAFLOW_MINEDU_ESCALE_JOB_NAME" in content
+    assert "minedu-escale-extract-job" in content
+    assert "dataflow-minedu-escale-job" in content
+    assert "MINEDU_ESCALE_START_YEAR=${MINEDU_ESCALE_START_YEAR}" in content
+    assert "MINEDU_ESCALE_END_YEAR=${MINEDU_ESCALE_END_YEAR}" in content
+    assert "pipelines.scrape_minedu_escale" in content
+    assert "bronze/minedu/escale_matricula_secundaria/extraction_date=\\${BRONZE_EXTRACTION_DATE}/data.csv" in content
+
+
 def test_mef_extract_job_has_complete_runtime_configuration():
     content = _read_deploy_script()
 

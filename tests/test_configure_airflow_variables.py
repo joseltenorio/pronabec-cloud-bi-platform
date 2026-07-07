@@ -39,6 +39,7 @@ def test_configure_airflow_variables_sets_job_names():
         "pronabec_finalize_dataset_job_name",
         "mef_extract_job_name",
         "pronabec_reports_stage_job_name",
+        "minedu_escale_extract_job_name",
         "bronze_manifest_validation_job_name",
         "dataflow_pronabec_report_job_name",
         "dataflow_pronabec_convocatorias_job_name",
@@ -55,9 +56,12 @@ def test_configure_airflow_variables_sets_job_names():
         "dataflow_mef_generica_job_name",
         "dataflow_mef_generica_temporal_job_name",
         "dataflow_mef_hierarchy_job_name",
+        "dataflow_minedu_escale_job_name",
         "gold_publish_job_name",
         "gold_validate_job_name",
         "quality_checks_job_name",
+        "minedu_escale_start_year",
+        "minedu_escale_end_year",
     ]
 
     for variable in required_variables:
