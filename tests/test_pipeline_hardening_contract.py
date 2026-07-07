@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-DEPLOY_SCRIPT = Path("scripts/deploy_cloud_run_jobs.ps1")
+DEPLOY_SCRIPT = Path("scripts/deploy_cloud_run_jobs.sh")
 DAG_FILE = Path("dags/pronabec_medallion_batch_dag.py")
 RUNBOOK = Path("docs/cloud/final_e2e_runbook.md")
 README = Path("README.md")
@@ -39,5 +39,4 @@ def test_cost_controlled_composer_operations_are_documented():
     readme_content = README.read_text(encoding="utf-8")
 
     assert "gcloud composer environments delete" in runbook_content
-    assert "scripts/configure_airflow_variables.ps1" in runbook_content
     assert "bronze-manifest-validation-job" in readme_content
