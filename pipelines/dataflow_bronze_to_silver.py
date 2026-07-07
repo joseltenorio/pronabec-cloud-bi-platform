@@ -23,6 +23,7 @@ from pipelines.common.bigquery import (
     validate_silver_write_mode,
 )
 from pipelines.common.logging import setup_structured_logger, log_event
+from pipelines.transforms.inei_reports import transform_inei_report_record
 from pipelines.transforms.pronabec_reports import REPORT_SPECS, transform_pronabec_report_record
 from pipelines.transforms.base import add_technical_metadata
 from pipelines.transforms.mef import transform_mef_record
@@ -163,6 +164,8 @@ class TransformBronzeRecordsDoFn(beam.DoFn):
                         schema_name = spec.target_dataset
                 elif source_system in ("pronabec_reports", "pronabec"):
                     schema_name = f"pronabec_{source_dataset}"
+                elif source_system == "inei_reports":
+                    schema_name = source_dataset
 
                 schema_path = repo_root / "config" / "schemas" / "silver" / f"{schema_name}_schema.json"
                 if schema_path.exists():
@@ -642,6 +645,16 @@ def transform_bronze_record(
         )
     if source_system == "mef":
         return transform_mef_record(
+            source_dataset,
+            record,
+            {
+                "extraction_date": extraction_date,
+                "ingestion_timestamp": ingestion_timestamp,
+                "pipeline_run_id": pipeline_run_id,
+            },
+        )
+    if source_system == "inei_reports":
+        return transform_inei_report_record(
             source_dataset,
             record,
             {
