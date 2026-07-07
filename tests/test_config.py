@@ -101,6 +101,14 @@ def test_get_pipeline_settings_reads_project_pipeline_config() -> None:
         "pes_2025",
         "beca18_universitarios_2012_2026",
     ]
+    assert settings["inei_reports"]["landing_prefix"] == "landing/inei_reports"
+    assert settings["inei_reports"]["bronze_prefix"] == "bronze/inei_reports"
+    assert [dataset["name"] for dataset in settings["inei_reports"]["datasets"]] == [
+        "inei_population_youth_region",
+        "inei_demographic_indicators_region",
+        "inei_pobreza_departamental",
+        "inei_internet_acceso_region",
+    ]
 
 
 def test_get_pipeline_settings_reads_pronabec_reports_env_overrides(
@@ -122,6 +130,19 @@ def test_get_pipeline_settings_reads_pronabec_reports_env_overrides(
             "beca18_universitarios_2012_2026",
         ],
     }
+
+
+def test_get_pipeline_settings_reads_inei_reports_env_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("INEI_REPORTS_LANDING_PREFIX", "custom/inei_landing")
+    monkeypatch.setenv("INEI_REPORTS_BRONZE_PREFIX", "custom/inei_bronze")
+
+    settings = get_pipeline_settings("config/pipeline.yaml")
+
+    assert settings["inei_reports"]["landing_prefix"] == "custom/inei_landing"
+    assert settings["inei_reports"]["bronze_prefix"] == "custom/inei_bronze"
+    assert len(settings["inei_reports"]["datasets"]) == 4
 
 
 def test_build_gcs_path_renders_template() -> None:

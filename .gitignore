@@ -60,3 +60,5 @@ Thumbs.db
 # IDE settings
 .vscode/
 .idea/
+
+pronabec_env.sh
