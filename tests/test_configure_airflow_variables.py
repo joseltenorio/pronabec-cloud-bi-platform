@@ -82,6 +82,7 @@ def test_configure_airflow_variables_uses_strict_bash_and_variables_set():
     content = SCRIPT_PATH.read_text(encoding="utf-8")
 
     assert "set -euo pipefail" in content
+    assert "./scripts/check_composer_environment.sh --allow-missing" in content
     assert 'variables set -- "$key" "$value"' in content
 
 

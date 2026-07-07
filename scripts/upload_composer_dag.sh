@@ -29,6 +29,15 @@ if [[ ! -f "$DAG_PATH" ]]; then
   exit 1
 fi
 
+./scripts/check_composer_environment.sh --allow-missing
+
+if ! gcloud composer environments describe "$COMPOSER_ENVIRONMENT_NAME" \
+  --location "$COMPOSER_LOCATION" \
+  --project "$GCP_PROJECT_ID" >/dev/null 2>&1; then
+  echo "Composer environment '$COMPOSER_ENVIRONMENT_NAME' does not exist. Create it first with scripts/create_composer_environment.sh or enable Create Composer environment in the manual deploy workflow." >&2
+  exit 1
+fi
+
 DAG_BUCKET="$(
   gcloud composer environments describe "$COMPOSER_ENVIRONMENT_NAME" \
     --location "$COMPOSER_LOCATION" \
