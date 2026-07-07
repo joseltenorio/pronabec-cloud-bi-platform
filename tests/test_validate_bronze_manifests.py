@@ -5,8 +5,10 @@ import pytest
 from pipelines.validate_bronze_manifests import (
     BronzeManifestCheck,
     BronzeManifestValidationError,
+    build_inei_manifest_check,
     build_pronabec_manifest_check,
     resolve_extraction_date,
+    resolve_inei_checks,
     resolve_pronabec_checks,
     validate_manifest_payload,
 )
@@ -31,6 +33,28 @@ def test_build_pronabec_manifest_check():
     assert check.success_uri == (
         "gs://lake-bucket/bronze/pronabec/perdida_becas/"
         "extraction_date=2026-06-28/_SUCCESS"
+    )
+
+
+def test_build_inei_manifest_check():
+    check = build_inei_manifest_check(
+        bucket_name="lake-bucket",
+        bronze_csv_template=(
+            "bronze/inei_reports/{dataset}/extraction_date={extraction_date}/data.csv"
+        ),
+        dataset_name="inei_population_youth_region",
+        extraction_date="2026-07-07",
+    )
+
+    assert check.source_system == "INEI"
+    assert check.source_dataset == "inei_population_youth_region"
+    assert check.manifest_uri == (
+        "gs://lake-bucket/bronze/inei_reports/inei_population_youth_region/"
+        "extraction_date=2026-07-07/manifest.json"
+    )
+    assert check.success_uri == (
+        "gs://lake-bucket/bronze/inei_reports/inei_population_youth_region/"
+        "extraction_date=2026-07-07/_SUCCESS"
     )
 
 
@@ -163,3 +187,24 @@ def test_resolve_pronabec_checks_include_all_bronze_enabled_datasets():
     )
 
     assert [check.source_dataset for check in checks] == ["convocatorias", "notas_becarios"]
+
+
+def test_resolve_inei_checks_include_configured_datasets():
+    checks = resolve_inei_checks(
+        pipeline_config={
+            "inei_reports": {
+                "datasets": [
+                    {"name": "inei_population_youth_region"},
+                    {"name": "inei_internet_acceso_region"},
+                ]
+            }
+        },
+        bucket_name="bucket",
+        bronze_csv_template="bronze/inei_reports/{dataset}/extraction_date={extraction_date}/data.csv",
+        extraction_date="2026-07-07",
+    )
+
+    assert [check.source_dataset for check in checks] == [
+        "inei_population_youth_region",
+        "inei_internet_acceso_region",
+    ]

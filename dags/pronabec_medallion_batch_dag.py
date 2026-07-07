@@ -63,6 +63,11 @@ REPORT_DATASET_TO_SUBSET = {
     item["source_dataset"]: item["source_subset"]
     for item in REPORT_DATASETS
 }
+INEI_REPORT_DATASETS = [
+    item["source_dataset"]
+    for item in ORCHESTRATION_CONFIG["datasets"]["inei_reports"]["items"]
+    if item.get("source_dataset")
+]
 
 
 def airflow_var_template(var_name: str, default: str | None = None) -> str:
@@ -115,6 +120,10 @@ PRONABEC_REPORTS_STAGE_JOB = airflow_var_template(
     resolve_airflow_var_name(ORCHESTRATION_CONFIG, "pronabec_reports_stage_job_name_var"),
     "pronabec-stage-reports-job",
 )
+INEI_REPORTS_STAGE_JOB = airflow_var_template(
+    resolve_airflow_var_name(ORCHESTRATION_CONFIG, "inei_reports_stage_job_name_var"),
+    "inei-stage-reports-job",
+)
 BRONZE_MANIFEST_VALIDATION_JOB = airflow_var_template(
     resolve_airflow_var_name(
         ORCHESTRATION_CONFIG,
@@ -125,6 +134,10 @@ BRONZE_MANIFEST_VALIDATION_JOB = airflow_var_template(
 DATAFLOW_PRONABEC_REPORT_JOB = airflow_var_template(
     resolve_airflow_var_name(ORCHESTRATION_CONFIG, "pronabec_reports_dataflow_job_name_var"),
     "dataflow-pronabec-report-job",
+)
+DATAFLOW_INEI_REPORT_JOB = airflow_var_template(
+    resolve_airflow_var_name(ORCHESTRATION_CONFIG, "inei_reports_dataflow_job_name_var"),
+    "dataflow-inei-report-job",
 )
 GOLD_PUBLISH_JOB = airflow_var_template(
     resolve_airflow_var_name(ORCHESTRATION_CONFIG, "gold_publish_job_name_var"),
@@ -148,10 +161,12 @@ RUN_PRONABEC_PLAN_EXECUTION = "{{ dag_run.conf.get('run_pronabec', true) and dag
 RUN_PRONABEC_FINALIZE = "{{ dag_run.conf.get('run_pronabec', true) and dag_run.conf.get('run_pronabec_finalize', true) }}"
 RUN_MEF = "{{ dag_run.conf.get('run_mef', true) }}"
 RUN_PRONABEC_REPORTS_STAGING = "{{ dag_run.conf.get('run_pronabec_reports_staging', true) }}"
+RUN_INEI_REPORTS_STAGING = "{{ dag_run.conf.get('run_inei_reports_staging', true) }}"
 RUN_BRONZE_MANIFEST_VALIDATION = "{{ dag_run.conf.get('run_bronze_manifest_validation', true) }}"
 RUN_DATAFLOW_PRONABEC = "{{ dag_run.conf.get('run_dataflow_pronabec', true) }}"
 RUN_DATAFLOW_MEF = "{{ dag_run.conf.get('run_dataflow_mef', true) }}"
 RUN_DATAFLOW_REPORTS = "{{ dag_run.conf.get('run_dataflow_reports', true) }}"
+RUN_DATAFLOW_INEI = "{{ dag_run.conf.get('run_dataflow_inei', true) }}"
 RUN_GOLD_PUBLISH = "{{ dag_run.conf.get('run_gold_publish', true) }}"
 RUN_GOLD_VALIDATION = "{{ dag_run.conf.get('run_gold_validation', true) }}"
 RUN_QUALITY = "{{ dag_run.conf.get('run_quality', true) }}"
@@ -554,6 +569,15 @@ def build_report_bronze_uri(dataset: str) -> str:
     return f"gs://{BUCKET_NAME}/{render_gcs_path(template, dataset=dataset, extraction_date=EXTRACTION_DATE)}"
 
 
+def build_inei_bronze_uri(dataset: str) -> str:
+    template = ORCHESTRATION_CONFIG["datasets"]["inei_reports"]["bronze_path_template"]
+    return f"gs://{BUCKET_NAME}/{render_gcs_path(template, dataset=dataset, extraction_date=EXTRACTION_DATE)}"
+
+
+def build_inei_output_table(dataset: str) -> str:
+    return build_bq_table_ref(PROJECT_ID, SILVER_DATASET, dataset)
+
+
 default_args = {
     "owner": "data-engineering",
     "depends_on_past": False,
@@ -585,10 +609,12 @@ with DAG(
         "run_pronabec_finalize": Param(default=True, type="boolean"),
         "run_mef": Param(default=True, type="boolean"),
         "run_pronabec_reports_staging": Param(default=True, type="boolean"),
+        "run_inei_reports_staging": Param(default=True, type="boolean"),
         "run_bronze_manifest_validation": Param(default=True, type="boolean"),
         "run_dataflow_pronabec": Param(default=True, type="boolean"),
         "run_dataflow_mef": Param(default=True, type="boolean"),
         "run_dataflow_reports": Param(default=True, type="boolean"),
+        "run_dataflow_inei": Param(default=True, type="boolean"),
         "run_gold_publish": Param(default=True, type="boolean"),
         "run_gold_validation": Param(default=True, type="boolean"),
         "run_quality": Param(default=True, type="boolean"),
@@ -661,6 +687,14 @@ with DAG(
                 )
             )
         chain_tasks(report_stage_tasks)
+
+    with TaskGroup(group_id="inei_reports_bronze") as inei_reports_bronze:
+        stage_inei_reports = cloud_run_job_operator(
+            task_id="stage_inei_reports",
+            job_name=INEI_REPORTS_STAGE_JOB,
+            enabled_expression=RUN_INEI_REPORTS_STAGING,
+            timeout_seconds=3600,
+        )
 
     validate_bronze_manifests = cloud_run_job_operator(
         task_id="validate_bronze_manifests",
@@ -739,6 +773,26 @@ with DAG(
             )
         chain_tasks(report_tasks)
 
+    with TaskGroup(group_id="inei_reports_silver") as inei_reports_silver:
+        inei_tasks = []
+        for source_dataset in INEI_REPORT_DATASETS:
+            inei_tasks.append(
+                cloud_run_job_operator(
+                    task_id=f"dataflow_{source_dataset}",
+                    job_name=DATAFLOW_INEI_REPORT_JOB,
+                    enabled_expression=RUN_DATAFLOW_INEI,
+                    timeout_seconds=7200,
+                    extra_env_vars={
+                        "SOURCE_SYSTEM": "inei_reports",
+                        "SOURCE_DATASET": source_dataset,
+                        "BRONZE_INPUT_PATH": build_inei_bronze_uri(source_dataset),
+                        "BQ_OUTPUT_TABLE": build_inei_output_table(source_dataset),
+                        "DATAFLOW_SDK_CONTAINER_IMAGE": DATAFLOW_SDK_CONTAINER_IMAGE,
+                    },
+                )
+            )
+        chain_tasks(inei_tasks)
+
     publish_gold_views = cloud_run_job_operator(
         task_id="publish_gold_views",
         job_name=GOLD_PUBLISH_JOB,
@@ -762,11 +816,11 @@ with DAG(
 
     finish_run = EmptyOperator(task_id="finish_run")
 
-    bronze_parallel = [pronabec_api_bronze, mef_bronze, pronabec_reports_bronze]
+    bronze_parallel = [pronabec_api_bronze, mef_bronze, pronabec_reports_bronze, inei_reports_bronze]
     init_run >> bronze_parallel
     bronze_parallel >> validate_bronze_manifests
 
-    silver_parallel = [pronabec_api_silver, mef_silver, pronabec_reports_silver]
+    silver_parallel = [pronabec_api_silver, mef_silver, pronabec_reports_silver, inei_reports_silver]
     validate_bronze_manifests >> silver_parallel
     silver_parallel >> publish_gold_views
     publish_gold_views >> validate_gold_contracts >> run_quality_checks >> finish_run

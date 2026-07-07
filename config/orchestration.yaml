@@ -24,6 +24,8 @@ jobs:
   mef_extract_job_name_var: mef_extract_job_name
   pronabec_reports_stage_job_name_var: pronabec_reports_stage_job_name
   pronabec_reports_dataflow_job_name_var: dataflow_pronabec_report_job_name
+  inei_reports_stage_job_name_var: inei_reports_stage_job_name
+  inei_reports_dataflow_job_name_var: dataflow_inei_report_job_name
   bronze_manifest_validation_job_name_var: bronze_manifest_validation_job_name
   gold_publish_job_name_var: gold_publish_job_name
   gold_validate_job_name_var: gold_validate_job_name
@@ -245,6 +247,21 @@ datasets:
     staging_job_name_var: pronabec_reports_stage_job_name
     dataflow_job_name_var: dataflow_pronabec_report_job_name
     items_from: "config/endpoints.yaml::pronabec_reports.documents[*]"
+
+  inei_reports:
+    enabled: true
+    source_system: inei_reports
+    landing_path_template: "landing/inei_reports"
+    bronze_base_path: "bronze/inei_reports"
+    bronze_path_template: "bronze/inei_reports/{dataset}/extraction_date={extraction_date}/data.csv"
+    silver_table_template: "{project_id}:{silver_dataset}.{dataset}"
+    staging_job_name_var: inei_reports_stage_job_name
+    dataflow_job_name_var: dataflow_inei_report_job_name
+    items:
+      - source_dataset: inei_population_youth_region
+      - source_dataset: inei_demographic_indicators_region
+      - source_dataset: inei_pobreza_departamental
+      - source_dataset: inei_internet_acceso_region
 
 gold:
   enabled: true

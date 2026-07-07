@@ -72,6 +72,26 @@ def build_pronabec_manifest_check(
     )
 
 
+def build_inei_manifest_check(
+    bucket_name: str,
+    bronze_csv_template: str,
+    dataset_name: str,
+    extraction_date: str,
+) -> BronzeManifestCheck:
+    csv_path = bronze_csv_template.format(
+        dataset=dataset_name,
+        extraction_date=extraction_date,
+    )
+    base_path = csv_path.rsplit("/", 1)[0]
+
+    return BronzeManifestCheck(
+        source_system="INEI",
+        source_dataset=dataset_name,
+        manifest_uri=build_gs_uri(bucket_name, f"{base_path}/manifest.json"),
+        success_uri=build_gs_uri(bucket_name, f"{base_path}/_SUCCESS"),
+    )
+
+
 def read_json_from_gcs(uri: str) -> dict[str, Any]:
     content = read_gcs_bytes(uri)
     payload = json.loads(content.decode("utf-8"))
@@ -199,6 +219,30 @@ def resolve_pronabec_checks(
     return checks
 
 
+def resolve_inei_checks(
+    pipeline_config: dict[str, Any],
+    bucket_name: str,
+    bronze_csv_template: str,
+    extraction_date: str,
+) -> list[BronzeManifestCheck]:
+    checks: list[BronzeManifestCheck] = []
+    datasets = pipeline_config.get("inei_reports", {}).get("datasets", [])
+    for dataset in datasets:
+        dataset_name = dataset.get("name") if isinstance(dataset, dict) else None
+        if not dataset_name:
+            continue
+        checks.append(
+            build_inei_manifest_check(
+                bucket_name=bucket_name,
+                bronze_csv_template=bronze_csv_template,
+                dataset_name=dataset_name,
+                extraction_date=extraction_date,
+            )
+        )
+
+    return checks
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Valida manifests Bronze antes de ejecutar Silver."
@@ -225,8 +269,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--source-system",
-        choices=["pronabec"],
-        default="pronabec",
+        choices=["all", "pronabec", "inei_reports"],
+        default="all",
         help="Sistema fuente a validar.",
     )
     return parser.parse_args()
@@ -255,16 +299,22 @@ def main() -> None:
 
     gcs_paths = pipeline_settings["gcs_paths"]
 
-    if args.source_system == "pronabec":
-        checks = resolve_pronabec_checks(
+    checks = []
+    if args.source_system in ("all", "pronabec"):
+        checks.extend(resolve_pronabec_checks(
             endpoints_config=endpoints_config,
             bucket_name=bucket_name,
             bronze_normalized_template=gcs_paths["pronabec_bronze_normalized"],
             extraction_date=extraction_date,
             orchestration_config=orchestration_config,
-        )
-    else:
-        checks = []
+        ))
+    if args.source_system in ("all", "inei_reports"):
+        checks.extend(resolve_inei_checks(
+            pipeline_config=pipeline_settings["config"],
+            bucket_name=bucket_name,
+            bronze_csv_template=gcs_paths["inei_reports_bronze_csv"],
+            extraction_date=extraction_date,
+        ))
 
     validate_bronze_manifests(
         checks=checks,
