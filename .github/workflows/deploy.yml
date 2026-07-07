@@ -33,6 +33,16 @@ on:
         required: false
         default: ""
         type: string
+      create_composer_environment:
+        description: Create Composer environment if it does not exist
+        required: true
+        default: false
+        type: boolean
+      delete_composer_environment:
+        description: Delete Composer environment if it exists
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -58,7 +68,8 @@ env:
   DATAFLOW_TEMP_LOCATION: gs://pronabec-cloud-bi-platform-lake-1030103187284/dataflow/temp
   DATAFLOW_STAGING_LOCATION: gs://pronabec-cloud-bi-platform-lake-1030103187284/dataflow/staging
   DATAFLOW_SERVICE_ACCOUNT: pronabec-dataflow-sa@pronabec-cloud-bi-platform.iam.gserviceaccount.com
-  CLOUD_RUN_SERVICE_ACCOUNT: pronabec-cloud-run-sa@pronabec-cloud-bi-platform.iam.gserviceaccount.com
+  CLOUD_RUN_SERVICE_ACCOUNT: pronabec-cloud-run-jobs@pronabec-cloud-bi-platform.iam.gserviceaccount.com
+  CLOUD_RUN_JOBS_SERVICE_ACCOUNT: pronabec-cloud-run-jobs@pronabec-cloud-bi-platform.iam.gserviceaccount.com
   MEF_SOURCE_MODE: consulta_amigable
   MEF_START_YEAR: "2012"
   MEF_END_YEAR: "2026"
@@ -100,6 +111,17 @@ jobs:
           bash -n scripts/*.sh
           python -m pytest -q
 
+      - name: Validate Composer lifecycle inputs
+        run: |
+          if [[ "${{ inputs.create_composer_environment }}" == "true" && "${{ inputs.delete_composer_environment }}" == "true" ]]; then
+            echo "Cannot create and delete Composer in the same deployment run." >&2
+            exit 1
+          fi
+
+      - name: Create Composer environment
+        if: ${{ inputs.create_composer_environment }}
+        run: ./scripts/create_composer_environment.sh
+
       - name: Deploy BigQuery
         if: ${{ inputs.deploy_bigquery }}
         run: |
@@ -127,7 +149,12 @@ jobs:
       - name: Validate Composer import errors
         if: ${{ inputs.validate_composer }}
         run: |
+          ./scripts/check_composer_environment.sh
           gcloud composer environments run "$COMPOSER_ENVIRONMENT_NAME" \
             --location "$COMPOSER_LOCATION" \
             --project "$GCP_PROJECT_ID" \
             dags list-import-errors
+
+      - name: Delete Composer environment
+        if: ${{ inputs.delete_composer_environment }}
+        run: ./scripts/delete_composer_environment.sh
