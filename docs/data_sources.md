@@ -10,6 +10,7 @@ Este documento describe las fuentes de datos consideradas para Project Cloud BI 
 | -------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------- | ----------------------- |
 | PRONABEC Datos Abiertos    | Portal público con endpoints JSON paginados         | Becas, convocatorias, notas, pérdida de becas, ubigeo y conceptos de pago | Extracción batch con Python                  | Bronze en Cloud Storage |
 | MEF Consulta Amigable      | Portal público                                      | Presupuesto asignado y ejecución presupuestal                             | Extracción batch mediante scraper controlado | Bronze en Cloud Storage |
+| MINEDU ESCALE              | Portal público HTML                                 | Matrícula secundaria departamental por grado                              | Scraper HTML controlado                      | Bronze en Cloud Storage |
 | Contexto regional INEI     | Archivos CSV manuales/externos en Landing de Cloud Storage | Contexto regional de población, pobreza, acceso a internet e indicadores demográficos | Preparación controlada de Landing a Bronze   | Bronze en Cloud Storage |
 | Datos geográficos / ubigeo | Dataset público de referencia o derivado de fuentes | Análisis territorial y normalización geográfica                           | Extracción batch o carga controlada          | Silver en BigQuery      |
 
@@ -349,7 +350,27 @@ Get-Content tmp\bronze\mef\presupuesto_producto\extraction_date=2026-06-14\extra
 
 ---
 
-## Fuente 3: Contexto regional INEI
+## Fuente 3: MINEDU ESCALE
+
+La fuente MINEDU ESCALE integra tablas HTML públicas con matrícula de educación secundaria por departamento, año y grado. En esta integración solo se extrae el bloque `Total Secundaria`, preservando primero a quinto grado para los 25 departamentos y el periodo 2012-2025.
+
+Documentación específica:
+
+- [MINEDU ESCALE - Matrícula de Educación Secundaria por Departamento](data_sources/minedu_escale_matricula_secundaria.md)
+
+Uso previsto:
+
+- señal de demanda educativa potencial
+- contexto regional para análisis posteriores
+- quinto grado como proxy de potenciales postulantes próximos
+
+Limitación principal:
+
+- no representa postulantes reales ni demanda observada de becas
+
+---
+
+## Fuente 4: Contexto regional INEI
 
 Los archivos de contexto regional INEI se manejan como reportes CSV manuales/externos ya cargados en `landing/inei_reports` en Cloud Storage. El pipeline operacional promueve esos archivos hacia rutas Bronze particionadas, los transforma a tablas Silver tipadas en BigQuery y los valida mediante el marco compartido de calidad.
 
@@ -364,7 +385,7 @@ Esta fuente se documenta en detalle en [Contexto regional INEI](data_sources/ine
 
 ---
 
-## Fuente 4: Datos geográficos y ubigeo
+## Fuente 5: Datos geográficos y ubigeo
 
 ### Descripción
 
