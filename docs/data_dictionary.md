@@ -22,6 +22,7 @@ Este diccionario cubre los datasets públicos considerados para el análisis de 
 - Convocatorias por carrera y sede.
 - Nota promedio del postulante por región.
 - Presupuesto MEF.
+- Indicadores de contexto regional INEI.
 - Vistas Gold esperadas para Power BI.
 
 ## Convenciones
@@ -770,7 +771,24 @@ En Bronze se conservan los strings vacíos que vengan del portal de origen sin a
 
 ---
 
-# 13. Campos derivados y enriquecimientos previstos
+# 13. Tablas de contexto regional INEI
+
+Las tablas de contexto regional INEI son indicadores Silver tipados cargados desde archivos CSV manuales en `landing/inei_reports`. Son insumos operacionales para futura ingeniería de características regionales y analítica territorial; no son salidas predictivas.
+
+| Tabla | Grano | Campos clave | Métricas |
+| --- | --- | --- | --- |
+| `silver.inei_population_youth_region` | Año y región | `anio`, `region` | `poblacion_total`, rangos de población joven, `share_15_24_total` |
+| `silver.inei_demographic_indicators_region` | Año y región | `anio`, `region` | tasas de natalidad, fecundidad, esperanza de vida, mortalidad infantil, migración y crecimiento |
+| `silver.inei_pobreza_departamental` | Año y región | `anio`, `region` | `pobreza_monetaria_pct` |
+| `silver.inei_internet_acceso_region` | Año y región | `anio`, `region` | `internet_acceso_pct` |
+
+Todas las tablas Silver INEI incluyen `source_system`, `source_dataset`, `extraction_date`, `ingestion_timestamp` y `pipeline_run_id`.
+
+Las reglas iniciales de calidad validan `anio` y `region` no nulos, rangos numéricos aceptados, valores de población no negativos y claves duplicadas por `(anio, region)`.
+
+---
+
+# 14. Campos derivados y enriquecimientos previstos
 
 ## `tipo_beca_normalizado`
 
@@ -829,7 +847,7 @@ Debe controlarse división entre cero.
 
 ---
 
-# 14. Capas Gold esperadas
+# 15. Capas Gold esperadas
 
 Las vistas Gold estarán orientadas al consumo en Power BI.
 
@@ -853,7 +871,7 @@ Las vistas Gold estarán orientadas al consumo en Power BI.
 
 ---
 
-# 15. Actualización futura del diccionario
+# 16. Actualización futura del diccionario
 
 Este diccionario será actualizado conforme se implementen las capas Silver, Gold y ML. Las siguientes mejoras previstas son:
 

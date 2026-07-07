@@ -12,17 +12,17 @@ Este runbook resume la ejecucion tecnica E2E de PRONABEC Cloud BI Platform en Go
 La secuencia operativa recomendada es:
 
 ```text
-build image
-deploy Cloud Run Jobs
-run discovery
-run build-plan
-run run-plan
-run finalize
-validate Bronze
-run Dataflow
-publish Gold
-validate Gold
-run quality
+construir imagen
+desplegar Cloud Run Jobs
+ejecutar discovery
+ejecutar build-plan
+ejecutar run-plan
+ejecutar finalize
+validar Bronze
+ejecutar Dataflow
+publicar Gold
+validar Gold
+ejecutar calidad
 ```
 
 La extraccion PRONABEC fue optimizada calibrando `page_size` por endpoint. La carga estimada de paginacion bajo de 6,623 requests a 122 requests, con fallbacks por dataset para endpoints publicos inestables.
@@ -44,9 +44,9 @@ Composer orquesta el flujo plan-driven de PRONABEC y aprovecha paralelismo contr
 
 ```text
 init_run
-  -> pronabec_api_bronze | mef_bronze | pronabec_reports_bronze
+  -> pronabec_api_bronze | mef_bronze | pronabec_reports_bronze | inei_reports_bronze
   -> validate_bronze_manifests
-  -> pronabec_api_silver | mef_silver | pronabec_reports_silver
+  -> pronabec_api_silver | mef_silver | pronabec_reports_silver | inei_reports_silver
   -> publish_gold_views
   -> validate_gold_contracts
   -> run_quality_checks
@@ -57,7 +57,9 @@ Composer no hardcodea rangos. `plan.json` es la fuente de verdad para los chunks
 
 Bronze PRONABEC descarga todos los datasets `bronze_enabled=true`. Silver solo transforma datasets `silver_enabled=true`. `required_for_e2e` queda como metadata operativa y no recorta discovery, build-plan, run-plan ni finalize.
 
-`bronze-manifest-validation-job` es la barrera obligatoria antes de Silver. Gold espera a que terminen las tres ramas Silver y Quality corre al final.
+`bronze-manifest-validation-job` es la barrera obligatoria antes de Silver. Gold espera a que terminen las tres ramas Silver y Calidad corre al final.
+
+El contexto regional INEI se incluye como una rama de reportes manuales/externos. El job de preparacion copia los archivos CSV desde `landing/inei_reports` hacia `bronze/inei_reports/{dataset}/extraction_date=YYYY-MM-DD/data.csv`, escribe `manifest.json` y `_SUCCESS`, y luego el job parametrizable `dataflow-inei-report-job` promueve cada dataset a `silver.inei_*`. Esta rama alimenta Calidad, pero no modifica salidas Gold predictivas en este PR.
 
 Composer paraleliza launchers de Cloud Run/Dataflow con `max_active_runs=1` y `max_active_tasks=8`. Los workers de cada Dataflow job se controlan aparte con la configuracion Dataflow existente, como `DATAFLOW_MAX_NUM_WORKERS`; no se asignan workers por dataset desde el DAG.
 
@@ -202,6 +204,37 @@ scripts/run_pronabec_reports_dataflow.sh
 
 El script lista `gs://${GCS_BUCKET_NAME}/bronze/pronabec_reports/`, verifica `data.csv` por reporte y ejecuta `dataflow-pronabec-report-job` con overrides por dataset. Composer, cuando se use para reports, debe pasar esos mismos parametros por cada reporte. Si aparece `placeholder_path`, la causa es una ejecucion mal parametrizada del launcher, no un problema del worker Dataflow.
 
+### Contexto regional INEI
+
+`inei-stage-reports-job` ejecuta:
+
+```bash
+python -m tools.stage_inei_reports --strict --overwrite
+```
+
+Archivos esperados en Landing:
+
+```text
+landing/inei_reports/inei_population_youth_region.csv
+landing/inei_reports/inei_demographic_indicators_region.csv
+landing/inei_reports/inei_pobreza_departamental_2012_2025.csv
+landing/inei_reports/inei_internet_acceso_region_2012_2025_final.csv
+```
+
+Para probar la preparacion manualmente sin desplegar nada nuevo:
+
+```bash
+python -m tools.stage_inei_reports \
+  --bucket "$GCS_BUCKET_NAME" \
+  --landing-prefix "$INEI_REPORTS_LANDING_PREFIX" \
+  --bronze-prefix "$INEI_REPORTS_BRONZE_PREFIX" \
+  --extraction-date "$(date +%F)" \
+  --strict \
+  --overwrite
+```
+
+No lance Dataflow INEI manualmente salvo que el Cloud Run Job ya esté desplegado y la ejecución tenga overrides reales para `SOURCE_DATASET`, `BRONZE_INPUT_PATH` y `BQ_OUTPUT_TABLE`.
+
 ## 6. Service account worker de Dataflow
 
 Los Cloud Run Jobs `dataflow-*` actuan como launchers. Los workers de Dataflow deben usar `DATAFLOW_SERVICE_ACCOUNT`, no la Compute default service account.
@@ -295,10 +328,12 @@ Ejemplo de `dag_run.conf`:
   "run_pronabec_finalize": true,
   "run_mef": true,
   "run_pronabec_reports_staging": true,
+  "run_inei_reports_staging": true,
   "run_bronze_manifest_validation": true,
   "run_dataflow_pronabec": true,
   "run_dataflow_mef": true,
   "run_dataflow_reports": true,
+  "run_dataflow_inei": true,
   "run_gold_publish": true,
   "run_gold_validation": true,
   "run_quality": true
@@ -309,7 +344,7 @@ Ejemplo de `dag_run.conf`:
 
 Si cambian modulos Python usados por launchers o `requirements.txt`, reconstruya la imagen launcher. Si cambian transforms, `requirements-dataflow-worker.txt` o packaging de Dataflow, reconstruya la imagen worker. Si solo cambian DAG, configuracion o documentacion, suba los artefactos a Composer y actualice las variables Airflow.
 
-### Quality checks
+### Controles de calidad
 
 `quality-checks-job` queda desplegado con los argumentos requeridos por `pipelines.quality_checks`: `--project-id`, `--silver-dataset`, `--gold-dataset`, `--audit-dataset`, `--pipeline-run-id` y `--fail-on-error`. Para reintentar solo calidad despues de Gold validate:
 

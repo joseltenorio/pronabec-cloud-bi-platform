@@ -10,6 +10,7 @@ Este documento describe las fuentes de datos consideradas para Project Cloud BI 
 | -------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------- | ----------------------- |
 | PRONABEC Datos Abiertos    | Portal público con endpoints JSON paginados         | Becas, convocatorias, notas, pérdida de becas, ubigeo y conceptos de pago | Extracción batch con Python                  | Bronze en Cloud Storage |
 | MEF Consulta Amigable      | Portal público                                      | Presupuesto asignado y ejecución presupuestal                             | Extracción batch mediante scraper controlado | Bronze en Cloud Storage |
+| Contexto regional INEI     | Archivos CSV manuales/externos en Landing de Cloud Storage | Contexto regional de población, pobreza, acceso a internet e indicadores demográficos | Preparación controlada de Landing a Bronze   | Bronze en Cloud Storage |
 | Datos geográficos / ubigeo | Dataset público de referencia o derivado de fuentes | Análisis territorial y normalización geográfica                           | Extracción batch o carga controlada          | Silver en BigQuery      |
 
 ---
@@ -348,9 +349,22 @@ Get-Content tmp\bronze\mef\presupuesto_producto\extraction_date=2026-06-14\extra
 
 ---
 
+## Fuente 3: Contexto regional INEI
+
+Los archivos de contexto regional INEI se manejan como reportes CSV manuales/externos ya cargados en `landing/inei_reports` en Cloud Storage. El pipeline operacional promueve esos archivos hacia rutas Bronze particionadas, los transforma a tablas Silver tipadas en BigQuery y los valida mediante el marco compartido de calidad.
+
+Datasets integrados:
+
+- `inei_population_youth_region`
+- `inei_demographic_indicators_region`
+- `inei_pobreza_departamental`
+- `inei_internet_acceso_region`
+
+Esta fuente se documenta en detalle en [Contexto regional INEI](data_sources/inei_regional_context.md). Las vistas Gold predictivas, modelos BigQuery ML, puntaje regional, escenarios presupuestales e integración MINEDU quedan fuera del alcance de esta rama del pipeline.
+
 ---
 
-## Fuente 3: Datos geográficos y ubigeo
+## Fuente 4: Datos geográficos y ubigeo
 
 ### Descripción
 
