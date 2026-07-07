@@ -38,10 +38,7 @@ jobs:
         run: bash -n scripts/*.sh
 
       - name: Generate temporary BigQuery DDL
-        run: |
-          python tools/generate_bigquery_ddl.py \
-            --project-id "$GCP_PROJECT_ID" \
-            --bucket "$GCS_BUCKET_NAME"
+        run: ./scripts/generate_bigquery_ddl.sh --ci
 
       - name: Pytest
         run: python -m pytest -q

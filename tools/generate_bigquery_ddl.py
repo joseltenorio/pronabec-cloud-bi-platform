@@ -10,6 +10,9 @@ BUCKET_ENV_VAR = "GCS_BUCKET_NAME"
 DEFAULT_OUTPUT_DIR = "build/generated/sql"
 DEFAULT_BRONZE_SCHEMAS_DIR = "config/schemas/bronze"
 DEFAULT_SILVER_SCHEMAS_DIR = "config/schemas/silver"
+GENERATION_MODE_CI = "ci"
+GENERATION_MODE_DEPLOY = "deploy"
+GENERATION_MODES = {GENERATION_MODE_CI, GENERATION_MODE_DEPLOY}
 
 HEADER = """-- ============================================================================
 -- Project Cloud BI Platform
@@ -146,6 +149,7 @@ def render_bronze_table(
     project_id: str,
     bucket: str,
     bronze_extraction_date: str | None = None,
+    generation_mode: str = GENERATION_MODE_DEPLOY,
 ) -> str:
     columns = render_columns(schema)
 
@@ -155,11 +159,15 @@ def render_bronze_table(
         else:
             slice_name = dataset.replace("presupuesto_mef_", "presupuesto_")
 
-        if not bronze_extraction_date:
+        if not bronze_extraction_date and generation_mode == GENERATION_MODE_DEPLOY:
             raise ValueError(
                 f"MEF external table DDL for '{dataset}' requires --bronze-extraction-date to be BigQuery-compatible."
             )
-        date_folder = f"extraction_date={bronze_extraction_date}" if bronze_extraction_date else "extraction_date=*"
+        date_folder = (
+            f"extraction_date={bronze_extraction_date}"
+            if bronze_extraction_date
+            else "extraction_date=${BRONZE_EXTRACTION_DATE}"
+        )
         table_name = f"{project_id}.bronze.mef_{slice_name}_raw"
         source_uri = f"gs://{bucket}/bronze/mef/{slice_name}/{date_folder}/year=*/data.csv"
         options = f"""OPTIONS (
@@ -220,7 +228,13 @@ def generate_ddl(
     bronze_schemas_dir: Path,
     silver_schemas_dir: Path,
     bronze_extraction_date: str | None = None,
+    generation_mode: str = GENERATION_MODE_DEPLOY,
 ) -> tuple[Path, Path]:
+    if generation_mode not in GENERATION_MODES:
+        raise ValueError(
+            f"Invalid generation_mode={generation_mode!r}. Expected one of {sorted(GENERATION_MODES)}."
+        )
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
     bronze_statements = []
@@ -233,6 +247,7 @@ def generate_ddl(
                 project_id=project_id,
                 bucket=bucket,
                 bronze_extraction_date=bronze_extraction_date,
+                generation_mode=generation_mode,
             )
         )
 
@@ -283,6 +298,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Fecha de extracción Bronze para URIs externas (formato YYYY-MM-DD). También se puede definir con BRONZE_EXTRACTION_DATE.",
     )
+    parser.add_argument(
+        "--generation-mode",
+        choices=sorted(GENERATION_MODES),
+        default=GENERATION_MODE_DEPLOY,
+        help="Modo de generación: deploy exige DDL operativo; ci permite templates estáticos sin fecha runtime.",
+    )
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--bronze-schemas-dir", default=DEFAULT_BRONZE_SCHEMAS_DIR)
     parser.add_argument("--silver-schemas-dir", default=DEFAULT_SILVER_SCHEMAS_DIR)
@@ -319,6 +340,7 @@ def main() -> None:
         bronze_schemas_dir=Path(args.bronze_schemas_dir),
         silver_schemas_dir=Path(args.silver_schemas_dir),
         bronze_extraction_date=args.bronze_extraction_date,
+        generation_mode=args.generation_mode,
     )
 
     print(f"Generated {bronze_output}")
