@@ -13,8 +13,9 @@ from pipelines.quality_checks import scope_silver_query_to_current_run, split_sq
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SQL_FILE_PATH = PROJECT_ROOT / "sql" / "quality" / "data_quality_checks.sql"
 SILVER_SCHEMAS_DIR = PROJECT_ROOT / "config" / "schemas" / "silver"
+ML_SCHEMAS_DIR = PROJECT_ROOT / "config" / "schemas" / "ml"
 GOLD_DDL_PATH = PROJECT_ROOT / "sql" / "ddl" / "create_gold_views.sql"
-EXPECTED_QUALITY_CHECKS = 70
+EXPECTED_QUALITY_CHECKS = 81
 QUALITY_OUTPUT_COLUMNS = {
     "check_id",
     "layer",
@@ -111,12 +112,18 @@ def _extract_literal_alias(query: str, alias: str) -> str:
     return match.group(1)
 
 
-def _load_silver_schemas() -> dict[str, set[str]]:
+def _load_schemas(schema_dir: Path) -> dict[str, set[str]]:
     schemas = {}
-    for path in SILVER_SCHEMAS_DIR.glob("*.json"):
+    for path in schema_dir.glob("*.json"):
         table_name = path.name.replace("_schema.json", "")
         fields = json.loads(path.read_text(encoding="utf-8"))
         schemas[table_name] = {field["name"] for field in fields}
+    return schemas
+
+
+def _load_all_layer_schemas() -> dict[str, set[str]]:
+    schemas = _load_schemas(SILVER_SCHEMAS_DIR)
+    schemas.update(_load_schemas(ML_SCHEMAS_DIR))
     return schemas
 
 
@@ -132,11 +139,20 @@ def _extract_gold_views() -> set[str]:
 
 
 def _extract_target_refs(query: str) -> list[tuple[str, str]]:
-    return re.findall(
+    refs = re.findall(
         r"`\{project_id\}\.\{(silver|gold)_dataset\}\.([A-Za-z0-9_]+)`",
         query,
         flags=re.IGNORECASE,
     )
+    refs.extend(
+        ("ml", table_name)
+        for table_name in re.findall(
+            r"`\{project_id\}\.\{ml_dataset\}\.([A-Za-z0-9_]+)`",
+            query,
+            flags=re.IGNORECASE,
+        )
+    )
+    return refs
 
 
 def _strip_literals_and_table_refs(sql: str) -> str:
@@ -191,6 +207,7 @@ def test_sql_contains_required_placeholders():
     content = SQL_FILE_PATH.read_text(encoding="utf-8")
     assert "{project_id}" in content, "Falta el placeholder {project_id} en el archivo SQL."
     assert "{silver_dataset}" in content, "Falta el placeholder {silver_dataset} en el archivo SQL."
+    assert "{ml_dataset}" in content, "Falta el placeholder {ml_dataset} en el archivo SQL."
 
 
 def test_sql_does_not_contain_hardcoded_project_ids():
@@ -311,6 +328,7 @@ def test_required_tables_are_covered():
         "inei_demographic_indicators_region",
         "inei_pobreza_departamental",
         "inei_internet_acceso_region",
+        "region_context_features",
     }
     
     for t in required_tables:
@@ -413,7 +431,7 @@ def test_no_global_negative_mef_restriction():
 
 
 def test_checks_reference_existing_physical_targets():
-    silver_schemas = _load_silver_schemas()
+    all_schemas = _load_all_layer_schemas()
     gold_views = _extract_gold_views()
 
     for index, query in enumerate(get_queries(), start=1):
@@ -423,8 +441,8 @@ def test_checks_reference_existing_physical_targets():
 
         assert refs, f"El check {index} ({check_id}) no referencia una tabla o vista objetivo."
         for dataset_kind, target_name in refs:
-            if dataset_kind.lower() == "silver":
-                assert target_name in silver_schemas, (
+            if dataset_kind.lower() in {"silver", "ml"}:
+                assert target_name in all_schemas, (
                     f"El check {index} ({check_id}) referencia una tabla Silver inexistente: {target_name}"
                 )
             elif dataset_kind.lower() == "gold":
@@ -441,7 +459,7 @@ def test_quality_sql_does_not_reference_legacy_colegios_columns():
 
 
 def test_pronabec_colegios_elegibles_checks_split_critical_and_completeness_fields():
-    silver_schemas = _load_silver_schemas()
+    silver_schemas = _load_schemas(SILVER_SCHEMAS_DIR)
     colegios_columns = silver_schemas["pronabec_colegios_elegibles"]
     critical_query = next(
         query
@@ -534,8 +552,31 @@ def test_inei_quality_checks_are_present_and_parameterized():
         assert f"`{{project_id}}.{{silver_dataset}}.{table}`" in content
 
 
+def test_ml_quality_checks_are_present_and_parameterized():
+    content = SQL_FILE_PATH.read_text(encoding="utf-8")
+
+    expected_checks = [
+        "ml_region_context_features_not_empty",
+        "ml_region_context_features_unique_grain",
+        "ml_region_context_features_year_range",
+        "ml_region_context_features_percentage_ranges",
+        "ml_region_context_features_nonnegative_counts",
+        "ml_region_context_features_completeness_score_range",
+        "ml_region_context_features_feature_quality_flag_allowed_values",
+        "ml_region_context_features_source_priority_allowed_values",
+        "ml_region_context_features_critical_regions_present",
+        "ml_region_context_features_no_legacy_region_variants",
+        "ml_region_context_features_synthetic_metadata_consistency",
+    ]
+    for check_id in expected_checks:
+        assert check_id in content
+
+    assert "{project_id}.{ml_dataset}.region_context_features" in content
+    assert "{project_id}.ml" not in content
+
+
 def test_silver_checks_use_declared_schema_columns_for_simple_predicates():
-    silver_schemas = _load_silver_schemas()
+    all_schemas = _load_all_layer_schemas()
 
     for index, query in enumerate(get_queries(), start=1):
         clean_query = _clean_query(query)
@@ -543,16 +584,16 @@ def test_silver_checks_use_declared_schema_columns_for_simple_predicates():
         layer = _extract_literal_alias(clean_query, "layer")
         table_name = _extract_literal_alias(clean_query, "table_name")
 
-        if layer != "silver":
+        if layer not in {"silver", "ml"}:
             continue
 
-        schema_columns = silver_schemas[table_name]
+        schema_columns = all_schemas[table_name]
         referenced_columns = _extract_simple_column_references(clean_query)
         unknown_columns = sorted(referenced_columns - schema_columns)
 
         assert not unknown_columns, (
             f"El check {index} ({check_id}) referencia columnas no declaradas "
-            f"en config/schemas/silver/{table_name}_schema.json: {unknown_columns}"
+            f"en el schema de {layer}.{table_name}: {unknown_columns}"
         )
 
 
