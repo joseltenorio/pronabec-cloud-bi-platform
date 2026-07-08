@@ -834,6 +834,42 @@ La primera capa del módulo predictivo vive en el dataset `ml`, pero no implemen
 
 `ml.region_context_features` no es un modelo ML. Es una tabla/vista de features regionales construida para que, en la siguiente rama, se puedan derivar scores, escenarios y simulaciones sin volver a rehacer la normalización territorial.
 
+## `ml.region_priority_scores`
+
+| Campo | Tipo esperado | Descripción |
+| --- | --- | --- |
+| anio | INTEGER | Año de referencia del score. |
+| region | STRING | Región canónica de presentación. |
+| region_canonical | STRING | Clave regional canónica unificada. |
+| pobreza_monetaria_pct | NUMERIC/FLOAT64 | Pobreza monetaria de contexto. |
+| poblacion_15_24 | INTEGER | Población joven de 15 a 24 años. |
+| poblacion_15_29 | INTEGER | Población joven de 15 a 29 años. |
+| poblacion_joven_pct | NUMERIC/FLOAT64 | Participación de población joven. |
+| matricula_5to_secundaria | INTEGER | Matrícula de quinto de secundaria. |
+| ruralidad_educativa_pct | NUMERIC/FLOAT64 | Ruralidad educativa. |
+| internet_acceso_pct | NUMERIC/FLOAT64 | Acceso a internet. |
+| brecha_digital_pct | NUMERIC/FLOAT64 | Brecha digital. |
+| pobreza_score | NUMERIC/FLOAT64 | Componente normalizado de pobreza. |
+| demanda_educativa_score | NUMERIC/FLOAT64 | Componente normalizado de demanda educativa. |
+| poblacion_joven_score | NUMERIC/FLOAT64 | Componente normalizado de población joven. |
+| ruralidad_score | NUMERIC/FLOAT64 | Componente normalizado de ruralidad educativa. |
+| brecha_digital_score | NUMERIC/FLOAT64 | Componente normalizado de brecha digital. |
+| priority_score | NUMERIC/FLOAT64 | Score final entre 0 y 1. |
+| priority_rank | INTEGER | Ranking anual de prioridad. |
+| priority_tier | STRING | Banda interpretable de prioridad. |
+| score_version | STRING | Versión del score. |
+| score_method | STRING | Método de cálculo. |
+| feature_completeness_score | NUMERIC/FLOAT64 | Completitud del contexto. |
+| feature_quality_flag | STRING | Bandera de calidad heredada. |
+| source_priority | STRING | Prioridad o mezcla de fuentes. |
+| has_synthetic_values | BOOLEAN | Indica si existen valores sintéticos. |
+| synthetic_fields | STRING | Campos sintéticos o imputados. |
+| created_at | TIMESTAMP | Timestamp de materialización o consulta. |
+
+### Consideración metodológica
+
+`ml.region_priority_scores` no es una predicción individual ni un modelo causal. Es un score explicable y ponderado sobre contexto regional.
+
 ---
 
 # 15. Campos derivados y enriquecimientos previstos
@@ -908,6 +944,7 @@ Las vistas Gold estarán orientadas al consumo en Power BI.
 | gold.vw_desercion_por_convocatoria | Pérdida de becas por convocatoria                        | Página Deserción             |
 | gold.vw_presupuesto_vs_becas       | Relación entre presupuesto y cobertura                   | Página Análisis Ejecutivo    |
 | gold.vw_riesgo_desercion           | Indicadores o predicciones de riesgo académico/deserción | Página Riesgo o ML           |
+| gold.vw_predictive_region_priority_scores | Score regional explicable para priorización           | Página Prioridad Regional    |
 
 ## Reglas generales para Gold
 

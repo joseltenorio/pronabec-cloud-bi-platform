@@ -10,7 +10,7 @@ La capa Gold convierte los datos integrados y estructurados de la capa Silver en
 La publicación de estas vistas se ejecuta de forma idempotente desde Cloud Run mediante `pipelines.publish_gold_views`, y su contrato operativo se valida con `pipelines.validate_gold` antes de que Composer permita continuar con calidad y consumo downstream.
 
 **Reglas de oro de la capa Gold:**
-- **Consumo exclusivo de Silver:** Las vistas Gold leen únicamente desde la capa Silver (`{project_id}.{silver_dataset}`). Nunca consumen datos crudos de Bronze, ni archivos locales manuales (`data/manual`) o temporales (`tmp`).
+- **Consumo controlado de capas curadas:** Las vistas Gold clásicas leen desde Silver (`{project_id}.{silver_dataset}`). La salida predictiva regional nueva se publica desde el score curado en `ml` y se expone sin recalcular en Gold.
 - **No duplicación de limpieza:** Gold no realiza tareas de limpieza, tipado fuerte, conversión de formatos (guiones, nulos, coma decimal), normalización de columnas anchas o canonización. Ese trabajo pertenece estrictamente a la capa Silver / Dataflow.
 - **Grano e integridad:** No se deben realizar joins fila a fila que crucen granularidades incompatibles. Gold unifica indicadores de grano diverso en formato largo (`UNION ALL`) o mediante agregaciones intermedias seguras.
 
@@ -144,6 +144,14 @@ La publicación de estas vistas se ejecuta de forma idempotente desde Cloud Run 
 * **Fuentes Silver:** `pronabec_report_beca18_becas_otorgadas_modalidad_anual` (por año) y `presupuesto_mef` (por año).
 * **Grano:** Año.
 * **KPIs calculados:** `total_becas_otorgadas`, `total_pia`, `total_pim`, `total_devengado`, `avance_presupuestal_pct`, `costo_promedio_por_beca`.
+
+### 16. `vw_predictive_region_priority_scores`
+* **Objetivo:** Exponer para Power BI el score regional explicable de prioridad predictiva sin recalcularlo.
+* **Fuente curada:** `ml.region_priority_scores`.
+* **Grano:** Año + región canónica.
+* **KPIs calculados:** `priority_score`, `priority_score_pct`, `priority_rank`, `priority_tier`.
+* **Uso en Power BI:** Ranking regional, semáforos de prioridad y mapas temáticos.
+* **Advertencias metodológicas:** La vista no es causal ni individual; solo resume contexto regional ponderado.
 
 ---
 
