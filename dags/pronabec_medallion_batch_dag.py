@@ -577,6 +577,19 @@ def chain_tasks_in_batches(upstream, tasks: list, *, batch_size: int, gate_prefi
         previous = batch_done
 
 
+def chain_task_batches(tasks: list, *, batch_size: int, gate_prefix: str) -> None:
+    if not tasks:
+        return
+
+    previous_batch_done = None
+    for index, batch in enumerate(_chunk_tasks(tasks, batch_size), start=1):
+        batch_done = EmptyOperator(task_id=f"{gate_prefix}_batch_{index}_done")
+        if previous_batch_done is not None:
+            previous_batch_done >> batch
+        batch >> batch_done
+        previous_batch_done = batch_done
+
+
 def render_gcs_path(template: str, **values: str) -> str:
     return template.format(**values)
 
@@ -838,7 +851,11 @@ with DAG(
                     },
                 )
             )
-        chain_tasks(report_tasks)
+        chain_task_batches(
+            report_tasks,
+            batch_size=7,
+            gate_prefix="pronabec_reports_silver",
+        )
 
     with TaskGroup(group_id="inei_reports_silver") as inei_reports_silver:
         inei_tasks = []

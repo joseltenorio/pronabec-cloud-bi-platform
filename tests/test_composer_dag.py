@@ -348,7 +348,12 @@ def test_silver_dataflow_groups_are_parallel_and_complete() -> None:
     }
     assert len(dag_mod.REPORT_DATASETS) == 23
     assert "all_silver_tasks" not in content
-    assert "chain_tasks(report_tasks)" in content
+    assert "def chain_task_batches(tasks: list, *, batch_size: int, gate_prefix: str) -> None:" in content
+    assert "chain_task_batches(" in content
+    assert "report_tasks," in content
+    assert "batch_size=7" in content
+    assert 'gate_prefix="pronabec_reports_silver"' in content
+    assert "chain_tasks(report_tasks)" not in content
     assert "chain_tasks(mef_tasks)" not in content
     assert "chain_tasks(pronabec_api_tasks)" not in content
 
@@ -359,13 +364,38 @@ def test_shared_cloud_run_finalize_runs_in_limited_batches() -> None:
     assert "def chain_tasks(tasks: list) -> None:" in content
     assert "for upstream, downstream in zip(tasks, tasks[1:]):" in content
     assert "def _chunk_tasks(tasks: list, batch_size: int) -> list[list]:" in content
+    assert "def chain_task_batches(tasks: list, *, batch_size: int, gate_prefix: str) -> None:" in content
     assert "batch_done = EmptyOperator(task_id=f\"{gate_prefix}_batch_{index}_done\")" in content
     assert "previous >> batch" in content
     assert "batch >> batch_done" in content
     assert "chain_tasks_in_batches(run_pronabec_extraction_plan, pronabec_finalize_tasks, batch_size=5, gate_prefix=\"finalize_pronabec\")" not in content
     assert "chain_tasks(report_stage_tasks)" in content
-    assert "chain_tasks(report_tasks)" in content
+    assert "chain_task_batches(" in content
+    assert "report_tasks," in content
+    assert "batch_size=7" in content
+    assert 'gate_prefix="pronabec_reports_silver"' in content
+    assert "chain_tasks(report_tasks)" not in content
     assert "chain_tasks(inei_tasks)" in content
+
+
+def test_pronabec_report_dataflow_runs_in_limited_batches() -> None:
+    content = _read_dag_source()
+
+    assert 'TaskGroup(group_id="pronabec_reports_silver")' in content
+    assert "chain_task_batches(" in content
+    assert "report_tasks," in content
+    assert "batch_size=7" in content
+    assert 'gate_prefix="pronabec_reports_silver"' in content
+    assert "chain_tasks(report_tasks)" not in content
+    assert "chain_tasks(report_stage_tasks)" in content
+    assert "chain_tasks(inei_tasks)" in content
+    assert "chain_tasks(mef_tasks)" not in content
+    assert "chain_tasks(pronabec_api_tasks)" not in content
+    assert "chain_tasks(pronabec_finalize_tasks)" not in content
+    assert "validate_bronze_manifests >> silver_parallel" in content
+    assert "silver_parallel >> publish_gold_views" in content
+    assert "chain_tasks(report_stage_tasks)" in content
+    assert "bronze_parallel >> validate_bronze_manifests" in content
 
 
 def test_dag_contains_inei_staging_and_dataflow_tasks() -> None:

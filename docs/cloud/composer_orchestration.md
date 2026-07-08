@@ -37,6 +37,8 @@ MEF y PRONABEC reports corren como ramas Bronze independientes en paralelo con P
 
 Despues de la validacion Bronze, Composer lanza en paralelo las ramas Silver/Dataflow: PRONABEC API, MEF y PRONABEC reports. `publish_gold_views` espera que terminen las tres ramas Silver; luego corren `validate_gold_contracts` y `run_quality_checks`.
 
+Los Dataflow de PRONABEC reports (`bronze_to_silver_pronabec_reports_*`) se ejecutan con paralelismo controlado en lotes de 7. Esto evita serializar los 23 reportes uno por uno, pero limita la concurrencia para no saturar Composer/Dataflow.
+
 ## Responsabilidades PRONABEC
 
 Las politicas declarativas separan tres conceptos:
