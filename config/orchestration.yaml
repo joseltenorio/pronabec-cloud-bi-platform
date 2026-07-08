@@ -326,3 +326,5 @@ gold:
       query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_predictive_region_cluster_profiles`"
     - name: vw_predictive_budget_forecast
       query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_predictive_budget_forecast`"
+    - name: vw_predictive_region_allocation_scenarios
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_predictive_region_allocation_scenarios`"

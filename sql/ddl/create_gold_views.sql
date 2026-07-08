@@ -662,3 +662,39 @@ SELECT
   model_name,
   forecast_version
 FROM `{project_id}.{ml_dataset}.budget_forecast_results`;
+
+
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_predictive_region_allocation_scenarios` AS
+SELECT
+  anio,
+  region,
+  region_canonical,
+  scenario_id,
+  scenario_name,
+  scenario_type,
+  allocation_method,
+  budget_multiplier,
+  scholarship_multiplier,
+  priority_score_v2,
+  context_priority_score,
+  coverage_gap_score,
+  primera_generacion_score,
+  poverty_score,
+  demand_score,
+  population_score,
+  digital_gap_score,
+  rurality_score,
+  scenario_raw_score,
+  allocation_weight,
+  allocation_pct,
+  scenario_rank,
+  baseline_rank_v2,
+  rank_change_vs_v2,
+  reference_forecast_budget_amount,
+  scenario_budget_amount,
+  estimated_budget_amount,
+  estimated_scholarships,
+  scenario_version,
+  scenario_notes,
+  created_at
+FROM `{project_id}.{ml_dataset}.region_allocation_scenarios`;
