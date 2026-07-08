@@ -788,7 +788,55 @@ Las reglas iniciales de calidad validan `anio` y `region` no nulos, rangos numé
 
 ---
 
-# 14. Campos derivados y enriquecimientos previstos
+# 14. Fundación regional ML
+
+La primera capa del módulo predictivo vive en el dataset `ml`, pero no implementa todavía modelos. Su función es normalizar contexto regional y dejar lista la base para scoring y simulación.
+
+## `ml.dim_region_mapping`
+
+| Campo | Tipo esperado | Descripción |
+| --- | --- | --- |
+| source_region | STRING | Nombre regional observado en la fuente. |
+| region_canonical | STRING | Región canónica estandarizada. |
+| region_scope | STRING | Alcance territorial de la variante. |
+| mapping_rule | STRING | Regla aplicada para consolidar la variante. |
+| is_aggregated_region | BOOLEAN | Indica si la región canónica consolida varias variantes. |
+| notes | STRING | Observaciones metodológicas o de trazabilidad. |
+
+## `ml.region_context_features`
+
+| Campo | Tipo esperado | Descripción |
+| --- | --- | --- |
+| anio | INTEGER | Año de referencia. |
+| region | STRING | Región canónica de presentación. |
+| region_canonical | STRING | Clave canónica unificada. |
+| pobreza_monetaria_pct | NUMERIC/FLOAT64 | Incidencia de pobreza monetaria. |
+| poblacion_total | INTEGER | Población total regional. |
+| poblacion_15_24 | INTEGER | Población joven de 15 a 24 años. |
+| poblacion_15_29 | INTEGER | Población joven de 15 a 29 años. |
+| poblacion_joven_pct | NUMERIC/FLOAT64 | Participación de población joven. |
+| matricula_5to_secundaria | INTEGER | Matrícula total de quinto de secundaria. |
+| matricula_5to_publica | INTEGER | Matrícula pública de quinto de secundaria. |
+| matricula_5to_privada | INTEGER | Matrícula privada de quinto de secundaria. |
+| matricula_5to_urbana | INTEGER | Matrícula urbana de quinto de secundaria. |
+| matricula_5to_rural | INTEGER | Matrícula rural de quinto de secundaria. |
+| ruralidad_educativa_pct | NUMERIC/FLOAT64 | Porcentaje rural de la matrícula de quinto. |
+| internet_acceso_pct | NUMERIC/FLOAT64 | Acceso regional a internet. |
+| brecha_digital_pct | NUMERIC/FLOAT64 | Brecha digital estimada. |
+| feature_completeness_score | NUMERIC/FLOAT64 | Proporción de campos clave no nulos. |
+| feature_quality_flag | STRING | Etiqueta resumida de calidad. |
+| has_synthetic_values | BOOLEAN | Indica si se sintetizó algún valor. |
+| synthetic_fields | STRING | Lista de campos sintéticos o imputados. |
+| source_priority | STRING | Prioridad o combinación de fuentes. |
+| created_at | TIMESTAMP | Timestamp de materialización o consulta. |
+
+### Consideración metodológica
+
+`ml.region_context_features` no es un modelo ML. Es una tabla/vista de features regionales construida para que, en la siguiente rama, se puedan derivar scores, escenarios y simulaciones sin volver a rehacer la normalización territorial.
+
+---
+
+# 15. Campos derivados y enriquecimientos previstos
 
 ## `tipo_beca_normalizado`
 
