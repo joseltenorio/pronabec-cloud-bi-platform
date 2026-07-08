@@ -227,16 +227,16 @@ DATAFLOW_COMMON_ARGS=(
 )
 
 ARGS_PRONABEC_DISCOVERY=(-m pipelines.discover_pronabec)
-upsert_cloud_run_job "$PRONABEC_DISCOVERY_JOB_NAME" "Discovery de datasets PRONABEC para planificacion particionada" ARGS_PRONABEC_DISCOVERY EMPTY_ENV
+upsert_cloud_run_job "$PRONABEC_DISCOVERY_JOB_NAME" "Discovery de datasets PRONABEC para planificacion particionada" ARGS_PRONABEC_DISCOVERY EMPTY_ENV 10800
 
 ARGS_PRONABEC_BUILD_PLAN=(-m pipelines.build_pronabec_extraction_plan)
-upsert_cloud_run_job "$PRONABEC_BUILD_PLAN_JOB_NAME" "Construccion del plan de extraccion PRONABEC particionado" ARGS_PRONABEC_BUILD_PLAN EMPTY_ENV
+upsert_cloud_run_job "$PRONABEC_BUILD_PLAN_JOB_NAME" "Construccion del plan de extraccion PRONABEC particionado" ARGS_PRONABEC_BUILD_PLAN EMPTY_ENV 7200
 
 ARGS_PRONABEC_RUN_PLAN=(-m pipelines.run_pronabec_extraction_plan)
-upsert_cloud_run_job "$PRONABEC_RUN_PLAN_JOB_NAME" "Ejecucion del plan de chunks PRONABEC desde plan.json" ARGS_PRONABEC_RUN_PLAN EMPTY_ENV
+upsert_cloud_run_job "$PRONABEC_RUN_PLAN_JOB_NAME" "Ejecucion del plan de chunks PRONABEC desde plan.json" ARGS_PRONABEC_RUN_PLAN EMPTY_ENV 14400
 
 ARGS_PRONABEC_FINALIZE=(-m pipelines.finalize_pronabec_dataset)
-upsert_cloud_run_job "$PRONABEC_FINALIZE_DATASET_JOB_NAME" "Consolidacion final de chunks PRONABEC hacia Bronze" ARGS_PRONABEC_FINALIZE EMPTY_ENV 3600 2Gi 1
+upsert_cloud_run_job "$PRONABEC_FINALIZE_DATASET_JOB_NAME" "Consolidacion final de chunks PRONABEC hacia Bronze" ARGS_PRONABEC_FINALIZE EMPTY_ENV 7200 2Gi 1
 
 ENV_MEF_EXTRACT=(
   "MEF_SOURCE_MODE=${MEF_SOURCE_MODE}"

@@ -307,10 +307,20 @@ def test_upsert_cloud_run_job_has_memory_and_cpu_defaults():
     assert 'local cpu="${7:-1}"' in content
 
 
-def test_pronabec_finalize_job_memory_and_cpu():
+def test_pronabec_jobs_timeouts_and_resources():
     content = _read_deploy_script()
+
+    discovery_section = _section_between(content, "ARGS_PRONABEC_DISCOVERY", "ARGS_PRONABEC_BUILD_PLAN")
+    assert "ARGS_PRONABEC_DISCOVERY EMPTY_ENV 10800" in discovery_section
+
+    build_plan_section = _section_between(content, "ARGS_PRONABEC_BUILD_PLAN", "ARGS_PRONABEC_RUN_PLAN")
+    assert "ARGS_PRONABEC_BUILD_PLAN EMPTY_ENV 7200" in build_plan_section
+
+    run_plan_section = _section_between(content, "ARGS_PRONABEC_RUN_PLAN", "ARGS_PRONABEC_FINALIZE")
+    assert "ARGS_PRONABEC_RUN_PLAN EMPTY_ENV 14400" in run_plan_section
+
     finalize_section = _section_between(content, "ARGS_PRONABEC_FINALIZE", "ENV_MEF_EXTRACT")
-    assert '3600 2Gi 1' in finalize_section
+    assert "ARGS_PRONABEC_FINALIZE EMPTY_ENV 7200 2Gi 1" in finalize_section
 
 
 def test_dataflow_jobs_use_dedicated_worker_service_account():

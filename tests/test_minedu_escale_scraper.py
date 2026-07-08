@@ -10,7 +10,11 @@ from pipelines.scrape_minedu_escale import (
     clean_number,
     extract_total_secundaria_rows,
     normalize_grade,
+    parse_args,
+    main,
+    scrape_minedu_escale,
     scrape_year_department,
+    write_bronze_csv_to_local,
     validate_enrollment_row,
 )
 
@@ -174,3 +178,272 @@ def test_scraper_returns_expected_5_rows_for_department_year_fixture(monkeypatch
     assert rows[0]["anio"] == "2025"
     assert rows[0]["codigo_departamento"] == "25"
     assert rows[0]["source_url"].endswith("dpto=25&prov=&dre=&tipo_ambito=ambito-ubigeo")
+
+
+def test_parse_args_accepts_dry_run_and_output_dir() -> None:
+    args = parse_args(["--dry-run", "--output-dir", "tmp"])
+
+    assert args.dry_run is True
+    assert args.output_dir == "tmp"
+
+
+def test_dry_run_writes_local_csv(tmp_path: Path) -> None:
+    records = [
+        {
+            "anio": "2025",
+            "codigo_departamento": "01",
+            "region": "AMAZONAS",
+            "nivel_educativo": "SECUNDARIA",
+            "grado": "PRIMER_GRADO",
+            "matricula_total": "100",
+            "matricula_publica": "60",
+            "matricula_privada": "40",
+            "matricula_urbana": "70",
+            "matricula_rural": "30",
+            "matricula_masculino": "50",
+            "matricula_femenino": "50",
+            "source_url": "https://example.test",
+            "extraction_date": "2026-07-07",
+            "ingestion_timestamp": "2026-07-07T00:00:00+00:00",
+            "pipeline_run_id": "debug",
+        }
+    ]
+
+    output_uri = write_bronze_csv_to_local(
+        output_dir=tmp_path,
+        extraction_date="2026-07-07",
+        records=records,
+    )
+
+    csv_path = tmp_path / "bronze" / "minedu" / "escale_matricula_secundaria" / "extraction_date=2026-07-07" / "data.csv"
+    assert output_uri == str(csv_path)
+    assert csv_path.exists()
+
+    content = csv_path.read_text(encoding="utf-8").splitlines()
+    assert content[0].split(",") == [
+        "anio",
+        "codigo_departamento",
+        "region",
+        "nivel_educativo",
+        "grado",
+        "matricula_total",
+        "matricula_publica",
+        "matricula_privada",
+        "matricula_urbana",
+        "matricula_rural",
+        "matricula_masculino",
+        "matricula_femenino",
+        "source_url",
+        "extraction_date",
+        "ingestion_timestamp",
+        "pipeline_run_id",
+    ]
+
+
+def test_dry_run_does_not_call_upload_csv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        "pipelines.scrape_minedu_escale.get_pipeline_settings",
+        lambda *_args, **_kwargs: {
+            "bucket_name": None,
+            "gcs_paths": {"minedu_escale_bronze": "unused"},
+        },
+    )
+    monkeypatch.setattr(
+        "pipelines.scrape_minedu_escale.load_yaml_config",
+        lambda *_args, **_kwargs: {
+            "minedu_escale": {
+                "base_url": "https://example.test",
+                "departments": {"01": "AMAZONAS"},
+                "yearly_tables": {"2025": {"anio_param": 39, "cuadro": 733}},
+                "default_start_year": 2025,
+                "default_end_year": 2025,
+            }
+        },
+    )
+    monkeypatch.setattr(
+        "pipelines.scrape_minedu_escale.scrape_minedu_escale",
+        lambda **_kwargs: [
+            {
+                "anio": "2025",
+                "codigo_departamento": "01",
+                "region": "AMAZONAS",
+                "nivel_educativo": "SECUNDARIA",
+                "grado": "PRIMER_GRADO",
+                "matricula_total": "100",
+                "matricula_publica": "60",
+                "matricula_privada": "40",
+                "matricula_urbana": "70",
+                "matricula_rural": "30",
+                "matricula_masculino": "50",
+                "matricula_femenino": "50",
+                "source_url": "https://example.test",
+                "extraction_date": "2026-07-07",
+                "ingestion_timestamp": "2026-07-07T00:00:00+00:00",
+                "pipeline_run_id": "debug",
+            }
+        ],
+    )
+
+    def _upload_csv_should_not_run(*_args, **_kwargs):  # pragma: no cover - defensive
+        raise AssertionError("upload_csv no debe ejecutarse en dry-run")
+
+    monkeypatch.setattr("pipelines.scrape_minedu_escale.upload_csv", _upload_csv_should_not_run)
+
+    main(
+        [
+            "--extraction-date",
+            "2026-07-07",
+            "--pipeline-run-id",
+            "debug-minedu-local-2025",
+            "--start-year",
+            "2025",
+            "--end-year",
+            "2025",
+            "--dry-run",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+
+    assert (
+        tmp_path
+        / "bronze"
+        / "minedu"
+        / "escale_matricula_secundaria"
+        / "extraction_date=2026-07-07"
+        / "data.csv"
+    ).exists()
+
+
+def test_department_code_filters_single_department_via_mock(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, str]] = []
+
+    def fake_scrape_year_department(**kwargs):
+        calls.append((kwargs["codigo_departamento"], kwargs["region"]))
+        return [
+            {
+                "anio": "2025",
+                "codigo_departamento": kwargs["codigo_departamento"],
+                "region": kwargs["region"],
+                "nivel_educativo": "SECUNDARIA",
+                "grado": grado,
+                "matricula_total": "100",
+                "matricula_publica": "60",
+                "matricula_privada": "40",
+                "matricula_urbana": "70",
+                "matricula_rural": "30",
+                "matricula_masculino": "50",
+                "matricula_femenino": "50",
+                "source_url": "https://example.test",
+                "extraction_date": "2026-07-07",
+                "ingestion_timestamp": "2026-07-07T00:00:00+00:00",
+                "pipeline_run_id": "debug",
+            }
+            for grado in [
+                "PRIMER_GRADO",
+                "SEGUNDO_GRADO",
+                "TERCER_GRADO",
+                "CUARTO_GRADO",
+                "QUINTO_GRADO",
+            ]
+        ]
+
+    monkeypatch.setattr("pipelines.scrape_minedu_escale.scrape_year_department", fake_scrape_year_department)
+
+    records = scrape_minedu_escale(
+        base_url="https://example.test",
+        departments={"01": "AMAZONAS", "02": "ANCASH"},
+        yearly_tables={2025: {"anio_param": 39, "cuadro": 733}},
+        extraction_date="2026-07-07",
+        pipeline_run_id="debug",
+        start_year=2025,
+        end_year=2025,
+        department_code="01",
+    )
+
+    assert len(records) == 5
+    assert calls == [("01", "AMAZONAS")]
+
+
+def test_scrape_minedu_escale_returns_125_rows_for_all_departments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, str]] = []
+
+    def fake_scrape_year_department(**kwargs):
+        calls.append((kwargs["codigo_departamento"], kwargs["region"]))
+        return [
+            {
+                "anio": "2025",
+                "codigo_departamento": kwargs["codigo_departamento"],
+                "region": kwargs["region"],
+                "nivel_educativo": "SECUNDARIA",
+                "grado": grado,
+                "matricula_total": "100",
+                "matricula_publica": "60",
+                "matricula_privada": "40",
+                "matricula_urbana": "70",
+                "matricula_rural": "30",
+                "matricula_masculino": "50",
+                "matricula_femenino": "50",
+                "source_url": "https://example.test",
+                "extraction_date": "2026-07-07",
+                "ingestion_timestamp": "2026-07-07T00:00:00+00:00",
+                "pipeline_run_id": "debug",
+            }
+            for grado in [
+                "PRIMER_GRADO",
+                "SEGUNDO_GRADO",
+                "TERCER_GRADO",
+                "CUARTO_GRADO",
+                "QUINTO_GRADO",
+            ]
+        ]
+
+    monkeypatch.setattr("pipelines.scrape_minedu_escale.scrape_year_department", fake_scrape_year_department)
+
+    records = scrape_minedu_escale(
+        base_url="https://example.test",
+        departments={f"{idx:02d}": f"DEP_{idx:02d}" for idx in range(1, 26)},
+        yearly_tables={2025: {"anio_param": 39, "cuadro": 733}},
+        extraction_date="2026-07-07",
+        pipeline_run_id="debug",
+        start_year=2025,
+        end_year=2025,
+    )
+
+    assert len(records) == 125
+    assert len(calls) == 25
+
+
+def test_debug_html_output_dir_writes_downloaded_html(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeResponse:
+        status_code = 200
+        text = _fixture_html()
+
+        def raise_for_status(self) -> None:
+            return None
+
+    session = requests.Session()
+    monkeypatch.setattr(session, "get", lambda *args, **kwargs: FakeResponse())
+
+    rows = scrape_year_department(
+        session=session,
+        base_url="https://escale.minedu.gob.pe/magnitudes-portlet/reporte/cuadro",
+        year=2025,
+        year_config={"anio_param": 39, "cuadro": 733},
+        codigo_departamento="01",
+        region="AMAZONAS",
+        extraction_date="2026-07-07",
+        pipeline_run_id="manual-20260707",
+        timeout=30,
+        debug_html_output_dir=tmp_path / "debug" / "minedu_html",
+    )
+
+    html_path = tmp_path / "debug" / "minedu_html" / "year=2025_dpto=01.html"
+    assert len(rows) == 5
+    assert html_path.exists()
+    assert html_path.read_text(encoding="utf-8").startswith("<html>")

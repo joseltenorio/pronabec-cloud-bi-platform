@@ -666,7 +666,7 @@ with DAG(
             task_id="build_pronabec_extraction_plan",
             job_name=PRONABEC_BUILD_PLAN_JOB,
             enabled_expression=RUN_PRONABEC_BUILD_PLAN,
-            timeout_seconds=3600,
+            timeout_seconds=7200,
         )
 
         run_pronabec_extraction_plan = cloud_run_job_operator(
@@ -684,7 +684,7 @@ with DAG(
                     task_id=f"finalize_pronabec_{source_dataset}",
                     job_name=PRONABEC_FINALIZE_DATASET_JOB,
                     enabled_expression=RUN_PRONABEC_FINALIZE,
-                    timeout_seconds=3600,
+                    timeout_seconds=7200,
                     extra_env_vars={
                         "SOURCE_DATASET": source_dataset,
                     },

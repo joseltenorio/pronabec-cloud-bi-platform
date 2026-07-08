@@ -6,23 +6,29 @@ Cloud Run Jobs es la capa de ejecucion serverless para procesos batch de PRONABE
 
 ## Jobs PRONABEC particionados
 
+Todos los jobs PRONABEC plan-driven están configurados con timeouts extendidos para acomodar la inestabilidad de la API externa y grandes volúmenes de datos.
+
 ### `pronabec-discovery-job`
 
 Ejecuta `python -m pipelines.discover_pronabec`. Calcula `effective_page_size`, observa `total_records` y `total_pages`, y escribe `discovery.json` en `bronze_work/pronabec/_plans/` para todos los datasets `bronze_enabled=true`.
+* **Timeout configurado**: 10800s (3 horas).
+* **Nota operativa**: Este job puede tardar más de 1 hora si algunos endpoints de la API de PRONABEC están lentos o inestables, ya que realiza validaciones exhaustivas de tamaño de página, reintentos con backoff exponencial y fallbacks automáticos para garantizar estabilidad.
 
 ### `pronabec-build-plan-job`
 
 Ejecuta `python -m pipelines.build_pronabec_extraction_plan`. Construye `plan.json` a partir de `discovery.json` para todos los datasets Bronze habilitados.
+* **Timeout configurado**: 7200s (2 horas).
 
 ### `pronabec-run-plan-job`
 
 Ejecuta `python -m pipelines.run_pronabec_extraction_plan`. Lee `plan.json` y ejecuta exactamente los chunks definidos en el plan. Este es el job principal para la extraccion PRONABEC particionada.
+* **Timeout configurado**: 14400s (4 horas).
 
 ### `pronabec-finalize-dataset-job`
 
 Ejecuta `python -m pipelines.finalize_pronabec_dataset`. Consolida los chunks intermedios hacia Bronze final y escribe `data.jsonl`, `manifest.json` y `_SUCCESS`.
-
-*Nota: Este job está configurado con 2Gi de memoria para evitar eventos de Out-Of-Memory (OOM) al consolidar grandes volúmenes de datos procedentes de chunks de datasets grandes (como `convocatorias_carrera_sede`).*
+* **Timeout configurado**: 7200s (2 horas).
+* **Nota operativa**: Este job está configurado con 2Gi de memoria para evitar eventos de Out-Of-Memory (OOM) al consolidar grandes volúmenes de datos procedentes de chunks de datasets grandes (como `convocatorias_carrera_sede`).
 
 ## Jobs MEF, reportes, Gold y calidad
 
@@ -100,6 +106,15 @@ La service account del job Cloud Run necesita `roles/iam.serviceAccountUser` sob
 Los workers de Dataflow no heredan automaticamente el codigo ni las dependencias del launcher. Por eso los jobs Dataflow pasan `DATAFLOW_SDK_CONTAINER_IMAGE` y `--sdk-container-image`, apuntando a una imagen worker dedicada que instala `requirements-dataflow-worker.txt` y el paquete `pipelines`.
 
 Si aparece `ModuleNotFoundError`, verifique que el job tenga `DATAFLOW_SDK_CONTAINER_IMAGE`, que sus argumentos incluyan `--sdk-container-image` y que la imagen worker haya sido reconstruida con `Dockerfile.dataflow`.
+
+## Resolución Recursiva de Placeholders
+
+Para los jobs parametrizados (como `dataflow-inei-report-job` o `dataflow-pronabec-report-job`), algunos argumentos del contenedor de lanzamiento se configuran usando variables de entorno que a su vez referencian otras variables (por ejemplo, `BQ_OUTPUT_TABLE` que se define como `${PROJECT_ID}:${SILVER_DATASET}.${SOURCE_DATASET}`).
+
+Para evitar fallas operativas debidas a literales sin evaluar en runtime (como `${SOURCE_DATASET}` pasando a la ejecución real de Python o Dataflow):
+- La función `expand_env_placeholders` resuelve recursivamente todas las variables de entorno de tipo `${VAR}` en los argumentos CLI antes de inicializar la lógica del pipeline.
+- El algoritmo expande recursivamente las variables de entorno hasta un nivel máximo de **5 iteraciones** (`max_depth=5`).
+- Si una variable referenciada en la cadena de expansión no está definida en el entorno, o si tras 5 iteraciones la cadena aún contiene marcas de placeholders (como en el caso de referencias circulares), se lanzará un error de tipo `ValueError` claro para detener la ejecución inmediatamente.
 
 ## Estrategia operativa
 

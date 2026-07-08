@@ -64,18 +64,32 @@ def deduce_source_metadata(table_name: str) -> tuple[str, str]:
 
 
 def expand_env_placeholders(value: str | None) -> str | None:
-    """Expand ${VAR} placeholders in Cloud Run job args before execution."""
+    """Expand ${VAR} placeholders in Cloud Run job args before execution recursively."""
     if value is None:
         return None
 
-    def replace(match: re.Match[str]) -> str:
-        env_name = match.group(1)
-        env_value = os.getenv(env_name)
-        if env_value is None:
-            raise ValueError(f"Variable de entorno requerida no definida: {env_name}")
-        return env_value
+    current_value = value
+    max_depth = 5
+    for _ in range(max_depth):
+        matches = list(ENV_PLACEHOLDER_PATTERN.finditer(current_value))
+        if not matches:
+            break
 
-    return ENV_PLACEHOLDER_PATTERN.sub(replace, value)
+        def replace(match: re.Match[str]) -> str:
+            env_name = match.group(1)
+            env_value = os.getenv(env_name)
+            if env_value is None:
+                raise ValueError(f"Variable de entorno requerida no definida: {env_name}")
+            return env_value
+
+        current_value = ENV_PLACEHOLDER_PATTERN.sub(replace, current_value)
+    else:
+        if ENV_PLACEHOLDER_PATTERN.search(current_value):
+            raise ValueError(
+                f"Excedido el nivel maximo de recursion o placeholders circulares detectados al expandir: {value}"
+            )
+
+    return current_value
 
 
 def resolve_extraction_date(cli_value: str | None) -> str | None:

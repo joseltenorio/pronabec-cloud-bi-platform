@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import io
 import os
 import re
 import uuid
 from collections import Counter
 from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
@@ -348,6 +350,7 @@ def scrape_year_department(
     extraction_date: str,
     pipeline_run_id: str,
     timeout: int,
+    debug_html_output_dir: str | Path | None = None,
 ) -> list[dict[str, str]]:
     source_url = build_minedu_escale_url(
         base_url=base_url,
@@ -357,6 +360,13 @@ def scrape_year_department(
     )
     response = session.get(source_url, timeout=timeout)
     response.raise_for_status()
+    if debug_html_output_dir:
+        debug_path = (
+            Path(debug_html_output_dir)
+            / f"year={year}_dpto={codigo_departamento}.html"
+        )
+        debug_path.parent.mkdir(parents=True, exist_ok=True)
+        debug_path.write_text(response.text, encoding="utf-8")
     rows = extract_total_secundaria_rows(response.text)
     bronze_rows: list[dict[str, str]] = []
     ingestion_timestamp = datetime.now(UTC).isoformat()
@@ -397,13 +407,23 @@ def scrape_minedu_escale(
     end_year: int,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
     session: requests.Session | None = None,
+    department_code: str | None = None,
+    debug_html_output_dir: str | Path | None = None,
 ) -> list[dict[str, str]]:
     session = session or requests.Session()
+    selected_departments = departments
+    if department_code is not None:
+        if department_code not in departments:
+            raise ValueError(
+                f"department_code no existe en la configuración MINEDU ESCALE: {department_code}"
+            )
+        selected_departments = {department_code: departments[department_code]}
+
     records: list[dict[str, str]] = []
     for year in sorted(yearly_tables):
         if year < start_year or year > end_year:
             continue
-        for codigo_departamento, region in departments.items():
+        for codigo_departamento, region in selected_departments.items():
             records.extend(
                 scrape_year_department(
                     session=session,
@@ -415,6 +435,7 @@ def scrape_minedu_escale(
                     extraction_date=extraction_date,
                     pipeline_run_id=pipeline_run_id,
                     timeout=timeout,
+                    debug_html_output_dir=debug_html_output_dir,
                 )
             )
 
@@ -427,7 +448,7 @@ def scrape_minedu_escale(
         raise ValueError(f"Se detectaron duplicados MINEDU ESCALE: {duplicates[:5]}")
 
     expected_years = [year for year in yearly_tables if start_year <= year <= end_year]
-    expected_rows = len(expected_years) * len(departments) * 5
+    expected_rows = len(expected_years) * len(selected_departments) * 5
     if len(records) != expected_rows:
         raise ValueError(
             f"MINEDU ESCALE produjo {len(records)} filas y se esperaban {expected_rows}."
@@ -450,6 +471,57 @@ def write_bronze_csv(
     )
 
 
+def write_bronze_csv_to_local(
+    *,
+    output_dir: str | Path,
+    extraction_date: str,
+    records: list[dict[str, str]],
+) -> str:
+    local_path = (
+        Path(output_dir)
+        / "bronze"
+        / "minedu"
+        / "escale_matricula_secundaria"
+        / f"extraction_date={extraction_date}"
+        / "data.csv"
+    )
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+    with local_path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=FIELDNAMES)
+        writer.writeheader()
+        writer.writerows(records)
+    return str(local_path)
+
+
+def _format_years_range(start_year: int, end_year: int) -> str:
+    if start_year == end_year:
+        return str(start_year)
+    return f"{start_year}-{end_year}"
+
+
+def _write_local_output_metadata(
+    *,
+    output_path: str | Path,
+    records_written: int,
+    start_year: int,
+    end_year: int,
+    department_count: int,
+    dry_run: bool,
+) -> None:
+    log_event(
+        logger,
+        "INFO",
+        "Extracción MINEDU ESCALE completada",
+        source_system="MINEDU_ESCALE",
+        source_dataset=DATASET_NAME,
+        records_written=records_written,
+        years=_format_years_range(start_year, end_year),
+        departments=department_count,
+        output_uri=str(output_path),
+        dry_run=dry_run,
+    )
+
+
 def resolve_extraction_date(value: str | None) -> str:
     resolved = value or str(date.today())
     try:
@@ -469,6 +541,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--start-year", type=int, default=None)
     parser.add_argument("--end-year", type=int, default=None)
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT_SECONDS)
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Ejecuta la extracción y escribe salidas locales en tmp/ sin usar GCS.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="tmp",
+        help="Directorio local base para salidas dry-run.",
+    )
+    parser.add_argument(
+        "--department-code",
+        help="Código de departamento ESCALE opcional para probar un solo departamento, por ejemplo 01.",
+    )
+    parser.add_argument(
+        "--debug-html-output-dir",
+        help="Directorio opcional para guardar HTML real descargado por año/departamento.",
+    )
     return parser.parse_args(argv)
 
 
@@ -479,7 +569,7 @@ def main(argv: list[str] | None = None) -> None:
     config = endpoints["minedu_escale"]
 
     bucket_name = args.bucket or pipeline_settings["bucket_name"]
-    if not bucket_name:
+    if not args.dry_run and not bucket_name:
         raise ConfigError("bucket es requerido via --bucket o GCS_BUCKET_NAME.")
 
     extraction_date = resolve_extraction_date(args.extraction_date)
@@ -495,9 +585,15 @@ def main(argv: list[str] | None = None) -> None:
     if start_year > end_year:
         raise ConfigError("start_year no puede ser mayor que end_year.")
 
+    departments = config["departments"]
+    if args.department_code is not None and args.department_code not in departments:
+        raise ValueError(
+            f"department_code no existe en la configuración MINEDU ESCALE: {args.department_code}"
+        )
+
     records = scrape_minedu_escale(
         base_url=config["base_url"],
-        departments=config["departments"],
+        departments=departments,
         yearly_tables={
             int(year): value for year, value in config["yearly_tables"].items()
         },
@@ -506,28 +602,33 @@ def main(argv: list[str] | None = None) -> None:
         start_year=start_year,
         end_year=end_year,
         timeout=args.timeout,
+        department_code=args.department_code,
+        debug_html_output_dir=args.debug_html_output_dir,
     )
-    object_path = build_gcs_path(
-        pipeline_settings["gcs_paths"]["minedu_escale_bronze"],
-        extraction_date=extraction_date,
-    )
-    output_uri = write_bronze_csv(
-        bucket_name=bucket_name,
-        object_path=object_path,
-        records=records,
-    )
-    log_event(
-        logger,
-        "INFO",
-        "Extracción MINEDU ESCALE completada",
-        source_system="MINEDU_ESCALE",
-        source_dataset=DATASET_NAME,
-        extraction_date=extraction_date,
-        pipeline_run_id=pipeline_run_id,
-        rows_written=len(records),
-        output_uri=output_uri,
+    if args.dry_run:
+        output_uri = write_bronze_csv_to_local(
+            output_dir=args.output_dir,
+            extraction_date=extraction_date,
+            records=records,
+        )
+    else:
+        object_path = build_gcs_path(
+            pipeline_settings["gcs_paths"]["minedu_escale_bronze"],
+            extraction_date=extraction_date,
+        )
+        output_uri = write_bronze_csv(
+            bucket_name=bucket_name,
+            object_path=object_path,
+            records=records,
+        )
+
+    _write_local_output_metadata(
+        output_path=output_uri,
+        records_written=len(records),
         start_year=start_year,
         end_year=end_year,
+        department_count=len({row["codigo_departamento"] for row in records}),
+        dry_run=args.dry_run,
     )
 
 
