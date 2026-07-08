@@ -69,6 +69,15 @@ HEADER_ALIASES = {
     "matricula_masculino": {"MASCULINO", "HOMBRES", "HOMBRE"},
     "matricula_femenino": {"FEMENINO", "MUJERES", "MUJER"},
 }
+DEFAULT_MINEDU_COLUMN_INDEXES = {
+    "matricula_total": 1,
+    "matricula_publica": 2,
+    "matricula_privada": 3,
+    "matricula_urbana": 4,
+    "matricula_rural": 5,
+    "matricula_masculino": 6,
+    "matricula_femenino": 7,
+}
 
 logger = setup_structured_logger("scrape_minedu_escale", level="INFO")
 
@@ -135,11 +144,41 @@ def _table_rows_from_html(html: str) -> list[list[str]]:
         raise ValueError("MINEDU ESCALE no contiene ninguna tabla HTML parseable.")
 
     rows: list[list[str]] = []
+    pending_rowspans: dict[int, tuple[str, int]] = {}
+
     for tr in table.find_all("tr"):
         cells = tr.find_all(["th", "td"])
         if not cells:
             continue
-        row = [" ".join(cell.get_text(" ", strip=True).split()) for cell in cells]
+        row: list[str] = []
+        column_index = 0
+
+        def consume_pending() -> None:
+            nonlocal column_index
+            while column_index in pending_rowspans:
+                value, remaining = pending_rowspans[column_index]
+                row.append(value)
+                if remaining <= 1:
+                    del pending_rowspans[column_index]
+                else:
+                    pending_rowspans[column_index] = (value, remaining - 1)
+                column_index += 1
+
+        consume_pending()
+        for cell in cells:
+            consume_pending()
+            cell_value = " ".join(cell.get_text(" ", strip=True).split())
+            rowspan = int(cell.get("rowspan", 1))
+            colspan = int(cell.get("colspan", 1))
+            for colspan_offset in range(colspan):
+                row.append(cell_value)
+                if rowspan > 1:
+                    pending_rowspans[column_index + colspan_offset] = (
+                        cell_value,
+                        rowspan - 1,
+                    )
+            column_index += colspan
+        consume_pending()
         rows.append(row)
 
     if not rows:
@@ -147,27 +186,110 @@ def _table_rows_from_html(html: str) -> list[list[str]]:
     return rows
 
 
-def _resolve_header_indexes(header_row: list[str]) -> dict[str, int]:
+def _looks_like_grade_data_row(row: list[str]) -> bool:
+    if not row:
+        return False
+    label = normalize_text(row[0])
+    return label in GRADE_MAP and len(row) >= 8
+
+
+def _preview_rows(rows: list[list[str]], limit: int = 5) -> list[list[str]]:
+    return [
+        [normalize_text(value) for value in row]
+        for row in rows[:limit]
+    ]
+
+
+def _resolve_header_indexes(rows: list[list[str]]) -> dict[str, int]:
     indexes: dict[str, int] = {}
-    normalized_headers = [normalize_text(value) for value in header_row]
-    for idx, header in enumerate(normalized_headers):
-        for field_name, aliases in HEADER_ALIASES.items():
-            if header in aliases and field_name not in indexes:
-                indexes[field_name] = idx
+    header_candidate_rows: list[list[str]] = []
+
+    for row in rows:
+        if _looks_like_grade_data_row(row):
+            break
+        header_candidate_rows.append(row)
+
+    for header_row in header_candidate_rows[:5]:
+        normalized_headers = [normalize_text(value) for value in header_row]
+        for idx, header in enumerate(normalized_headers):
+            for field_name, aliases in HEADER_ALIASES.items():
+                if header in aliases and field_name not in indexes:
+                    indexes[field_name] = idx
+
     missing = [field for field in HEADER_ALIASES if field not in indexes]
-    if missing:
-        raise ValueError(f"No se pudieron resolver columnas MINEDU ESCALE: {missing}")
-    return indexes
+    if not missing:
+        return indexes
+
+    fallback_grade_row = next((row for row in rows if _looks_like_grade_data_row(row)), None)
+    if fallback_grade_row is not None:
+        log_event(
+            logger,
+            "WARNING",
+            "minedu_escale_header_resolution_fallback",
+            missing_fields=missing,
+            fallback_used=True,
+            detected_column_count=len(fallback_grade_row),
+            preview_rows=_preview_rows(rows),
+        )
+        return dict(DEFAULT_MINEDU_COLUMN_INDEXES)
+
+    preview_rows = _preview_rows(rows)
+    log_event(
+        logger,
+        "ERROR",
+        "minedu_escale_header_resolution_failed",
+        missing_fields=missing,
+        fallback_used=False,
+        detected_column_count=max((len(row) for row in rows), default=0),
+        preview_rows=preview_rows,
+    )
+    raise ValueError(
+        "No se pudieron resolver columnas MINEDU ESCALE: "
+        f"{missing}. Muestra de filas iniciales: {preview_rows}"
+    )
+
+
+def _get_row_value(row: list[str], field_name: str, header_indexes: dict[str, int]) -> int:
+    column_index = header_indexes[field_name]
+    if len(row) <= column_index:
+        raise ValueError(
+            "Fila MINEDU ESCALE incompleta para la estructura esperada. "
+            f"field={field_name} column_index={column_index} row={row}"
+        )
+    return clean_number(row[column_index])
+
+
+def _validate_fallback_row_shape(rows: list[list[str]], header_indexes: dict[str, int]) -> None:
+    max_required_index = max(header_indexes.values())
+    fallback_grade_row = next((row for row in rows if normalize_text(row[0]) in GRADE_MAP), None)
+    if fallback_grade_row is not None and len(fallback_grade_row) <= max_required_index:
+        preview_rows = _preview_rows(rows)
+        log_event(
+            logger,
+            "ERROR",
+            "minedu_escale_header_resolution_failed",
+            fallback_used=True,
+            detected_column_count=len(fallback_grade_row),
+            preview_rows=preview_rows,
+        )
+        raise ValueError(
+            "No se pudo aplicar el fallback posicional MINEDU ESCALE porque la fila de grado "
+            f"tiene menos de {max_required_index + 1} columnas. "
+            f"Fila detectada: {fallback_grade_row}. Muestra: {preview_rows}"
+        )
 
 
 def extract_total_secundaria_rows(html: str) -> list[dict[str, int | str]]:
     _try_parse_with_pandas(html)
     rows = _table_rows_from_html(html)
-    header_indexes = _resolve_header_indexes(rows[0])
+    header_indexes = _resolve_header_indexes(rows)
+    _validate_fallback_row_shape(rows, header_indexes)
     in_total_secundaria = False
     extracted: list[dict[str, int | str]] = []
 
     for row in rows[1:]:
+        if not row:
+            continue
         label = normalize_text(row[0])
         if label == "TOTAL SECUNDARIA":
             in_total_secundaria = True
@@ -182,15 +304,13 @@ def extract_total_secundaria_rows(html: str) -> list[dict[str, int | str]]:
         extracted.append(
             {
                 "grado": normalize_grade(row[0]),
-                "matricula_total": clean_number(row[header_indexes["matricula_total"]]),
-                "matricula_publica": clean_number(row[header_indexes["matricula_publica"]]),
-                "matricula_privada": clean_number(row[header_indexes["matricula_privada"]]),
-                "matricula_urbana": clean_number(row[header_indexes["matricula_urbana"]]),
-                "matricula_rural": clean_number(row[header_indexes["matricula_rural"]]),
-                "matricula_masculino": clean_number(
-                    row[header_indexes["matricula_masculino"]]
-                ),
-                "matricula_femenino": clean_number(row[header_indexes["matricula_femenino"]]),
+                "matricula_total": _get_row_value(row, "matricula_total", header_indexes),
+                "matricula_publica": _get_row_value(row, "matricula_publica", header_indexes),
+                "matricula_privada": _get_row_value(row, "matricula_privada", header_indexes),
+                "matricula_urbana": _get_row_value(row, "matricula_urbana", header_indexes),
+                "matricula_rural": _get_row_value(row, "matricula_rural", header_indexes),
+                "matricula_masculino": _get_row_value(row, "matricula_masculino", header_indexes),
+                "matricula_femenino": _get_row_value(row, "matricula_femenino", header_indexes),
             }
         )
 

@@ -16,10 +16,17 @@ from pipelines.scrape_minedu_escale import (
 
 
 FIXTURE_PATH = Path("tests/fixtures/minedu_escale_secondary_enrollment.html")
+GROUPED_HEADER_FIXTURE_PATH = Path(
+    "tests/fixtures/minedu_escale_secondary_enrollment_grouped_header.html"
+)
 
 
 def _fixture_html() -> str:
     return FIXTURE_PATH.read_text(encoding="utf-8")
+
+
+def _grouped_header_fixture_html() -> str:
+    return GROUPED_HEADER_FIXTURE_PATH.read_text(encoding="utf-8")
 
 
 def test_build_url_uses_year_and_department_params() -> None:
@@ -64,6 +71,65 @@ def test_extract_ignores_presencial_distancia_alternancia() -> None:
     rows = extract_total_secundaria_rows(_fixture_html())
 
     assert all(row["matricula_total"] != 999 for row in rows)
+
+
+def test_extract_total_secundaria_rows_supports_grouped_header_fixture() -> None:
+    rows = extract_total_secundaria_rows(_grouped_header_fixture_html())
+
+    assert len(rows) == 5
+    assert rows[0]["grado"] == "PRIMER_GRADO"
+    assert rows[0]["matricula_total"] == 1000
+    assert rows[0]["matricula_publica"] == 800
+    assert rows[0]["matricula_privada"] == 200
+    assert rows[0]["matricula_urbana"] == 700
+    assert rows[0]["matricula_rural"] == 300
+    assert rows[0]["matricula_masculino"] == 510
+    assert rows[0]["matricula_femenino"] == 490
+
+
+def test_extract_total_secundaria_rows_uses_fallback_positional_for_incomplete_header() -> None:
+    html = """
+    <table>
+      <tr>
+        <th>Nivel educativo</th>
+        <th>Total</th>
+        <th>Gestión</th>
+        <th>Área</th>
+        <th>Sexo</th>
+      </tr>
+      <tr><td>Total Secundaria</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><td>Primer grado</td><td>1000</td><td>800</td><td>200</td><td>700</td><td>300</td><td>510</td><td>490</td></tr>
+      <tr><td>Segundo grado</td><td>950</td><td>760</td><td>190</td><td>650</td><td>300</td><td>490</td><td>460</td></tr>
+      <tr><td>Tercer grado</td><td>900</td><td>720</td><td>180</td><td>620</td><td>280</td><td>460</td><td>440</td></tr>
+      <tr><td>Cuarto grado</td><td>850</td><td>680</td><td>170</td><td>600</td><td>250</td><td>430</td><td>420</td></tr>
+      <tr><td>Quinto grado</td><td>800</td><td>640</td><td>160</td><td>560</td><td>240</td><td>390</td><td>410</td></tr>
+    </table>
+    """
+
+    rows = extract_total_secundaria_rows(html)
+
+    assert len(rows) == 5
+    assert rows[0]["matricula_publica"] == 800
+    assert rows[0]["matricula_femenino"] == 490
+
+
+def test_extract_total_secundaria_rows_fails_when_incomplete_structure_has_less_than_8_columns() -> None:
+    html = """
+    <table>
+      <tr>
+        <th>Nivel educativo</th>
+        <th>Total</th>
+        <th>Gestión</th>
+        <th>Área</th>
+        <th>Sexo</th>
+      </tr>
+      <tr><td>Total Secundaria</td><td></td><td></td><td></td><td></td></tr>
+      <tr><td>Primer grado</td><td>1000</td><td>800</td><td>200</td><td>700</td></tr>
+    </table>
+    """
+
+    with pytest.raises(ValueError, match="No se pudieron resolver columnas MINEDU ESCALE"):
+        extract_total_secundaria_rows(html)
 
 
 def test_validate_row_checks_public_private_total() -> None:
