@@ -15,7 +15,7 @@ SQL_FILE_PATH = PROJECT_ROOT / "sql" / "quality" / "data_quality_checks.sql"
 SILVER_SCHEMAS_DIR = PROJECT_ROOT / "config" / "schemas" / "silver"
 ML_SCHEMAS_DIR = PROJECT_ROOT / "config" / "schemas" / "ml"
 GOLD_DDL_PATH = PROJECT_ROOT / "sql" / "ddl" / "create_gold_views.sql"
-EXPECTED_QUALITY_CHECKS = 95
+EXPECTED_QUALITY_CHECKS = 114
 QUALITY_OUTPUT_COLUMNS = {
     "check_id",
     "layer",
@@ -330,7 +330,10 @@ def test_required_tables_are_covered():
         "inei_internet_acceso_region",
         "region_context_features",
         "region_priority_scores",
+        "region_coverage_features",
+        "region_priority_scores_v2",
         "vw_predictive_region_priority_scores",
+        "vw_predictive_region_priority_scores_v2",
     }
     
     for t in required_tables:
@@ -569,11 +572,19 @@ def test_ml_quality_checks_are_present_and_parameterized():
         "ml_region_context_features_critical_regions_present",
         "ml_region_context_features_no_legacy_region_variants",
         "ml_region_context_features_synthetic_metadata_consistency",
+        "ml_region_coverage_features_not_empty",
+        "ml_region_coverage_features_unique_grain",
+        "ml_region_coverage_features_nonnegative_rates",
+        "ml_region_coverage_features_score_ranges",
+        "ml_region_coverage_features_flag_allowed_values",
+        "ml_region_coverage_features_source_method_allowed_values",
+        "ml_region_coverage_features_no_legacy_region_variants",
     ]
     for check_id in expected_checks:
         assert check_id in content
 
     assert "{project_id}.{ml_dataset}.region_context_features" in content
+    assert "{project_id}.{ml_dataset}.region_coverage_features" in content
     assert "{project_id}.ml" not in content
 
 
@@ -597,6 +608,24 @@ def test_ml_region_priority_quality_checks_are_present_and_parameterized():
     assert "{project_id}.{ml_dataset}.region_priority_scores" in content
 
 
+def test_ml_region_priority_v2_quality_checks_are_present_and_parameterized():
+    content = SQL_FILE_PATH.read_text(encoding="utf-8")
+
+    expected_checks = [
+        "ml_region_priority_scores_v2_not_empty",
+        "ml_region_priority_scores_v2_unique_grain",
+        "ml_region_priority_scores_v2_priority_score_range",
+        "ml_region_priority_scores_v2_component_ranges",
+        "ml_region_priority_scores_v2_tier_allowed_values",
+        "ml_region_priority_scores_v2_rank_positive",
+        "ml_region_priority_scores_v2_version_constant",
+    ]
+    for check_id in expected_checks:
+        assert check_id in content
+
+    assert "{project_id}.{ml_dataset}.region_priority_scores_v2" in content
+
+
 def test_gold_predictive_region_priority_quality_checks_are_present_and_parameterized():
     content = SQL_FILE_PATH.read_text(encoding="utf-8")
 
@@ -611,6 +640,22 @@ def test_gold_predictive_region_priority_quality_checks_are_present_and_paramete
         assert check_id in content
 
     assert "{project_id}.{gold_dataset}.vw_predictive_region_priority_scores" in content
+
+
+def test_gold_predictive_region_priority_v2_quality_checks_are_present_and_parameterized():
+    content = SQL_FILE_PATH.read_text(encoding="utf-8")
+
+    expected_checks = [
+        "gold_predictive_region_priority_scores_v2_not_empty",
+        "gold_predictive_region_priority_scores_v2_unique_grain",
+        "gold_predictive_region_priority_scores_v2_priority_score_range",
+        "gold_predictive_region_priority_scores_v2_priority_score_pct_range",
+        "gold_predictive_region_priority_scores_v2_rank_positive",
+    ]
+    for check_id in expected_checks:
+        assert check_id in content
+
+    assert "{project_id}.{gold_dataset}.vw_predictive_region_priority_scores_v2" in content
 
 
 def test_silver_checks_use_declared_schema_columns_for_simple_predicates():
