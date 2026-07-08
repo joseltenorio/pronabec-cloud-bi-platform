@@ -573,3 +573,37 @@ SELECT
   score_method,
   created_at
 FROM `{project_id}.{ml_dataset}.region_priority_scores`;
+
+
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_predictive_region_priority_scores_v2` AS
+SELECT
+  anio,
+  region,
+  region_canonical,
+  priority_rank_v2,
+  priority_tier_v2,
+  priority_score_v2,
+  SAFE_MULTIPLY(priority_score_v2, 100) AS priority_score_v2_pct,
+  CASE
+    WHEN priority_rank_v2 IS NULL THEN region_canonical
+    ELSE CONCAT(CAST(priority_rank_v2 AS STRING), '. ', region_canonical)
+  END AS priority_label_v2,
+  context_priority_score,
+  coverage_gap_score,
+  primera_generacion_score,
+  context_priority_rank,
+  context_priority_tier,
+  regional_becarios_pct,
+  regional_becarios_estimated,
+  total_becas_anual,
+  becas_por_1000_jovenes,
+  becas_por_1000_matriculados_5to,
+  demanda_no_cubierta_estimada,
+  coverage_data_quality_flag,
+  coverage_source_method,
+  coverage_source_notes,
+  has_estimated_coverage,
+  score_version,
+  score_method,
+  created_at
+FROM `{project_id}.{ml_dataset}.region_priority_scores_v2`;

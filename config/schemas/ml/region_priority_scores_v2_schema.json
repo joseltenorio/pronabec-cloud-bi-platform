@@ -1,0 +1,20 @@
+[
+  { "name": "anio", "type": "INT64", "mode": "REQUIRED", "description": "Año de referencia del score regional v2." },
+  { "name": "region", "type": "STRING", "mode": "REQUIRED", "description": "Región canónica de presentación." },
+  { "name": "region_canonical", "type": "STRING", "mode": "REQUIRED", "description": "Clave regional canónica unificada." },
+  { "name": "context_priority_score", "type": "FLOAT64", "mode": "NULLABLE", "description": "Score contextual heredado desde v1." },
+  { "name": "coverage_gap_score", "type": "FLOAT64", "mode": "NULLABLE", "description": "Score normalizado de brecha de cobertura regional." },
+  { "name": "primera_generacion_score", "type": "FLOAT64", "mode": "NULLABLE", "description": "Score normalizado de primera generación regional." },
+  { "name": "priority_score_v2", "type": "FLOAT64", "mode": "NULLABLE", "description": "Score regional v2 combinado de contexto, cobertura y primera generación." },
+  { "name": "priority_rank_v2", "type": "INT64", "mode": "NULLABLE", "description": "Ranking anual del score regional v2." },
+  { "name": "priority_tier_v2", "type": "STRING", "mode": "NULLABLE", "description": "Clasificación interpretable del score v2." },
+  { "name": "context_priority_rank", "type": "INT64", "mode": "NULLABLE", "description": "Ranking contextual heredado desde v1." },
+  { "name": "context_priority_tier", "type": "STRING", "mode": "NULLABLE", "description": "Tier contextual heredado desde v1." },
+  { "name": "coverage_data_quality_flag", "type": "STRING", "mode": "NULLABLE", "description": "Bandera resumida de calidad de la señal de cobertura PRONABEC." },
+  { "name": "coverage_source_method", "type": "STRING", "mode": "NULLABLE", "description": "Método de construcción de la cobertura PRONABEC regional." },
+  { "name": "coverage_source_notes", "type": "STRING", "mode": "NULLABLE", "description": "Notas metodológicas sobre la cobertura PRONABEC regional." },
+  { "name": "has_estimated_coverage", "type": "BOOL", "mode": "NULLABLE", "description": "Indica si la cobertura regional fue estimada a partir de un proxy." },
+  { "name": "score_version", "type": "STRING", "mode": "NULLABLE", "description": "Versión lógica del score regional." },
+  { "name": "score_method", "type": "STRING", "mode": "NULLABLE", "description": "Método de cálculo del score regional." },
+  { "name": "created_at", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Timestamp de materialización o consulta." }
+]
