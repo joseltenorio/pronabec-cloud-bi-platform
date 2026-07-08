@@ -71,6 +71,8 @@ Ejecuta `pronabec-run-plan-job`. Lee `plan.json` y ejecuta los chunks exactos de
 
 Ejecuta `pronabec-finalize-dataset-job`. Consolida los chunks de un dataset PRONABEC en la ubicacion Bronze final, escribiendo `data.jsonl`, `manifest.json` y `_SUCCESS`.
 
+Los tasks `finalize_pronabec_*` se ejecutan con paralelismo controlado en lotes de 5. Esto evita serializar todos los datasets uno por uno, pero mantiene un límite razonable de concurrencia sobre el Cloud Run Job compartido `pronabec-finalize-dataset-job`.
+
 ## Bronze work y Dataflow
 
 `bronze_work/` es temporal. Dataflow no lee `bronze_work`.
