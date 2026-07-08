@@ -13,6 +13,7 @@ DEFAULT_SOURCE_FILES = (
     "sql/ddl/create_gold_views.sql",
     "sql/ml/create_dim_region_mapping.sql",
     "sql/ml/create_region_context_features.sql",
+    "sql/ml/create_region_priority_scores.sql",
     "sql/quality/data_quality_checks.sql",
 )
 
