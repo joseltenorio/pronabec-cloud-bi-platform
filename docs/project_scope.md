@@ -56,9 +56,10 @@ El proyecto incluye los siguientes componentes:
 
 ### Machine Learning
 
-- Implementar un componente tabular de Machine Learning con BigQuery ML.
-- Entrenar un modelo para estimar riesgo de pérdida o deserción de beca.
-- Exponer resultados de predicción para análisis en Power BI.
+- Implementar una base regional predictiva en el dataset `ml` a partir de fuentes Silver.
+- Estandarizar contexto territorial con INEI + MINEDU.
+- Preparar features para scoring, simulación y clustering territorial.
+- Dejar la capa lista para BigQuery ML y futuros modelos regionales.
 
 ## Fuera del alcance inicial
 
@@ -71,6 +72,9 @@ Los siguientes elementos no forman parte del alcance inicial:
 - Despliegue en Kubernetes o GKE.
 - Aplicación web transaccional.
 - Reporting final basado manualmente en archivos CSV.
+- Predicción individual de estudiantes.
+- Modelos supervisados de estudiantes sintéticos.
+- KMeans, ARIMA_PLUS y regresiones en esta rama.
 
 ## Modo de procesamiento
 

@@ -33,6 +33,7 @@ El sistema de validación cubre los tres sistemas principales del proyecto:
 3. **`pronabec_reports`**: Cobertura de reportes agregados que incluye:
    - **Beca 18 Universitarios (2012-2026)**: Tablas de carrera anual y universidad anual.
    - **Reportes documentales**: Cobertura de calidad para los 23 reportes documentales de origen, validando que no estén vacíos y cuenten con metadatos técnicos válidos (`extraction_date`, `pipeline_run_id`).
+4. **`ml`**: Cobertura de la base regional predictiva, validando `ml.region_context_features` como features territoriales unificadas.
 
 ## 4. Tipos de Checks Implementados
 
@@ -46,6 +47,7 @@ Las consultas versionadas en `sql/quality/data_quality_checks.sql` cubren las si
 * **Consistencia de Campos Canónicos (`canonical consistency`)**: Si un campo de canonización (`carrera_estudio_canonical_match_method` o `universidad_canonical_match_method`) no es nulo, el valor canonizado correspondiente (`*_canonical`) no debe ser nulo.
 * **Consistencia Temporal MEF (`temporal consistency`)**: Para tablas temporales del MEF, si el `periodo_tipo` es `MENSUAL`, el campo `mes_numero` debe estar entre 1 y 12. Si es `TRIMESTRAL`, el `trimestre` debe estar entre 1 y 4.
 * **Duplicados (`duplicate checks`)**: Control de unicidad basado en la clave natural lógica de negocio (ej. combinación de carrera, año y fecha de extracción).
+* **Base ML regional (`ml`)**: Validaciones de unicidad por `anio + region_canonical`, rangos 2012-2025, porcentajes, conteos no negativos y metadata sintética.
 
 ## 5. Prácticas y Restricciones de Seguridad (Checks que NO se deben hacer)
 
