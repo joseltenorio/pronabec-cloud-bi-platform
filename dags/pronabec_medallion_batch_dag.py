@@ -558,6 +558,25 @@ def chain_tasks(tasks: list) -> None:
         upstream >> downstream
 
 
+def _chunk_tasks(tasks: list, batch_size: int) -> list[list]:
+    if batch_size <= 0:
+        raise ValueError("batch_size must be greater than zero")
+
+    return [tasks[index : index + batch_size] for index in range(0, len(tasks), batch_size)]
+
+
+def chain_tasks_in_batches(upstream, tasks: list, *, batch_size: int, gate_prefix: str) -> None:
+    if not tasks:
+        return
+
+    previous = upstream
+    for index, batch in enumerate(_chunk_tasks(tasks, batch_size), start=1):
+        batch_done = EmptyOperator(task_id=f"{gate_prefix}_batch_{index}_done")
+        previous >> batch
+        batch >> batch_done
+        previous = batch_done
+
+
 def render_gcs_path(template: str, **values: str) -> str:
     return template.format(**values)
 
@@ -693,7 +712,12 @@ with DAG(
 
         discover_pronabec_datasets >> build_pronabec_extraction_plan >> run_pronabec_extraction_plan
         run_pronabec_extraction_plan >> pronabec_finalize_tasks
-        chain_tasks(pronabec_finalize_tasks)
+        chain_tasks_in_batches(
+            run_pronabec_extraction_plan,
+            pronabec_finalize_tasks,
+            batch_size=5,
+            gate_prefix="finalize_pronabec",
+        )
 
     with TaskGroup(group_id="mef_bronze") as mef_bronze:
         extract_mef = cloud_run_job_operator(
