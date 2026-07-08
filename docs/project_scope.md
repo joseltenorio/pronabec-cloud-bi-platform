@@ -61,8 +61,9 @@ El proyecto incluye los siguientes componentes:
 - Publicar un score regional de prioridad explicable para consumo inicial en Power BI.
 - Agregar una capa de cobertura regional PRONABEC como proxy analítico para cobertura relativa, brecha de cobertura y primera generación.
 - Publicar un score regional v2 que combine contexto, cobertura PRONABEC y primera generación.
-- Preparar features para scoring, simulación y clustering territorial.
-- Dejar la capa lista para BigQuery ML y futuros modelos regionales.
+- Entrenar un modelo BigQuery ML KMeans para segmentacion regional no supervisada.
+- Entrenar un modelo BigQuery ML ARIMA_PLUS para forecast presupuestal mensual agregado.
+- Publicar salidas predictivas agregadas en Gold para Power BI.
 
 ## Fuera del alcance inicial
 
@@ -77,8 +78,8 @@ Los siguientes elementos no forman parte del alcance inicial:
 - Reporting final basado manualmente en archivos CSV.
 - Predicción individual de estudiantes.
 - Modelos supervisados de estudiantes sintéticos.
-- KMeans, ARIMA_PLUS y regresiones en esta rama.
-- Random Forest, XGBoost, deserción, pérdida de beca, datos sintéticos individuales y escenarios presupuestales todavía no forman parte de esta fase.
+- Random Forest, XGBoost, deserción, pérdida de beca, datos sintéticos individuales, pagos individuales y escenarios presupuestales no forman parte de esta fase.
+- Inferencia causal a partir de clusters o forecast.
 
 ## Modo de procesamiento
 
@@ -108,4 +109,4 @@ A la fecha actual, la **Fase Cloud de Ingeniería de Datos está 100% completada
 
 Los siguientes entregables quedan como **Trabajo Pendiente para Fases Posteriores**:
 - Conexión e implementación final de dashboards ejecutivos en **Power BI**.
-- Implementación de algoritmos predictivos y entrenamiento en BigQuery ML.
+- Modelos supervisados avanzados o prediccion individual.

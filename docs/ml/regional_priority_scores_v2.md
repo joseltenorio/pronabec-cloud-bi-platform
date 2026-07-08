@@ -28,3 +28,5 @@ La ponderación se ajusta por disponibilidad de componentes, igual que en v1.
 ## Consumo Gold
 
 La vista Gold `gold.vw_predictive_region_priority_scores_v2` expone el score ya calculado y no lo recalcula.
+
+El score tambien se anexa a `ml.region_cluster_assignments` para facilitar el analisis de clusters regionales en Power BI. La interpretacion de clusters debe hacerse con perfiles promedio, no con el numero de centroide.

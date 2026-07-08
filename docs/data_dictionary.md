@@ -913,6 +913,90 @@ La primera capa del módulo predictivo vive en el dataset `ml`, pero no implemen
 
 `ml.region_priority_scores_v2` mejora el score contextual v1 incorporando cobertura PRONABEC y primera generación. Sigue siendo un score explicable, no un modelo supervisado ni una predicción individual.
 
+## `ml.model_region_clusters`
+
+Modelo BigQuery ML KMeans no supervisado entrenado sobre `ml.region_coverage_features`.
+
+| Parámetro | Valor |
+| --- | --- |
+| model_type | KMeans |
+| num_clusters | 4 |
+| standardize_features | TRUE |
+| Fuente | `ml.region_coverage_features` |
+
+### Consideración metodológica
+
+El modelo segmenta regiones por similitud de features agregadas. No predice estudiantes, no estima causalidad y no debe interpretarse sin revisar los perfiles promedio.
+
+## `ml.region_cluster_assignments`
+
+| Campo | Tipo esperado | Descripción |
+| --- | --- | --- |
+| anio | INTEGER | Año de referencia. |
+| region | STRING | Región canónica de presentación. |
+| region_canonical | STRING | Clave canónica unificada. |
+| priority_score_v2 | NUMERIC/FLOAT64 | Score regional v2 anexado para análisis. |
+| context_priority_score | NUMERIC/FLOAT64 | Score contextual. |
+| coverage_gap_score | NUMERIC/FLOAT64 | Score de brecha de cobertura. |
+| primera_generacion_score | NUMERIC/FLOAT64 | Score de primera generación. |
+| pobreza_monetaria_pct | NUMERIC/FLOAT64 | Pobreza monetaria regional. |
+| matricula_5to_secundaria | INTEGER | Matrícula de quinto de secundaria. |
+| poblacion_15_29 | INTEGER | Población joven regional. |
+| brecha_digital_pct | NUMERIC/FLOAT64 | Brecha digital. |
+| ruralidad_educativa_pct | NUMERIC/FLOAT64 | Ruralidad educativa. |
+| primera_generacion_ratio | NUMERIC/FLOAT64 | Proporción de primera generación. |
+| becas_por_1000_jovenes | NUMERIC/FLOAT64 | Cobertura estimada por mil jóvenes. |
+| becas_por_1000_matriculados_5to | NUMERIC/FLOAT64 | Cobertura estimada por mil matriculados de quinto. |
+| centroid_id | INTEGER | Centroide asignado por KMeans. |
+| centroid_distance | NUMERIC/FLOAT64 | Distancia al centroide asignado. |
+| cluster_label | STRING | Etiqueta genérica del cluster. |
+| created_at | TIMESTAMP | Timestamp de materialización o consulta. |
+
+## `ml.region_cluster_profiles`
+
+| Campo | Tipo esperado | Descripción |
+| --- | --- | --- |
+| centroid_id | INTEGER | Centroide del cluster. |
+| cluster_label | STRING | Etiqueta genérica. |
+| regiones_count | INTEGER | Cantidad de regiones canónicas en el cluster. |
+| avg_priority_score_v2 | NUMERIC/FLOAT64 | Promedio del score v2. |
+| avg_context_priority_score | NUMERIC/FLOAT64 | Promedio del score contextual. |
+| avg_coverage_gap_score | NUMERIC/FLOAT64 | Promedio de brecha de cobertura. |
+| avg_primera_generacion_score | NUMERIC/FLOAT64 | Promedio de primera generación. |
+| avg_pobreza_monetaria_pct | NUMERIC/FLOAT64 | Promedio de pobreza monetaria. |
+| avg_matricula_5to_secundaria | NUMERIC/FLOAT64 | Promedio de matrícula de quinto. |
+| avg_brecha_digital_pct | NUMERIC/FLOAT64 | Promedio de brecha digital. |
+| avg_ruralidad_educativa_pct | NUMERIC/FLOAT64 | Promedio de ruralidad educativa. |
+| created_at | TIMESTAMP | Timestamp de materialización o consulta. |
+
+## `ml.model_budget_forecast`
+
+Modelo BigQuery ML ARIMA_PLUS entrenado sobre el devengado mensual agregado de `silver.presupuesto_mef_temporal`.
+
+| Parámetro | Valor |
+| --- | --- |
+| model_type | ARIMA_PLUS |
+| time_series_timestamp_col | `periodo_fecha` |
+| time_series_data_col | `devengado_total` |
+| Horizonte publicado | 12 meses |
+
+### Consideración metodológica
+
+El forecast presupuestal es referencial. No es causal, no modela productos ni pagos individuales y no representa compromisos financieros.
+
+## `ml.budget_forecast_results`
+
+| Campo | Tipo esperado | Descripción |
+| --- | --- | --- |
+| forecast_timestamp | TIMESTAMP | Mes pronosticado. |
+| forecast_value | NUMERIC/FLOAT64 | Devengado total pronosticado. |
+| prediction_interval_lower_bound | NUMERIC/FLOAT64 | Límite inferior del intervalo de predicción. |
+| prediction_interval_upper_bound | NUMERIC/FLOAT64 | Límite superior del intervalo de predicción. |
+| confidence_level | NUMERIC/FLOAT64 | Nivel de confianza usado. |
+| forecast_horizon_months | INTEGER | Horizonte mensual solicitado. |
+| model_name | STRING | Nombre lógico del modelo. |
+| forecast_version | STRING | Versión lógica del forecast. |
+
 ---
 
 # 15. Campos derivados y enriquecimientos previstos
@@ -989,6 +1073,9 @@ Las vistas Gold estarán orientadas al consumo en Power BI.
 | gold.vw_riesgo_desercion           | Indicadores o predicciones de riesgo académico/deserción | Página Riesgo o ML           |
 | gold.vw_predictive_region_priority_scores | Score regional explicable para priorización           | Página Prioridad Regional    |
 | gold.vw_predictive_region_priority_scores_v2 | Score regional v2 explicable para priorización        | Página Prioridad Regional    |
+| gold.vw_predictive_region_clusters | Asignaciones KMeans regionales                         | Página Segmentación Regional |
+| gold.vw_predictive_region_cluster_profiles | Perfiles promedio para interpretar clusters            | Página Segmentación Regional |
+| gold.vw_predictive_budget_forecast | Forecast presupuestal mensual referencial              | Página Presupuesto           |
 
 ## Reglas generales para Gold
 

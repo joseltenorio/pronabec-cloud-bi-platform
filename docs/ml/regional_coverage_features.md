@@ -30,4 +30,4 @@ Cuando no existe conteo regional real de becarios, la cobertura se estima desde 
 
 ## Alcance
 
-La vista no implementa KMeans, forecast, simulación presupuestal ni modelos supervisados.
+La vista alimenta el modelo KMeans regional (`ml.model_region_clusters`) y el score regional v2. No implementa forecast, simulación presupuestal ni modelos supervisados.

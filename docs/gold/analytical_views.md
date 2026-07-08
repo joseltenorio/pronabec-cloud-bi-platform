@@ -10,7 +10,7 @@ La capa Gold convierte los datos integrados y estructurados de la capa Silver en
 La publicación de estas vistas se ejecuta de forma idempotente desde Cloud Run mediante `pipelines.publish_gold_views`, y su contrato operativo se valida con `pipelines.validate_gold` antes de que Composer permita continuar con calidad y consumo downstream.
 
 **Reglas de oro de la capa Gold:**
-- **Consumo controlado de capas curadas:** Las vistas Gold clásicas leen desde Silver (`{project_id}.{silver_dataset}`). La salida predictiva regional nueva se publica desde el score curado en `ml` y se expone sin recalcular en Gold.
+- **Consumo controlado de capas curadas:** Las vistas Gold clásicas leen desde Silver (`{project_id}.{silver_dataset}`). Las salidas predictivas se publican desde objetos curados en `ml` y se exponen sin recalcular modelos en Gold.
 - **No duplicación de limpieza:** Gold no realiza tareas de limpieza, tipado fuerte, conversión de formatos (guiones, nulos, coma decimal), normalización de columnas anchas o canonización. Ese trabajo pertenece estrictamente a la capa Silver / Dataflow.
 - **Grano e integridad:** No se deben realizar joins fila a fila que crucen granularidades incompatibles. Gold unifica indicadores de grano diverso en formato largo (`UNION ALL`) o mediante agregaciones intermedias seguras.
 
@@ -153,6 +153,33 @@ La publicación de estas vistas se ejecuta de forma idempotente desde Cloud Run 
 * **Uso en Power BI:** Ranking regional, semáforos de prioridad y mapas temáticos.
 * **Advertencias metodológicas:** La vista no es causal ni individual; solo resume contexto regional ponderado.
 
+### 17. `vw_predictive_region_priority_scores_v2`
+* **Objetivo:** Exponer el score regional v2 con señales de contexto, cobertura y primera generacion.
+* **Fuente curada:** `ml.region_priority_scores_v2`.
+* **Grano:** Año + region canonica.
+* **Uso en Power BI:** Priorizacion regional, ranking y comparacion de componentes.
+* **Advertencias metodologicas:** No es causal ni individual.
+
+### 18. `vw_predictive_region_clusters`
+* **Objetivo:** Exponer las asignaciones del modelo KMeans regional sin recalcular `ML.PREDICT` en Gold.
+* **Fuente curada:** `ml.region_cluster_assignments`.
+* **Grano:** Año + region canonica.
+* **Uso en Power BI:** Segmentacion territorial y comparacion de clusters.
+* **Advertencias metodologicas:** KMeans es no supervisado. Las etiquetas son genericas y deben interpretarse con perfiles promedio.
+
+### 19. `vw_predictive_region_cluster_profiles`
+* **Objetivo:** Publicar promedios por cluster para interpretar los centroides.
+* **Fuente curada:** `ml.region_cluster_profiles`.
+* **Grano:** Centroide.
+* **Uso en Power BI:** Perfilamiento de segmentos regionales.
+
+### 20. `vw_predictive_budget_forecast`
+* **Objetivo:** Exponer el forecast presupuestal mensual agregado producido por ARIMA_PLUS.
+* **Fuente curada:** `ml.budget_forecast_results`.
+* **Grano:** Mes pronosticado.
+* **Uso en Power BI:** Escenario referencial de devengado mensual.
+* **Advertencias metodologicas:** Es referencial, no causal y no representa compromisos financieros.
+
 ---
 
 ## 4. Clasificación y Granularidad de MEF
@@ -173,6 +200,8 @@ Las métricas expuestas en la capa Gold asumen que los controles de calidad en S
 - **Acceso:** Power BI debe conectarse exclusivamente al dataset `gold` en BigQuery utilizando la conexión nativa DirectQuery o Import.
 - **Prohibición:** Está terminantemente prohibido conectar tableros o reportes directos del usuario de negocio a la capa `bronze` para evitar latencias, lecturas innecesarias e inconsistencias de datos. La capa `silver` sólo se expone para propósitos de desarrollo, pruebas de auditoría técnica o depuración.
 
-## 7. Extensión v2 de prioridad regional
+## 7. Extensión predictiva regional y presupuestal
 
 La vista `vw_predictive_region_priority_scores_v2` amplía la salida regional existente con cobertura PRONABEC y primera generación. Su fuente curada es `ml.region_priority_scores_v2`, por lo que Gold sigue siendo una capa de exposición y no de recálculo.
+
+Las vistas `vw_predictive_region_clusters`, `vw_predictive_region_cluster_profiles` y `vw_predictive_budget_forecast` siguen el mismo principio: consumen resultados del dataset `ml` y no ejecutan modelos dentro de Gold.
