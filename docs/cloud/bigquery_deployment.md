@@ -62,6 +62,7 @@ create_audit_tables.rendered.sql
 create_gold_views.rendered.sql
 create_dim_region_mapping.rendered.sql
 create_region_context_features.rendered.sql
+create_region_priority_scores.rendered.sql
 data_quality_checks.rendered.sql
 ```
 
@@ -156,6 +157,6 @@ Esta separación evita inconsistencias entre schemas JSON y SQL generado, reduce
 
 El despliegue BigQuery prepara los objetos requeridos por las reglas de calidad y auditoría. Las tablas Audit reciben resultados de ejecución y validaciones, mientras que Gold depende de Silver para exponer vistas analíticas.
 
-Los SQL de la capa `ml` se renderizan y despliegan con el flujo estándar de BigQuery, después de que las tablas Silver estén disponibles. `ml.region_context_features` depende de `ml.dim_region_mapping` como fuente única de normalización regional.
+Los SQL de la capa `ml` se renderizan y despliegan con el flujo estándar de BigQuery, después de que las tablas Silver estén disponibles. `ml.region_context_features` depende de `ml.dim_region_mapping` como fuente única de normalización regional. `ml.region_priority_scores` se ejecuta después de `ml.region_context_features` y antes de la vista Gold predictiva para mantener el orden lógico de dependencias.
 
 La consistencia entre Silver, Gold y Audit permite que el pipeline conserve trazabilidad técnica desde la transformación hasta la validación posterior.

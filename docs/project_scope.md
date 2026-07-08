@@ -58,6 +58,7 @@ El proyecto incluye los siguientes componentes:
 
 - Implementar una base regional predictiva en el dataset `ml` a partir de fuentes Silver.
 - Estandarizar contexto territorial con INEI + MINEDU.
+- Publicar un score regional de prioridad explicable para consumo inicial en Power BI.
 - Preparar features para scoring, simulación y clustering territorial.
 - Dejar la capa lista para BigQuery ML y futuros modelos regionales.
 

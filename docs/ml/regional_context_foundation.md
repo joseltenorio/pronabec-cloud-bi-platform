@@ -70,6 +70,20 @@ La normalización resuelve mayúsculas, tildes, espacios dobles y variantes comu
 - La población joven se usa como denominador contextual para entender escala y presión demográfica.
 - El módulo no infiere causalidad sobre reducción de pobreza ni sobre impacto real de una beca.
 
+## Regional priority score v1
+
+La siguiente salida de esta base es `ml.region_priority_scores`, un score regional explicable que prioriza regiones según necesidad social, demanda educativa, población joven, ruralidad educativa y brecha digital.
+
+Puntos metodológicos:
+
+- No es un modelo individual de estudiantes.
+- No es causal ni pretende medir impacto real de una beca.
+- Usa únicamente `ml.region_context_features` como fuente.
+- Normaliza cada componente por año mediante min-max.
+- Ajusta el score final por componentes disponibles cuando faltan valores.
+- Conserva `feature_completeness_score` y `feature_quality_flag` para lectura de confiabilidad.
+- No incorpora cobertura PRONABEC todavía.
+
 ## Datos sintéticos y manuales
 
 La versión actual privilegia datos oficiales/manuales provenientes de Silver. Si en el futuro se rellena un hueco con promedio regional, carry-forward o cualquier otra imputación, el registro deberá marcarse explícitamente con:
@@ -96,4 +110,3 @@ La siguiente rama podrá construir sobre esta base:
 - escenarios presupuestales
 - simulación de asignación regional
 - clustering territorial
-
