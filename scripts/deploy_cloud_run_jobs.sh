@@ -101,6 +101,7 @@ BRONZE_DATASET="${BQ_BRONZE_DATASET:-bronze}"
 SILVER_DATASET="${BQ_SILVER_DATASET:-silver}"
 GOLD_DATASET="${BQ_GOLD_DATASET:-gold}"
 AUDIT_DATASET="${BQ_AUDIT_DATASET:-audit}"
+ML_DATASET="${BQ_ML_DATASET:-ml}"
 
 DATAFLOW_TEMP_LOCATION="${DATAFLOW_TEMP_LOCATION:-}"
 DATAFLOW_STAGING_LOCATION="${DATAFLOW_STAGING_LOCATION:-}"
@@ -325,7 +326,7 @@ upsert_cloud_run_job "$DATAFLOW_INEI_REPORT_JOB_NAME" "Lanzador Dataflow paramet
 ARGS_DF_MINEDU_ESCALE=("${DATAFLOW_COMMON_ARGS[@]}" --source-system minedu_escale --source-dataset minedu_matricula_secundaria_departamental --input-path "gs://${BUCKET_NAME}/bronze/minedu/escale_matricula_secundaria/extraction_date=\${BRONZE_EXTRACTION_DATE}/data.csv" --input-format csv --output-table "${PROJECT_ID}:${SILVER_DATASET}.minedu_matricula_secundaria_departamental" --summary-output-path "gs://${BUCKET_NAME}/audit/processing_summary/minedu_matricula_secundaria_departamental_\${BRONZE_EXTRACTION_DATE}.json")
 upsert_cloud_run_job "$DATAFLOW_MINEDU_ESCALE_JOB_NAME" "Lanzador Dataflow MINEDU ESCALE Bronze a Silver" ARGS_DF_MINEDU_ESCALE DATAFLOW_ENV_VARS 7200
 
-ARGS_QUALITY=(-m pipelines.quality_checks --project-id "$PROJECT_ID" --silver-dataset "$SILVER_DATASET" --gold-dataset "$GOLD_DATASET" --audit-dataset "$AUDIT_DATASET" --extraction-date "\${BRONZE_EXTRACTION_DATE}" --pipeline-run-id "\${PIPELINE_RUN_ID}" --fail-on-error)
+ARGS_QUALITY=(-m pipelines.quality_checks --project-id "$PROJECT_ID" --silver-dataset "$SILVER_DATASET" --gold-dataset "$GOLD_DATASET" --audit-dataset "$AUDIT_DATASET" --ml-dataset "$ML_DATASET" --extraction-date "\${BRONZE_EXTRACTION_DATE}" --pipeline-run-id "\${PIPELINE_RUN_ID}" --fail-on-error)
 upsert_cloud_run_job "$QUALITY_CHECKS_JOB_NAME" "Ejecucion batch de controles de calidad BigQuery" ARGS_QUALITY EMPTY_ENV
 
 log "Cloud Run Jobs configured successfully."

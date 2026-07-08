@@ -695,6 +695,36 @@ def test_ml_checks_remain_global_without_extraction_date(tmp_path, monkeypatch):
     assert mock_client.query_job_configs[0] is None
 
 
+def test_ml_checks_render_ml_dataset_placeholder(tmp_path, monkeypatch):
+    checks_file = tmp_path / "checks.sql"
+    checks_file.write_text(
+        "SELECT 'ml_placeholder_check' AS check_id, 'ml' AS layer, "
+        "'region_priority_scores' AS table_name, 'ERROR' AS severity, "
+        "0 AS failed_rows, TRUE AS passed, 'Ok' AS details "
+        "FROM `{project_id}.{ml_dataset}.region_priority_scores`;",
+        encoding="utf-8",
+    )
+
+    mock_client = MockBigQueryClient()
+    monkeypatch.setattr("google.cloud.bigquery.Client", lambda project: mock_client)
+
+    exit_code = run_quality_checks(
+        project_id="test-project",
+        silver_dataset="silver_ds",
+        gold_dataset="gold_ds",
+        audit_dataset="audit_ds",
+        ml_dataset="ml_test",
+        checks_file=str(checks_file),
+        pipeline_run_id="run-ml-placeholder",
+        dry_run=False,
+        fail_on_error=True,
+    )
+
+    assert exit_code == 0
+    assert len(mock_client.queries_run) == 1
+    assert "test-project.ml_test.region_priority_scores" in mock_client.queries_run[0]
+
+
 def test_runner_failed_check(tmp_path, monkeypatch):
     """Valida que un check fallido retorne código de salida 1 y se guarde como fallido en Audit."""
     checks_file = tmp_path / "checks.sql"

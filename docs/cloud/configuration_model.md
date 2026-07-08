@@ -140,6 +140,8 @@ La configuración de calidad declara el archivo SQL de reglas y el comportamient
 - `QUALITY_FAIL_ON_ERROR`;
 - `QUALITY_DRY_RUN`.
 
+El runner de calidad usa `BQ_ML_DATASET` para renderizar checks que referencian la capa `ml` sin acoplarse a un nombre fijo de dataset.
+
 ## Relación con componentes del repositorio
 
 ### Extractores
