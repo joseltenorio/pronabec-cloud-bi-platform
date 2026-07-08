@@ -1,0 +1,17 @@
+[
+  { "name": "scenario_id", "type": "STRING", "mode": "REQUIRED", "description": "Identificador estable del escenario prescriptivo." },
+  { "name": "scenario_name", "type": "STRING", "mode": "NULLABLE", "description": "Nombre legible del escenario." },
+  { "name": "scenario_type", "type": "STRING", "mode": "NULLABLE", "description": "Tipo funcional del escenario." },
+  { "name": "allocation_method", "type": "STRING", "mode": "NULLABLE", "description": "Metodo de scoring usado para asignar presupuesto regional." },
+  { "name": "budget_multiplier", "type": "FLOAT64", "mode": "NULLABLE", "description": "Multiplicador aplicado al presupuesto forecast de referencia." },
+  { "name": "scholarship_multiplier", "type": "FLOAT64", "mode": "NULLABLE", "description": "Multiplicador aplicado a la estimacion referencial de becas." },
+  { "name": "poverty_weight", "type": "FLOAT64", "mode": "NULLABLE", "description": "Peso del componente de pobreza." },
+  { "name": "demand_weight", "type": "FLOAT64", "mode": "NULLABLE", "description": "Peso del componente de demanda educativa." },
+  { "name": "population_weight", "type": "FLOAT64", "mode": "NULLABLE", "description": "Peso del componente de poblacion joven." },
+  { "name": "coverage_weight", "type": "FLOAT64", "mode": "NULLABLE", "description": "Peso del componente de brecha de cobertura." },
+  { "name": "first_generation_weight", "type": "FLOAT64", "mode": "NULLABLE", "description": "Peso del componente de primera generacion universitaria." },
+  { "name": "balanced_priority_weight", "type": "FLOAT64", "mode": "NULLABLE", "description": "Peso logico del score balanceado v2 cuando aplica." },
+  { "name": "scenario_description", "type": "STRING", "mode": "NULLABLE", "description": "Descripcion metodologica breve del escenario." },
+  { "name": "scenario_version", "type": "STRING", "mode": "NULLABLE", "description": "Version logica del bloque de escenarios." },
+  { "name": "created_at", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Timestamp de consulta de la vista." }
+]
