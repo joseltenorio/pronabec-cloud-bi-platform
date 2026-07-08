@@ -151,6 +151,10 @@ def test_deduce_source_metadata():
     assert sys == "ml"
     assert ds == "region_context_features"
 
+    sys, ds = deduce_source_metadata("region_priority_scores")
+    assert sys == "ml"
+    assert ds == "region_priority_scores"
+
     # Caso desconocido
     sys, ds = deduce_source_metadata("tabla_desconocida")
     assert sys == "unknown"

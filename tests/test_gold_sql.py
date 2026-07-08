@@ -24,6 +24,7 @@ REQUIRED_VIEWS = [
     "vw_mef_presupuesto_ejecucion_temporal",
     "vw_pronabec_becas_vs_presupuesto_anual",
     "vw_pronabec_beca18_resumen_analitico",
+    "vw_predictive_region_priority_scores",
 ]
 
 # Lista de tablas Silver reales que deben ser referenciadas
@@ -179,3 +180,11 @@ def test_gold_sql_beca18_resumen_analitico_spec(gold_sql_content: str) -> None:
     assert "presupuesto_mef" in gold_sql_content
     assert "convocatorias_carrera_sede" not in gold_sql_content
     assert "aggregation_scope" not in gold_sql_content
+
+
+def test_gold_sql_predictive_region_priority_spec(gold_sql_content: str) -> None:
+    assert "vw_predictive_region_priority_scores" in gold_sql_content
+    assert "{project_id}.{ml_dataset}.region_priority_scores" in gold_sql_content
+    assert "priority_score_pct" in gold_sql_content
+    assert "priority_label" in gold_sql_content
+    assert "SELECT *" not in gold_sql_content
