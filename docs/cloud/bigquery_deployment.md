@@ -70,6 +70,8 @@ create_region_cluster_assignments.rendered.sql
 create_region_cluster_profiles.rendered.sql
 create_budget_forecast_model.rendered.sql
 create_budget_forecast_results.rendered.sql
+create_budget_scenarios.rendered.sql
+create_region_allocation_scenarios.rendered.sql
 data_quality_checks.rendered.sql
 ```
 
@@ -166,6 +168,6 @@ El despliegue BigQuery prepara los objetos requeridos por las reglas de calidad 
 
 Los SQL de la capa `ml` se renderizan y despliegan con el flujo estándar de BigQuery, después de que las tablas Silver estén disponibles. `ml.region_context_features` depende de `ml.dim_region_mapping` como fuente única de normalización regional. `ml.region_priority_scores` se ejecuta después de `ml.region_context_features`. Luego `ml.region_coverage_features` combina el contexto con PRONABEC y alimenta `ml.region_priority_scores_v2`.
 
-El despliegue predictivo continúa con `ml.model_region_clusters`, `ml.region_cluster_assignments`, `ml.region_cluster_profiles`, `ml.model_budget_forecast` y `ml.budget_forecast_results`. Las vistas Gold consumen estas salidas ya calculadas y no recalculan `ML.PREDICT` ni `ML.FORECAST`.
+El despliegue predictivo continúa con `ml.model_region_clusters`, `ml.region_cluster_assignments`, `ml.region_cluster_profiles`, `ml.model_budget_forecast`, `ml.budget_forecast_results`, `ml.budget_scenarios` y `ml.region_allocation_scenarios`. Las vistas Gold consumen estas salidas ya calculadas y no recalculan `ML.PREDICT`, `ML.FORECAST` ni simulaciones prescriptivas.
 
 La consistencia entre Silver, Gold y Audit permite que el pipeline conserve trazabilidad técnica desde la transformación hasta la validación posterior.

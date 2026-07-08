@@ -180,6 +180,13 @@ La publicación de estas vistas se ejecuta de forma idempotente desde Cloud Run 
 * **Uso en Power BI:** Escenario referencial de devengado mensual.
 * **Advertencias metodologicas:** Es referencial, no causal y no representa compromisos financieros.
 
+### 21. `vw_predictive_region_allocation_scenarios`
+* **Objetivo:** Exponer escenarios prescriptivos de asignacion regional de presupuesto/becas sin recalcular la simulacion en Gold.
+* **Fuente curada:** `ml.region_allocation_scenarios`.
+* **Grano:** Año + region canonica + escenario.
+* **Uso en Power BI:** Comparar priorizacion base v2, pobreza, demanda/poblacion joven, primera generacion, balance equidad-demanda y variaciones de presupuesto +10%, +20% y -10%.
+* **Advertencias metodologicas:** Son escenarios simulados, no asignaciones oficiales. No hay causalidad ni prediccion individual. `estimated_scholarships` depende de un costo promedio referencial agregado.
+
 ---
 
 ## 4. Clasificación y Granularidad de MEF
@@ -204,4 +211,4 @@ Las métricas expuestas en la capa Gold asumen que los controles de calidad en S
 
 La vista `vw_predictive_region_priority_scores_v2` amplía la salida regional existente con cobertura PRONABEC y primera generación. Su fuente curada es `ml.region_priority_scores_v2`, por lo que Gold sigue siendo una capa de exposición y no de recálculo.
 
-Las vistas `vw_predictive_region_clusters`, `vw_predictive_region_cluster_profiles` y `vw_predictive_budget_forecast` siguen el mismo principio: consumen resultados del dataset `ml` y no ejecutan modelos dentro de Gold.
+Las vistas `vw_predictive_region_clusters`, `vw_predictive_region_cluster_profiles`, `vw_predictive_budget_forecast` y `vw_predictive_region_allocation_scenarios` siguen el mismo principio: consumen resultados del dataset `ml` y no ejecutan modelos dentro de Gold.

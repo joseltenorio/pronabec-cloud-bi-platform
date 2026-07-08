@@ -35,8 +35,8 @@ El sistema de validación cubre los tres sistemas principales del proyecto:
    - **Reportes documentales**: Cobertura de calidad para los 23 reportes documentales de origen, validando que no estén vacíos y cuenten con metadatos técnicos válidos (`extraction_date`, `pipeline_run_id`).
 4. **`ml`**: Cobertura de la base regional predictiva, validando `ml.region_context_features` como features territoriales unificadas.
 5. **`ml` score regional**: Validación de `ml.region_priority_scores` y `ml.region_priority_scores_v2` como scores explicables por año y región canónica.
-6. **`ml` modelos predictivos agregados**: Validación de asignaciones KMeans, perfiles de clusters y resultados de forecast ARIMA_PLUS.
-7. **`gold` predictivo**: Validación de vistas de consumo sin recálculo para scores, clusters y forecast presupuestal.
+6. **`ml` modelos predictivos agregados**: Validación de asignaciones KMeans, perfiles de clusters, resultados de forecast ARIMA_PLUS y escenarios prescriptivos regionales.
+7. **`gold` predictivo**: Validación de vistas de consumo sin recálculo para scores, clusters, forecast presupuestal y escenarios regionales.
 
 ## 4. Tipos de Checks Implementados
 
@@ -54,6 +54,7 @@ Las consultas versionadas en `sql/quality/data_quality_checks.sql` cubren las si
 * **Score regional predictivo (`ml` y `gold`)**: Validaciones de score entre 0 y 1, componentes normalizados, tiers controlados, ranking positivo y cobertura de regiones críticas.
 * **Clusters regionales (`ml` y `gold`)**: Validaciones de no vacio, unicidad por `anio + region_canonical`, `centroid_id` no nulo y perfiles con `regiones_count > 0`.
 * **Forecast presupuestal (`ml` y `gold`)**: Validaciones de no vacio, `forecast_value` no nulo e intervalos de prediccion coherentes.
+* **Escenarios regionales (`ml` y `gold`)**: Validaciones de escenarios no vacios, unicidad de grano, rangos de pesos, suma aproximada de `allocation_weight`, rankings no nulos y montos no negativos.
 
 ## 5. Prácticas y Restricciones de Seguridad (Checks que NO se deben hacer)
 
@@ -168,8 +169,11 @@ El archivo `sql/quality/data_quality_checks.sql` ya incluye reglas para:
 - `ml.region_cluster_assignments`
 - `ml.region_cluster_profiles`
 - `ml.budget_forecast_results`
+- `ml.budget_scenarios`
+- `ml.region_allocation_scenarios`
 - `gold.vw_predictive_region_clusters`
 - `gold.vw_predictive_region_cluster_profiles`
 - `gold.vw_predictive_budget_forecast`
+- `gold.vw_predictive_region_allocation_scenarios`
 
-Estas reglas validan rangos, unicidad, catálogos permitidos, presencia de señales PRONABEC, asignaciones KMeans y forecast presupuestal sin asumir causalidad ni prediccion individual.
+Estas reglas validan rangos, unicidad, catálogos permitidos, presencia de señales PRONABEC, asignaciones KMeans, forecast presupuestal y escenarios prescriptivos sin asumir causalidad ni prediccion individual.

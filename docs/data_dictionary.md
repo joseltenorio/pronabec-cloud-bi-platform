@@ -1076,6 +1076,7 @@ Las vistas Gold estarán orientadas al consumo en Power BI.
 | gold.vw_predictive_region_clusters | Asignaciones KMeans regionales                         | Página Segmentación Regional |
 | gold.vw_predictive_region_cluster_profiles | Perfiles promedio para interpretar clusters            | Página Segmentación Regional |
 | gold.vw_predictive_budget_forecast | Forecast presupuestal mensual referencial              | Página Presupuesto           |
+| gold.vw_predictive_region_allocation_scenarios | Escenarios prescriptivos de asignación regional       | Página Escenarios Regionales |
 
 ## Reglas generales para Gold
 
@@ -1084,6 +1085,14 @@ Las vistas Gold estarán orientadas al consumo en Power BI.
 - Las agregaciones deben estar diseñadas para facilitar el consumo desde Power BI.
 - Las vistas Gold no deben depender de rutas locales ni archivos CSV.
 - Las vistas Gold deben evitar lógica de limpieza pesada; esa lógica pertenece a Silver.
+
+## ML prescriptivo regional
+
+`ml.budget_scenarios` define escenarios simulados para comparar reglas de priorización: base score v2, presupuesto +10%, presupuesto +20%, presupuesto -10%, enfoque pobreza, enfoque demanda/población joven, enfoque primera generación y enfoque balanceado.
+
+`ml.region_allocation_scenarios` distribuye el forecast presupuestal agregado entre regiones usando pesos normalizados por año y escenario. Las columnas principales son `scenario_raw_score`, `allocation_weight`, `allocation_pct`, `scenario_rank`, `rank_change_vs_v2`, `scenario_budget_amount`, `estimated_budget_amount` y `estimated_scholarships`.
+
+Estos objetos no son asignaciones oficiales, no implementan causalidad y no predicen estudiantes individuales.
 
 ---
 

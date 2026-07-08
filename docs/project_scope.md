@@ -63,6 +63,7 @@ El proyecto incluye los siguientes componentes:
 - Publicar un score regional v2 que combine contexto, cobertura PRONABEC y primera generación.
 - Entrenar un modelo BigQuery ML KMeans para segmentacion regional no supervisada.
 - Entrenar un modelo BigQuery ML ARIMA_PLUS para forecast presupuestal mensual agregado.
+- Publicar escenarios prescriptivos regionales de asignacion de presupuesto/becas basados en scores agregados.
 - Publicar salidas predictivas agregadas en Gold para Power BI.
 
 ## Fuera del alcance inicial
@@ -78,7 +79,8 @@ Los siguientes elementos no forman parte del alcance inicial:
 - Reporting final basado manualmente en archivos CSV.
 - Predicción individual de estudiantes.
 - Modelos supervisados de estudiantes sintéticos.
-- Random Forest, XGBoost, deserción, pérdida de beca, datos sintéticos individuales, pagos individuales y escenarios presupuestales no forman parte de esta fase.
+- Random Forest, XGBoost, deserción, pérdida de beca, datos sintéticos individuales y pagos individuales no forman parte de esta fase.
+- Los escenarios regionales implementados son simulaciones prescriptivas agregadas; no son asignaciones oficiales.
 - Inferencia causal a partir de clusters o forecast.
 
 ## Modo de procesamiento
