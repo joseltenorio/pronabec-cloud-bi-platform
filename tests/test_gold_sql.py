@@ -29,6 +29,7 @@ REQUIRED_VIEWS = [
     "vw_predictive_region_clusters",
     "vw_predictive_region_cluster_profiles",
     "vw_predictive_budget_forecast",
+    "vw_predictive_region_allocation_scenarios",
 ]
 
 # Lista de tablas Silver reales que deben ser referenciadas
@@ -212,8 +213,20 @@ def test_gold_sql_predictive_ml_model_outputs_spec(gold_sql_content: str) -> Non
     assert "vw_predictive_region_clusters" in gold_sql_content
     assert "vw_predictive_region_cluster_profiles" in gold_sql_content
     assert "vw_predictive_budget_forecast" in gold_sql_content
+    assert "vw_predictive_region_allocation_scenarios" in gold_sql_content
     assert "{project_id}.{ml_dataset}.region_cluster_assignments" in gold_sql_content
     assert "{project_id}.{ml_dataset}.region_cluster_profiles" in gold_sql_content
     assert "{project_id}.{ml_dataset}.budget_forecast_results" in gold_sql_content
+    assert "{project_id}.{ml_dataset}.region_allocation_scenarios" in gold_sql_content
     assert "ML.PREDICT" not in gold_sql_content
     assert "ML.FORECAST" not in gold_sql_content
+
+
+def test_gold_sql_allocation_scenarios_exposes_ml_without_recalculation(gold_sql_content: str) -> None:
+    marker = "vw_predictive_region_allocation_scenarios"
+    assert marker in gold_sql_content
+    view_sql = gold_sql_content[gold_sql_content.index(marker):]
+
+    assert "FROM `{project_id}.{ml_dataset}.region_allocation_scenarios`" in view_sql
+    assert "scenario_raw_score" in view_sql
+    assert "CASE" not in view_sql.split("FROM `{project_id}.{ml_dataset}.region_allocation_scenarios`", 1)[0]

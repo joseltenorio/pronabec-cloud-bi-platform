@@ -20,6 +20,8 @@ DEFAULT_SOURCE_FILES = (
     "sql/ml/create_region_cluster_profiles.sql",
     "sql/ml/create_budget_forecast_model.sql",
     "sql/ml/create_budget_forecast_results.sql",
+    "sql/ml/create_budget_scenarios.sql",
+    "sql/ml/create_region_allocation_scenarios.sql",
     "sql/ddl/create_gold_views.sql",
     "sql/quality/data_quality_checks.sql",
 )

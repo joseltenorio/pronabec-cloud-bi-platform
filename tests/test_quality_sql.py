@@ -15,7 +15,7 @@ SQL_FILE_PATH = PROJECT_ROOT / "sql" / "quality" / "data_quality_checks.sql"
 SILVER_SCHEMAS_DIR = PROJECT_ROOT / "config" / "schemas" / "silver"
 ML_SCHEMAS_DIR = PROJECT_ROOT / "config" / "schemas" / "ml"
 GOLD_DDL_PATH = PROJECT_ROOT / "sql" / "ddl" / "create_gold_views.sql"
-EXPECTED_QUALITY_CHECKS = 127
+EXPECTED_QUALITY_CHECKS = 145
 QUALITY_OUTPUT_COLUMNS = {
     "check_id",
     "layer",
@@ -28,6 +28,7 @@ QUALITY_OUTPUT_COLUMNS = {
 SQL_FUNCTIONS_AND_KEYWORDS = {
     "AND",
     "AS",
+    "ABS",
     "BETWEEN",
     "BY",
     "CAST",
@@ -66,6 +67,7 @@ QUALITY_LOCAL_ALIASES = {
     "dup_cnt",
     "failed_cnt",
     "total_cnt",
+    "total_weight",
 }
 
 
@@ -335,11 +337,14 @@ def test_required_tables_are_covered():
         "region_cluster_assignments",
         "region_cluster_profiles",
         "budget_forecast_results",
+        "budget_scenarios",
+        "region_allocation_scenarios",
         "vw_predictive_region_priority_scores",
         "vw_predictive_region_priority_scores_v2",
         "vw_predictive_region_clusters",
         "vw_predictive_region_cluster_profiles",
         "vw_predictive_budget_forecast",
+        "vw_predictive_region_allocation_scenarios",
     }
     
     for t in required_tables:
@@ -678,6 +683,20 @@ def test_ml_predictive_model_output_quality_checks_are_present_and_parameterized
         "ml_budget_forecast_results_value_not_null",
         "ml_budget_forecast_results_lower_bound",
         "ml_budget_forecast_results_upper_bound",
+        "ml_budget_scenarios_not_empty",
+        "ml_budget_scenarios_unique_scenario_id",
+        "ml_budget_scenarios_budget_multiplier_positive",
+        "ml_budget_scenarios_scholarship_multiplier_positive",
+        "ml_budget_scenarios_weight_ranges",
+        "ml_budget_scenarios_base_priority_present",
+        "ml_region_allocation_scenarios_not_empty",
+        "ml_region_allocation_scenarios_unique_grain",
+        "ml_region_allocation_scenarios_allocation_weight_range",
+        "ml_region_allocation_scenarios_allocation_pct_range",
+        "ml_region_allocation_scenarios_weight_sum_by_year_scenario",
+        "ml_region_allocation_scenarios_rank_not_null",
+        "ml_region_allocation_scenarios_estimated_budget_nonnegative",
+        "ml_region_allocation_scenarios_scenario_budget_nonnegative",
     ]
     for check_id in expected_checks:
         assert check_id in content
@@ -685,6 +704,8 @@ def test_ml_predictive_model_output_quality_checks_are_present_and_parameterized
     assert "{project_id}.{ml_dataset}.region_cluster_assignments" in content
     assert "{project_id}.{ml_dataset}.region_cluster_profiles" in content
     assert "{project_id}.{ml_dataset}.budget_forecast_results" in content
+    assert "{project_id}.{ml_dataset}.budget_scenarios" in content
+    assert "{project_id}.{ml_dataset}.region_allocation_scenarios" in content
 
 
 def test_gold_predictive_model_output_quality_checks_are_present_and_parameterized():
@@ -694,6 +715,10 @@ def test_gold_predictive_model_output_quality_checks_are_present_and_parameteriz
         "gold_predictive_region_clusters_not_empty",
         "gold_predictive_region_cluster_profiles_not_empty",
         "gold_predictive_budget_forecast_not_empty",
+        "gold_predictive_region_allocation_scenarios_not_empty",
+        "gold_predictive_region_allocation_scenarios_unique_grain",
+        "gold_predictive_region_allocation_scenarios_allocation_weight_range",
+        "gold_predictive_region_allocation_scenarios_rank_not_null",
     ]
     for check_id in expected_checks:
         assert check_id in content
@@ -701,6 +726,7 @@ def test_gold_predictive_model_output_quality_checks_are_present_and_parameteriz
     assert "{project_id}.{gold_dataset}.vw_predictive_region_clusters" in content
     assert "{project_id}.{gold_dataset}.vw_predictive_region_cluster_profiles" in content
     assert "{project_id}.{gold_dataset}.vw_predictive_budget_forecast" in content
+    assert "{project_id}.{gold_dataset}.vw_predictive_region_allocation_scenarios" in content
 
 
 def test_silver_checks_use_declared_schema_columns_for_simple_predicates():

@@ -70,6 +70,8 @@ def test_deploy_bigquery_includes_ml_sql_rendered_artifacts():
     assert "create_region_cluster_profiles.rendered.sql" in content
     assert "create_budget_forecast_model.rendered.sql" in content
     assert "create_budget_forecast_results.rendered.sql" in content
+    assert "create_budget_scenarios.rendered.sql" in content
+    assert "create_region_allocation_scenarios.rendered.sql" in content
     assert content.index("create_dim_region_mapping.rendered.sql") < content.index("create_region_context_features.rendered.sql")
     assert content.index("create_region_context_features.rendered.sql") < content.index("create_region_priority_scores.rendered.sql")
     assert content.index("create_region_priority_scores.rendered.sql") < content.index("create_region_coverage_features.rendered.sql")
@@ -79,7 +81,9 @@ def test_deploy_bigquery_includes_ml_sql_rendered_artifacts():
     assert content.index("create_region_cluster_assignments.rendered.sql") < content.index("create_region_cluster_profiles.rendered.sql")
     assert content.index("create_region_cluster_profiles.rendered.sql") < content.index("create_budget_forecast_model.rendered.sql")
     assert content.index("create_budget_forecast_model.rendered.sql") < content.index("create_budget_forecast_results.rendered.sql")
-    assert content.index("create_budget_forecast_results.rendered.sql") < content.index("create_gold_views.rendered.sql")
+    assert content.index("create_budget_forecast_results.rendered.sql") < content.index("create_budget_scenarios.rendered.sql")
+    assert content.index("create_budget_scenarios.rendered.sql") < content.index("create_region_allocation_scenarios.rendered.sql")
+    assert content.index("create_region_allocation_scenarios.rendered.sql") < content.index("create_gold_views.rendered.sql")
 
 
 def test_render_sql_templates_script_passes_ml_dataset_to_renderer():
@@ -97,6 +101,8 @@ def test_render_sql_templates_script_passes_ml_dataset_to_renderer():
     assert "sql/ml/create_region_cluster_profiles.sql" in content
     assert "sql/ml/create_budget_forecast_model.sql" in content
     assert "sql/ml/create_budget_forecast_results.sql" in content
+    assert "sql/ml/create_budget_scenarios.sql" in content
+    assert "sql/ml/create_region_allocation_scenarios.sql" in content
 
 
 def test_generate_bigquery_ddl_script_supports_ci_and_deploy_modes():

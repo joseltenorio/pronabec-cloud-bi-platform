@@ -21,6 +21,8 @@ def test_render_sql_templates_default_sources_include_ml() -> None:
     assert "sql/ml/create_region_cluster_profiles.sql" in DEFAULT_SOURCE_FILES
     assert "sql/ml/create_budget_forecast_model.sql" in DEFAULT_SOURCE_FILES
     assert "sql/ml/create_budget_forecast_results.sql" in DEFAULT_SOURCE_FILES
+    assert "sql/ml/create_budget_scenarios.sql" in DEFAULT_SOURCE_FILES
+    assert "sql/ml/create_region_allocation_scenarios.sql" in DEFAULT_SOURCE_FILES
 
 
 def test_render_sql_templates_renders_ml_artifacts(tmp_path: Path) -> None:
@@ -53,6 +55,8 @@ def test_render_sql_templates_renders_ml_artifacts(tmp_path: Path) -> None:
     cluster_profiles_path = output_dir / "create_region_cluster_profiles.rendered.sql"
     budget_model_path = output_dir / "create_budget_forecast_model.rendered.sql"
     budget_results_path = output_dir / "create_budget_forecast_results.rendered.sql"
+    budget_scenarios_path = output_dir / "create_budget_scenarios.rendered.sql"
+    allocation_scenarios_path = output_dir / "create_region_allocation_scenarios.rendered.sql"
     gold_path = output_dir / "create_gold_views.rendered.sql"
     quality_path = output_dir / "data_quality_checks.rendered.sql"
 
@@ -66,6 +70,8 @@ def test_render_sql_templates_renders_ml_artifacts(tmp_path: Path) -> None:
     assert cluster_profiles_path.exists()
     assert budget_model_path.exists()
     assert budget_results_path.exists()
+    assert budget_scenarios_path.exists()
+    assert allocation_scenarios_path.exists()
     assert gold_path.exists()
     assert quality_path.exists()
 
@@ -79,6 +85,8 @@ def test_render_sql_templates_renders_ml_artifacts(tmp_path: Path) -> None:
     cluster_profiles_content = cluster_profiles_path.read_text(encoding="utf-8")
     budget_model_content = budget_model_path.read_text(encoding="utf-8")
     budget_results_content = budget_results_path.read_text(encoding="utf-8")
+    budget_scenarios_content = budget_scenarios_path.read_text(encoding="utf-8")
+    allocation_scenarios_content = allocation_scenarios_path.read_text(encoding="utf-8")
     gold_content = gold_path.read_text(encoding="utf-8")
     quality_content = quality_path.read_text(encoding="utf-8")
 
@@ -93,6 +101,8 @@ def test_render_sql_templates_renders_ml_artifacts(tmp_path: Path) -> None:
         cluster_profiles_content,
         budget_model_content,
         budget_results_content,
+        budget_scenarios_content,
+        allocation_scenarios_content,
         gold_content,
         quality_content,
     ]:
@@ -114,3 +124,5 @@ def test_render_sql_templates_renders_ml_artifacts(tmp_path: Path) -> None:
     assert "test-project.ml.region_cluster_profiles" in cluster_profiles_content
     assert "test-project.ml.model_budget_forecast" in budget_model_content
     assert "test-project.ml.budget_forecast_results" in budget_results_content
+    assert "test-project.ml.budget_scenarios" in budget_scenarios_content
+    assert "test-project.ml.region_allocation_scenarios" in allocation_scenarios_content

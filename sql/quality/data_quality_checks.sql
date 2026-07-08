@@ -2178,3 +2178,305 @@ SELECT
 FROM (
   SELECT COUNT(*) AS cnt FROM `{project_id}.{gold_dataset}.vw_predictive_budget_forecast`
 );
+
+-- =============================================================================
+-- ML budget scenario checks
+-- =============================================================================
+
+-- Check: ml_budget_scenarios_not_empty
+SELECT
+  'ml_budget_scenarios_not_empty' AS check_id,
+  'ml' AS layer,
+  'budget_scenarios' AS table_name,
+  'ERROR' AS severity,
+  IF(cnt = 0, 1, 0) AS failed_rows,
+  (cnt > 0) AS passed,
+  IF(cnt = 0, 'La vista ML de escenarios presupuestales está vacía', 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS cnt FROM `{project_id}.{ml_dataset}.budget_scenarios`
+);
+
+-- Check: ml_budget_scenarios_unique_scenario_id
+SELECT
+  'ml_budget_scenarios_unique_scenario_id' AS check_id,
+  'ml' AS layer,
+  'budget_scenarios' AS table_name,
+  'ERROR' AS severity,
+  dup_cnt AS failed_rows,
+  (dup_cnt = 0) AS passed,
+  IF(dup_cnt > 0, CONCAT('Se encontraron ', CAST(dup_cnt AS STRING), ' scenario_id duplicados'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS dup_cnt
+  FROM (
+    SELECT scenario_id
+    FROM `{project_id}.{ml_dataset}.budget_scenarios`
+    GROUP BY scenario_id
+    HAVING COUNT(*) > 1
+  )
+);
+
+-- Check: ml_budget_scenarios_budget_multiplier_positive
+SELECT
+  'ml_budget_scenarios_budget_multiplier_positive' AS check_id,
+  'ml' AS layer,
+  'budget_scenarios' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' escenarios con budget_multiplier no positivo'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.budget_scenarios`
+  WHERE budget_multiplier IS NULL OR budget_multiplier <= 0
+);
+
+-- Check: ml_budget_scenarios_scholarship_multiplier_positive
+SELECT
+  'ml_budget_scenarios_scholarship_multiplier_positive' AS check_id,
+  'ml' AS layer,
+  'budget_scenarios' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' escenarios con scholarship_multiplier no positivo'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.budget_scenarios`
+  WHERE scholarship_multiplier IS NULL OR scholarship_multiplier <= 0
+);
+
+-- Check: ml_budget_scenarios_weight_ranges
+SELECT
+  'ml_budget_scenarios_weight_ranges' AS check_id,
+  'ml' AS layer,
+  'budget_scenarios' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' escenarios con pesos fuera de rango'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.budget_scenarios`
+  WHERE poverty_weight < 0 OR poverty_weight > 1
+     OR demand_weight < 0 OR demand_weight > 1
+     OR population_weight < 0 OR population_weight > 1
+     OR coverage_weight < 0 OR coverage_weight > 1
+     OR first_generation_weight < 0 OR first_generation_weight > 1
+     OR balanced_priority_weight < 0 OR balanced_priority_weight > 1
+);
+
+-- Check: ml_budget_scenarios_base_priority_present
+SELECT
+  'ml_budget_scenarios_base_priority_present' AS check_id,
+  'ml' AS layer,
+  'budget_scenarios' AS table_name,
+  'ERROR' AS severity,
+  IF(cnt = 0, 1, 0) AS failed_rows,
+  (cnt > 0) AS passed,
+  IF(cnt = 0, 'No existe el escenario base_priority', 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS cnt
+  FROM `{project_id}.{ml_dataset}.budget_scenarios`
+  WHERE scenario_id = 'base_priority'
+);
+
+-- =============================================================================
+-- ML regional allocation scenario checks
+-- =============================================================================
+
+-- Check: ml_region_allocation_scenarios_not_empty
+SELECT
+  'ml_region_allocation_scenarios_not_empty' AS check_id,
+  'ml' AS layer,
+  'region_allocation_scenarios' AS table_name,
+  'ERROR' AS severity,
+  IF(cnt = 0, 1, 0) AS failed_rows,
+  (cnt > 0) AS passed,
+  IF(cnt = 0, 'La vista ML de escenarios de asignación regional está vacía', 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS cnt FROM `{project_id}.{ml_dataset}.region_allocation_scenarios`
+);
+
+-- Check: ml_region_allocation_scenarios_unique_grain
+SELECT
+  'ml_region_allocation_scenarios_unique_grain' AS check_id,
+  'ml' AS layer,
+  'region_allocation_scenarios' AS table_name,
+  'ERROR' AS severity,
+  dup_cnt AS failed_rows,
+  (dup_cnt = 0) AS passed,
+  IF(dup_cnt > 0, CONCAT('Se encontraron ', CAST(dup_cnt AS STRING), ' combinaciones duplicadas de anio, region_canonical y scenario_id'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS dup_cnt
+  FROM (
+    SELECT anio, region_canonical, scenario_id
+    FROM `{project_id}.{ml_dataset}.region_allocation_scenarios`
+    GROUP BY anio, region_canonical, scenario_id
+    HAVING COUNT(*) > 1
+  )
+);
+
+-- Check: ml_region_allocation_scenarios_allocation_weight_range
+SELECT
+  'ml_region_allocation_scenarios_allocation_weight_range' AS check_id,
+  'ml' AS layer,
+  'region_allocation_scenarios' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' allocation_weight fuera de rango'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_allocation_scenarios`
+  WHERE allocation_weight IS NOT NULL
+    AND (allocation_weight < 0 OR allocation_weight > 1)
+);
+
+-- Check: ml_region_allocation_scenarios_allocation_pct_range
+SELECT
+  'ml_region_allocation_scenarios_allocation_pct_range' AS check_id,
+  'ml' AS layer,
+  'region_allocation_scenarios' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' allocation_pct fuera de rango'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_allocation_scenarios`
+  WHERE allocation_pct IS NOT NULL
+    AND (allocation_pct < 0 OR allocation_pct > 100)
+);
+
+-- Check: ml_region_allocation_scenarios_weight_sum_by_year_scenario
+SELECT
+  'ml_region_allocation_scenarios_weight_sum_by_year_scenario' AS check_id,
+  'ml' AS layer,
+  'region_allocation_scenarios' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' combinaciones anio-escenario cuyo allocation_weight no suma aproximadamente 1'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM (
+    SELECT anio, scenario_id, SUM(allocation_weight) AS total_weight
+    FROM `{project_id}.{ml_dataset}.region_allocation_scenarios`
+    GROUP BY anio, scenario_id
+    HAVING ABS(total_weight - 1) > 0.0001
+  )
+);
+
+-- Check: ml_region_allocation_scenarios_rank_not_null
+SELECT
+  'ml_region_allocation_scenarios_rank_not_null' AS check_id,
+  'ml' AS layer,
+  'region_allocation_scenarios' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' escenarios regionales sin scenario_rank'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_allocation_scenarios`
+  WHERE scenario_rank IS NULL
+);
+
+-- Check: ml_region_allocation_scenarios_estimated_budget_nonnegative
+SELECT
+  'ml_region_allocation_scenarios_estimated_budget_nonnegative' AS check_id,
+  'ml' AS layer,
+  'region_allocation_scenarios' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' estimated_budget_amount negativos'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_allocation_scenarios`
+  WHERE estimated_budget_amount IS NOT NULL
+    AND estimated_budget_amount < 0
+);
+
+-- Check: ml_region_allocation_scenarios_scenario_budget_nonnegative
+SELECT
+  'ml_region_allocation_scenarios_scenario_budget_nonnegative' AS check_id,
+  'ml' AS layer,
+  'region_allocation_scenarios' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' scenario_budget_amount negativos'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_allocation_scenarios`
+  WHERE scenario_budget_amount IS NOT NULL
+    AND scenario_budget_amount < 0
+);
+
+-- =============================================================================
+-- Gold regional allocation scenario checks
+-- =============================================================================
+
+-- Check: gold_predictive_region_allocation_scenarios_not_empty
+SELECT
+  'gold_predictive_region_allocation_scenarios_not_empty' AS check_id,
+  'gold' AS layer,
+  'vw_predictive_region_allocation_scenarios' AS table_name,
+  'ERROR' AS severity,
+  IF(cnt = 0, 1, 0) AS failed_rows,
+  (cnt > 0) AS passed,
+  IF(cnt = 0, 'La vista Gold predictiva de escenarios regionales está vacía', 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS cnt FROM `{project_id}.{gold_dataset}.vw_predictive_region_allocation_scenarios`
+);
+
+-- Check: gold_predictive_region_allocation_scenarios_unique_grain
+SELECT
+  'gold_predictive_region_allocation_scenarios_unique_grain' AS check_id,
+  'gold' AS layer,
+  'vw_predictive_region_allocation_scenarios' AS table_name,
+  'ERROR' AS severity,
+  dup_cnt AS failed_rows,
+  (dup_cnt = 0) AS passed,
+  IF(dup_cnt > 0, CONCAT('Se encontraron ', CAST(dup_cnt AS STRING), ' combinaciones duplicadas de anio, region_canonical y scenario_id'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS dup_cnt
+  FROM (
+    SELECT anio, region_canonical, scenario_id
+    FROM `{project_id}.{gold_dataset}.vw_predictive_region_allocation_scenarios`
+    GROUP BY anio, region_canonical, scenario_id
+    HAVING COUNT(*) > 1
+  )
+);
+
+-- Check: gold_predictive_region_allocation_scenarios_allocation_weight_range
+SELECT
+  'gold_predictive_region_allocation_scenarios_allocation_weight_range' AS check_id,
+  'gold' AS layer,
+  'vw_predictive_region_allocation_scenarios' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' allocation_weight fuera de rango en Gold'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{gold_dataset}.vw_predictive_region_allocation_scenarios`
+  WHERE allocation_weight IS NOT NULL
+    AND (allocation_weight < 0 OR allocation_weight > 1)
+);
+
+-- Check: gold_predictive_region_allocation_scenarios_rank_not_null
+SELECT
+  'gold_predictive_region_allocation_scenarios_rank_not_null' AS check_id,
+  'gold' AS layer,
+  'vw_predictive_region_allocation_scenarios' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' escenarios Gold sin scenario_rank'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{gold_dataset}.vw_predictive_region_allocation_scenarios`
+  WHERE scenario_rank IS NULL
+);

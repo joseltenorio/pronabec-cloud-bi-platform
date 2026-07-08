@@ -134,6 +134,8 @@ run_bq_sql_file "${GENERATED_SQL_DIR}/create_region_cluster_assignments.rendered
 run_bq_sql_file "${GENERATED_SQL_DIR}/create_region_cluster_profiles.rendered.sql" "Perfiles ML de clusters regionales"
 run_bq_sql_file "${GENERATED_SQL_DIR}/create_budget_forecast_model.rendered.sql" "Modelo ML ARIMA_PLUS presupuestal"
 run_bq_sql_file "${GENERATED_SQL_DIR}/create_budget_forecast_results.rendered.sql" "Resultados ML de forecast presupuestal"
+run_bq_sql_file "${GENERATED_SQL_DIR}/create_budget_scenarios.rendered.sql" "Escenarios ML presupuestales"
+run_bq_sql_file "${GENERATED_SQL_DIR}/create_region_allocation_scenarios.rendered.sql" "Escenarios ML de asignación regional"
 
 if [[ "$SKIP_GOLD" == false ]]; then
   run_bq_sql_file "${GENERATED_SQL_DIR}/create_gold_views.rendered.sql" "Vistas Gold"
