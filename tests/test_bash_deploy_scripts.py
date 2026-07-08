@@ -62,6 +62,10 @@ def test_deploy_bigquery_includes_ml_sql_rendered_artifacts():
 
     assert "create_dim_region_mapping.rendered.sql" in content
     assert "create_region_context_features.rendered.sql" in content
+    assert "create_region_priority_scores.rendered.sql" in content
+    assert content.index("create_dim_region_mapping.rendered.sql") < content.index("create_region_context_features.rendered.sql")
+    assert content.index("create_region_context_features.rendered.sql") < content.index("create_region_priority_scores.rendered.sql")
+    assert content.index("create_region_priority_scores.rendered.sql") < content.index("create_gold_views.rendered.sql")
 
 
 def test_render_sql_templates_script_passes_ml_dataset_to_renderer():
