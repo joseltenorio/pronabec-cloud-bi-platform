@@ -35,6 +35,8 @@
 
 Las etiquetas son genericas (`Cluster 1` a `Cluster 4`). La interpretacion sustantiva debe validarse con los perfiles promedio, no asumirse desde el numero de centroide.
 
+`coverage_gap_score` puede venir nulo en la capa de features; el entrenamiento y la prediccion lo tratan como `0` para conservar todas las filas de `ml.region_coverage_features` y evitar vaciar el set de entrenamiento.
+
 ## Limites
 
 - No hay prediccion individual.

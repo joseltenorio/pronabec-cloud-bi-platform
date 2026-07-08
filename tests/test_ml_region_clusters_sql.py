@@ -29,6 +29,9 @@ def test_region_cluster_model_uses_bigquery_ml_kmeans() -> None:
     assert "standardize_features = TRUE" in content
     assert "kmeans_init_method = 'KMEANS++'" in content
     assert "`{project_id}.{ml_dataset}.region_coverage_features`" in content
+    assert "coverage_gap_score IS NOT NULL" not in content
+    assert "COALESCE(coverage_gap_score, 0)" in content
+    assert "COALESCE(context_priority_score, 0)" in content
 
 
 def test_region_cluster_assignments_and_profiles() -> None:
@@ -41,6 +44,8 @@ def test_region_cluster_assignments_and_profiles() -> None:
     assert "`{project_id}.{ml_dataset}.region_coverage_features`" in assignments
     assert "centroid_id" in assignments
     assert "Cluster " in assignments
+    assert "COALESCE(coverage_gap_score, 0)" in assignments
+    assert "COALESCE(context_priority_score, 0)" in assignments
 
     assert "CREATE OR REPLACE VIEW `{project_id}.{ml_dataset}.region_cluster_profiles`" in profiles
     assert "`{project_id}.{ml_dataset}.region_cluster_assignments`" in profiles
