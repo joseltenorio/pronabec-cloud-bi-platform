@@ -1,0 +1,21 @@
+[
+  { "name": "anio", "type": "INT64", "mode": "REQUIRED", "description": "Año de referencia de la asignación de cluster regional." },
+  { "name": "region", "type": "STRING", "mode": "REQUIRED", "description": "Región canónica de presentación." },
+  { "name": "region_canonical", "type": "STRING", "mode": "REQUIRED", "description": "Clave regional canónica unificada." },
+  { "name": "priority_score_v2", "type": "FLOAT64", "mode": "NULLABLE", "description": "Score regional v2 asociado a la región y año." },
+  { "name": "context_priority_score", "type": "FLOAT64", "mode": "NULLABLE", "description": "Score contextual heredado." },
+  { "name": "coverage_gap_score", "type": "FLOAT64", "mode": "NULLABLE", "description": "Score de brecha de cobertura regional." },
+  { "name": "primera_generacion_score", "type": "FLOAT64", "mode": "NULLABLE", "description": "Score normalizado de primera generación." },
+  { "name": "pobreza_monetaria_pct", "type": "FLOAT64", "mode": "NULLABLE", "description": "Incidencia de pobreza monetaria regional." },
+  { "name": "matricula_5to_secundaria", "type": "INT64", "mode": "NULLABLE", "description": "Matrícula total de quinto de secundaria." },
+  { "name": "poblacion_15_29", "type": "INT64", "mode": "NULLABLE", "description": "Población regional de 15 a 29 años." },
+  { "name": "brecha_digital_pct", "type": "FLOAT64", "mode": "NULLABLE", "description": "Brecha digital regional." },
+  { "name": "ruralidad_educativa_pct", "type": "FLOAT64", "mode": "NULLABLE", "description": "Participación rural de la matrícula de quinto." },
+  { "name": "primera_generacion_ratio", "type": "FLOAT64", "mode": "NULLABLE", "description": "Proporción regional de primera generación." },
+  { "name": "becas_por_1000_jovenes", "type": "FLOAT64", "mode": "NULLABLE", "description": "Cobertura estimada por mil jóvenes." },
+  { "name": "becas_por_1000_matriculados_5to", "type": "FLOAT64", "mode": "NULLABLE", "description": "Cobertura estimada por mil matriculados de quinto." },
+  { "name": "centroid_id", "type": "INT64", "mode": "NULLABLE", "description": "Identificador del centroide asignado por BigQuery ML." },
+  { "name": "centroid_distance", "type": "FLOAT64", "mode": "NULLABLE", "description": "Distancia al centroide asignado cuando BigQuery ML la devuelve." },
+  { "name": "cluster_label", "type": "STRING", "mode": "NULLABLE", "description": "Etiqueta genérica del cluster." },
+  { "name": "created_at", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Timestamp de materialización o consulta de la capa ML." }
+]

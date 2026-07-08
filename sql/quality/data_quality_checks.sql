@@ -1975,3 +1975,206 @@ FROM (
   WHERE priority_score_v2 IS NOT NULL
     AND (priority_rank_v2 IS NULL OR priority_rank_v2 < 1)
 );
+
+-- =============================================================================
+-- ML regional cluster assignment checks
+-- =============================================================================
+
+-- Check: ml_region_cluster_assignments_not_empty
+SELECT
+  'ml_region_cluster_assignments_not_empty' AS check_id,
+  'ml' AS layer,
+  'region_cluster_assignments' AS table_name,
+  'ERROR' AS severity,
+  IF(cnt = 0, 1, 0) AS failed_rows,
+  (cnt > 0) AS passed,
+  IF(cnt = 0, 'La vista ML de asignaciones de clusters regionales está vacía', 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS cnt FROM `{project_id}.{ml_dataset}.region_cluster_assignments`
+);
+
+-- Check: ml_region_cluster_assignments_unique_grain
+SELECT
+  'ml_region_cluster_assignments_unique_grain' AS check_id,
+  'ml' AS layer,
+  'region_cluster_assignments' AS table_name,
+  'ERROR' AS severity,
+  dup_cnt AS failed_rows,
+  (dup_cnt = 0) AS passed,
+  IF(dup_cnt > 0, CONCAT('Se encontraron ', CAST(dup_cnt AS STRING), ' combinaciones duplicadas de anio y region_canonical'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS dup_cnt
+  FROM (
+    SELECT anio, region_canonical
+    FROM `{project_id}.{ml_dataset}.region_cluster_assignments`
+    GROUP BY anio, region_canonical
+    HAVING COUNT(*) > 1
+  )
+);
+
+-- Check: ml_region_cluster_assignments_centroid_not_null
+SELECT
+  'ml_region_cluster_assignments_centroid_not_null' AS check_id,
+  'ml' AS layer,
+  'region_cluster_assignments' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' asignaciones sin centroid_id'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_cluster_assignments`
+  WHERE centroid_id IS NULL
+);
+
+-- Check: ml_region_cluster_assignments_year_range
+SELECT
+  'ml_region_cluster_assignments_year_range' AS check_id,
+  'ml' AS layer,
+  'region_cluster_assignments' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' asignaciones con anio fuera de rango 2012-2025'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_cluster_assignments`
+  WHERE anio < 2012 OR anio > 2025
+);
+
+-- =============================================================================
+-- ML regional cluster profile checks
+-- =============================================================================
+
+-- Check: ml_region_cluster_profiles_not_empty
+SELECT
+  'ml_region_cluster_profiles_not_empty' AS check_id,
+  'ml' AS layer,
+  'region_cluster_profiles' AS table_name,
+  'ERROR' AS severity,
+  IF(cnt = 0, 1, 0) AS failed_rows,
+  (cnt > 0) AS passed,
+  IF(cnt = 0, 'La vista ML de perfiles de clusters regionales está vacía', 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS cnt FROM `{project_id}.{ml_dataset}.region_cluster_profiles`
+);
+
+-- Check: ml_region_cluster_profiles_region_count_positive
+SELECT
+  'ml_region_cluster_profiles_region_count_positive' AS check_id,
+  'ml' AS layer,
+  'region_cluster_profiles' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' perfiles con regiones_count no positivo'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_cluster_profiles`
+  WHERE regiones_count IS NULL OR regiones_count <= 0
+);
+
+-- =============================================================================
+-- ML budget forecast checks
+-- =============================================================================
+
+-- Check: ml_budget_forecast_results_not_empty
+SELECT
+  'ml_budget_forecast_results_not_empty' AS check_id,
+  'ml' AS layer,
+  'budget_forecast_results' AS table_name,
+  'ERROR' AS severity,
+  IF(cnt = 0, 1, 0) AS failed_rows,
+  (cnt > 0) AS passed,
+  IF(cnt = 0, 'La vista ML de forecast presupuestal está vacía', 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS cnt FROM `{project_id}.{ml_dataset}.budget_forecast_results`
+);
+
+-- Check: ml_budget_forecast_results_value_not_null
+SELECT
+  'ml_budget_forecast_results_value_not_null' AS check_id,
+  'ml' AS layer,
+  'budget_forecast_results' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' forecasts sin forecast_value'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.budget_forecast_results`
+  WHERE forecast_value IS NULL
+);
+
+-- Check: ml_budget_forecast_results_lower_bound
+SELECT
+  'ml_budget_forecast_results_lower_bound' AS check_id,
+  'ml' AS layer,
+  'budget_forecast_results' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' forecasts por debajo del intervalo inferior'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.budget_forecast_results`
+  WHERE prediction_interval_lower_bound > forecast_value
+);
+
+-- Check: ml_budget_forecast_results_upper_bound
+SELECT
+  'ml_budget_forecast_results_upper_bound' AS check_id,
+  'ml' AS layer,
+  'budget_forecast_results' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' forecasts por encima del intervalo superior'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.budget_forecast_results`
+  WHERE forecast_value > prediction_interval_upper_bound
+);
+
+-- =============================================================================
+-- Gold predictive ML model output checks
+-- =============================================================================
+
+-- Check: gold_predictive_region_clusters_not_empty
+SELECT
+  'gold_predictive_region_clusters_not_empty' AS check_id,
+  'gold' AS layer,
+  'vw_predictive_region_clusters' AS table_name,
+  'ERROR' AS severity,
+  IF(cnt = 0, 1, 0) AS failed_rows,
+  (cnt > 0) AS passed,
+  IF(cnt = 0, 'La vista Gold predictiva de clusters regionales está vacía', 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS cnt FROM `{project_id}.{gold_dataset}.vw_predictive_region_clusters`
+);
+
+-- Check: gold_predictive_region_cluster_profiles_not_empty
+SELECT
+  'gold_predictive_region_cluster_profiles_not_empty' AS check_id,
+  'gold' AS layer,
+  'vw_predictive_region_cluster_profiles' AS table_name,
+  'ERROR' AS severity,
+  IF(cnt = 0, 1, 0) AS failed_rows,
+  (cnt > 0) AS passed,
+  IF(cnt = 0, 'La vista Gold predictiva de perfiles de clusters está vacía', 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS cnt FROM `{project_id}.{gold_dataset}.vw_predictive_region_cluster_profiles`
+);
+
+-- Check: gold_predictive_budget_forecast_not_empty
+SELECT
+  'gold_predictive_budget_forecast_not_empty' AS check_id,
+  'gold' AS layer,
+  'vw_predictive_budget_forecast' AS table_name,
+  'ERROR' AS severity,
+  IF(cnt = 0, 1, 0) AS failed_rows,
+  (cnt > 0) AS passed,
+  IF(cnt = 0, 'La vista Gold predictiva de forecast presupuestal está vacía', 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS cnt FROM `{project_id}.{gold_dataset}.vw_predictive_budget_forecast`
+);

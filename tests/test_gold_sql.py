@@ -26,6 +26,9 @@ REQUIRED_VIEWS = [
     "vw_pronabec_beca18_resumen_analitico",
     "vw_predictive_region_priority_scores",
     "vw_predictive_region_priority_scores_v2",
+    "vw_predictive_region_clusters",
+    "vw_predictive_region_cluster_profiles",
+    "vw_predictive_budget_forecast",
 ]
 
 # Lista de tablas Silver reales que deben ser referenciadas
@@ -196,3 +199,14 @@ def test_gold_sql_predictive_region_priority_v2_spec(gold_sql_content: str) -> N
     assert "{project_id}.{ml_dataset}.region_priority_scores_v2" in gold_sql_content
     assert "priority_score_v2_pct" in gold_sql_content
     assert "priority_label_v2" in gold_sql_content
+
+
+def test_gold_sql_predictive_ml_model_outputs_spec(gold_sql_content: str) -> None:
+    assert "vw_predictive_region_clusters" in gold_sql_content
+    assert "vw_predictive_region_cluster_profiles" in gold_sql_content
+    assert "vw_predictive_budget_forecast" in gold_sql_content
+    assert "{project_id}.{ml_dataset}.region_cluster_assignments" in gold_sql_content
+    assert "{project_id}.{ml_dataset}.region_cluster_profiles" in gold_sql_content
+    assert "{project_id}.{ml_dataset}.budget_forecast_results" in gold_sql_content
+    assert "ML.PREDICT" not in gold_sql_content
+    assert "ML.FORECAST" not in gold_sql_content

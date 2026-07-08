@@ -55,7 +55,7 @@ def test_load_validation_queries_reads_manifest() -> None:
 def test_gold_validation_queries_do_not_use_reserved_rows_alias() -> None:
     queries = load_validation_queries()
 
-    assert len(queries) == 18
+    assert len(queries) == 21
     for query in queries:
         query_text = query["query"]
         assert not re.search(r"\bAS\s+ROWS\b", query_text, flags=re.IGNORECASE)

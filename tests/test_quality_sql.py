@@ -15,7 +15,7 @@ SQL_FILE_PATH = PROJECT_ROOT / "sql" / "quality" / "data_quality_checks.sql"
 SILVER_SCHEMAS_DIR = PROJECT_ROOT / "config" / "schemas" / "silver"
 ML_SCHEMAS_DIR = PROJECT_ROOT / "config" / "schemas" / "ml"
 GOLD_DDL_PATH = PROJECT_ROOT / "sql" / "ddl" / "create_gold_views.sql"
-EXPECTED_QUALITY_CHECKS = 114
+EXPECTED_QUALITY_CHECKS = 127
 QUALITY_OUTPUT_COLUMNS = {
     "check_id",
     "layer",
@@ -332,8 +332,14 @@ def test_required_tables_are_covered():
         "region_priority_scores",
         "region_coverage_features",
         "region_priority_scores_v2",
+        "region_cluster_assignments",
+        "region_cluster_profiles",
+        "budget_forecast_results",
         "vw_predictive_region_priority_scores",
         "vw_predictive_region_priority_scores_v2",
+        "vw_predictive_region_clusters",
+        "vw_predictive_region_cluster_profiles",
+        "vw_predictive_budget_forecast",
     }
     
     for t in required_tables:
@@ -656,6 +662,45 @@ def test_gold_predictive_region_priority_v2_quality_checks_are_present_and_param
         assert check_id in content
 
     assert "{project_id}.{gold_dataset}.vw_predictive_region_priority_scores_v2" in content
+
+
+def test_ml_predictive_model_output_quality_checks_are_present_and_parameterized():
+    content = SQL_FILE_PATH.read_text(encoding="utf-8")
+
+    expected_checks = [
+        "ml_region_cluster_assignments_not_empty",
+        "ml_region_cluster_assignments_unique_grain",
+        "ml_region_cluster_assignments_centroid_not_null",
+        "ml_region_cluster_assignments_year_range",
+        "ml_region_cluster_profiles_not_empty",
+        "ml_region_cluster_profiles_region_count_positive",
+        "ml_budget_forecast_results_not_empty",
+        "ml_budget_forecast_results_value_not_null",
+        "ml_budget_forecast_results_lower_bound",
+        "ml_budget_forecast_results_upper_bound",
+    ]
+    for check_id in expected_checks:
+        assert check_id in content
+
+    assert "{project_id}.{ml_dataset}.region_cluster_assignments" in content
+    assert "{project_id}.{ml_dataset}.region_cluster_profiles" in content
+    assert "{project_id}.{ml_dataset}.budget_forecast_results" in content
+
+
+def test_gold_predictive_model_output_quality_checks_are_present_and_parameterized():
+    content = SQL_FILE_PATH.read_text(encoding="utf-8")
+
+    expected_checks = [
+        "gold_predictive_region_clusters_not_empty",
+        "gold_predictive_region_cluster_profiles_not_empty",
+        "gold_predictive_budget_forecast_not_empty",
+    ]
+    for check_id in expected_checks:
+        assert check_id in content
+
+    assert "{project_id}.{gold_dataset}.vw_predictive_region_clusters" in content
+    assert "{project_id}.{gold_dataset}.vw_predictive_region_cluster_profiles" in content
+    assert "{project_id}.{gold_dataset}.vw_predictive_budget_forecast" in content
 
 
 def test_silver_checks_use_declared_schema_columns_for_simple_predicates():

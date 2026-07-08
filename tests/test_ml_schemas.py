@@ -22,6 +22,9 @@ def test_ml_schema_files_exist() -> None:
     assert (ML_SCHEMAS_DIR / "region_priority_scores_schema.json").exists()
     assert (ML_SCHEMAS_DIR / "region_coverage_features_schema.json").exists()
     assert (ML_SCHEMAS_DIR / "region_priority_scores_v2_schema.json").exists()
+    assert (ML_SCHEMAS_DIR / "region_cluster_assignments_schema.json").exists()
+    assert (ML_SCHEMAS_DIR / "region_cluster_profiles_schema.json").exists()
+    assert (ML_SCHEMAS_DIR / "budget_forecast_results_schema.json").exists()
 
 
 def test_dim_region_mapping_schema_contract() -> None:

@@ -1,0 +1,14 @@
+[
+  { "name": "centroid_id", "type": "INT64", "mode": "NULLABLE", "description": "Identificador del centroide asignado por BigQuery ML." },
+  { "name": "cluster_label", "type": "STRING", "mode": "NULLABLE", "description": "Etiqueta genérica del cluster." },
+  { "name": "regiones_count", "type": "INT64", "mode": "NULLABLE", "description": "Cantidad de regiones canónicas asignadas al cluster." },
+  { "name": "avg_priority_score_v2", "type": "FLOAT64", "mode": "NULLABLE", "description": "Promedio del score regional v2." },
+  { "name": "avg_context_priority_score", "type": "FLOAT64", "mode": "NULLABLE", "description": "Promedio del score contextual." },
+  { "name": "avg_coverage_gap_score", "type": "FLOAT64", "mode": "NULLABLE", "description": "Promedio del score de brecha de cobertura." },
+  { "name": "avg_primera_generacion_score", "type": "FLOAT64", "mode": "NULLABLE", "description": "Promedio del score de primera generación." },
+  { "name": "avg_pobreza_monetaria_pct", "type": "FLOAT64", "mode": "NULLABLE", "description": "Promedio de pobreza monetaria regional." },
+  { "name": "avg_matricula_5to_secundaria", "type": "FLOAT64", "mode": "NULLABLE", "description": "Promedio de matrícula de quinto de secundaria." },
+  { "name": "avg_brecha_digital_pct", "type": "FLOAT64", "mode": "NULLABLE", "description": "Promedio de brecha digital regional." },
+  { "name": "avg_ruralidad_educativa_pct", "type": "FLOAT64", "mode": "NULLABLE", "description": "Promedio de ruralidad educativa." },
+  { "name": "created_at", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Timestamp de materialización o consulta del perfil." }
+]

@@ -1,0 +1,10 @@
+[
+  { "name": "forecast_timestamp", "type": "TIMESTAMP", "mode": "NULLABLE", "description": "Periodo mensual pronosticado por BigQuery ML." },
+  { "name": "forecast_value", "type": "FLOAT64", "mode": "NULLABLE", "description": "Valor pronosticado del devengado total." },
+  { "name": "prediction_interval_lower_bound", "type": "FLOAT64", "mode": "NULLABLE", "description": "Límite inferior del intervalo de predicción." },
+  { "name": "prediction_interval_upper_bound", "type": "FLOAT64", "mode": "NULLABLE", "description": "Límite superior del intervalo de predicción." },
+  { "name": "confidence_level", "type": "FLOAT64", "mode": "NULLABLE", "description": "Nivel de confianza usado por ML.FORECAST." },
+  { "name": "forecast_horizon_months", "type": "INT64", "mode": "NULLABLE", "description": "Horizonte mensual solicitado al forecast." },
+  { "name": "model_name", "type": "STRING", "mode": "NULLABLE", "description": "Nombre lógico del modelo BigQuery ML usado." },
+  { "name": "forecast_version", "type": "STRING", "mode": "NULLABLE", "description": "Versión lógica del forecast presupuestal." }
+]
