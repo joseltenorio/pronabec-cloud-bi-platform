@@ -10,12 +10,17 @@ DEFAULT_OUTPUT_DIR = "build/generated/sql"
 DEFAULT_SOURCE_FILES = (
     "sql/ddl/create_datasets.sql",
     "sql/ddl/create_audit_tables.sql",
-    "sql/ddl/create_gold_views.sql",
     "sql/ml/create_dim_region_mapping.sql",
     "sql/ml/create_region_context_features.sql",
-    "sql/ml/create_region_coverage_features.sql",
     "sql/ml/create_region_priority_scores.sql",
+    "sql/ml/create_region_coverage_features.sql",
     "sql/ml/create_region_priority_scores_v2.sql",
+    "sql/ml/create_region_cluster_model.sql",
+    "sql/ml/create_region_cluster_assignments.sql",
+    "sql/ml/create_region_cluster_profiles.sql",
+    "sql/ml/create_budget_forecast_model.sql",
+    "sql/ml/create_budget_forecast_results.sql",
+    "sql/ddl/create_gold_views.sql",
     "sql/quality/data_quality_checks.sql",
 )
 

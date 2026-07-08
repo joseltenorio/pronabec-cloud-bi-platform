@@ -129,6 +129,11 @@ run_bq_sql_file "${GENERATED_SQL_DIR}/create_region_context_features.rendered.sq
 run_bq_sql_file "${GENERATED_SQL_DIR}/create_region_priority_scores.rendered.sql" "Score ML de prioridad regional"
 run_bq_sql_file "${GENERATED_SQL_DIR}/create_region_coverage_features.rendered.sql" "Features ML de cobertura regional"
 run_bq_sql_file "${GENERATED_SQL_DIR}/create_region_priority_scores_v2.rendered.sql" "Score ML de prioridad regional v2"
+run_bq_sql_file "${GENERATED_SQL_DIR}/create_region_cluster_model.rendered.sql" "Modelo ML KMeans regional"
+run_bq_sql_file "${GENERATED_SQL_DIR}/create_region_cluster_assignments.rendered.sql" "Asignaciones ML de clusters regionales"
+run_bq_sql_file "${GENERATED_SQL_DIR}/create_region_cluster_profiles.rendered.sql" "Perfiles ML de clusters regionales"
+run_bq_sql_file "${GENERATED_SQL_DIR}/create_budget_forecast_model.rendered.sql" "Modelo ML ARIMA_PLUS presupuestal"
+run_bq_sql_file "${GENERATED_SQL_DIR}/create_budget_forecast_results.rendered.sql" "Resultados ML de forecast presupuestal"
 
 if [[ "$SKIP_GOLD" == false ]]; then
   run_bq_sql_file "${GENERATED_SQL_DIR}/create_gold_views.rendered.sql" "Vistas Gold"
