@@ -20,6 +20,8 @@ def test_ml_schema_files_exist() -> None:
     assert (ML_SCHEMAS_DIR / "dim_region_mapping_schema.json").exists()
     assert (ML_SCHEMAS_DIR / "region_context_features_schema.json").exists()
     assert (ML_SCHEMAS_DIR / "region_priority_scores_schema.json").exists()
+    assert (ML_SCHEMAS_DIR / "region_coverage_features_schema.json").exists()
+    assert (ML_SCHEMAS_DIR / "region_priority_scores_v2_schema.json").exists()
 
 
 def test_dim_region_mapping_schema_contract() -> None:
@@ -118,6 +120,95 @@ def test_region_priority_scores_schema_contract() -> None:
         "source_priority": "STRING",
         "has_synthetic_values": "BOOL",
         "synthetic_fields": "STRING",
+        "created_at": "TIMESTAMP",
+    }
+
+    for field_name, (field_type, field_mode) in expected_required.items():
+        assert field_name in fields
+        assert fields[field_name]["type"] == field_type
+        assert fields[field_name]["mode"] == field_mode
+
+    assert set(fields) == set(expected_required) | set(expected_nullable)
+
+    for field_name, field_type in expected_nullable.items():
+        assert field_name in fields
+        assert fields[field_name]["type"] == field_type
+        assert fields[field_name]["mode"] == "NULLABLE"
+
+
+def test_region_coverage_features_schema_contract() -> None:
+    schema = _load_schema(ML_SCHEMAS_DIR / "region_coverage_features_schema.json")
+    fields = _field_map(schema)
+
+    expected_required = {
+        "anio": ("INT64", "REQUIRED"),
+        "region": ("STRING", "REQUIRED"),
+        "region_canonical": ("STRING", "REQUIRED"),
+    }
+    expected_nullable = {
+        "pobreza_monetaria_pct": "FLOAT64",
+        "poblacion_15_24": "INT64",
+        "poblacion_15_29": "INT64",
+        "matricula_5to_secundaria": "INT64",
+        "ruralidad_educativa_pct": "FLOAT64",
+        "internet_acceso_pct": "FLOAT64",
+        "brecha_digital_pct": "FLOAT64",
+        "context_priority_score": "FLOAT64",
+        "context_priority_rank": "INT64",
+        "context_priority_tier": "STRING",
+        "regional_becarios_pct": "FLOAT64",
+        "regional_becarios_estimated": "INT64",
+        "total_becas_anual": "INT64",
+        "primera_generacion_ratio": "FLOAT64",
+        "total_becarios_primera_generacion": "INT64",
+        "total_becarios_encuestados": "INT64",
+        "becas_por_1000_jovenes": "FLOAT64",
+        "becas_por_1000_matriculados_5to": "FLOAT64",
+        "demanda_no_cubierta_estimada": "INT64",
+        "coverage_gap_score": "FLOAT64",
+        "primera_generacion_score": "FLOAT64",
+        "coverage_data_quality_flag": "STRING",
+        "coverage_source_method": "STRING",
+        "coverage_source_notes": "STRING",
+        "has_estimated_coverage": "BOOL",
+        "created_at": "TIMESTAMP",
+    }
+
+    for field_name, (field_type, field_mode) in expected_required.items():
+        assert field_name in fields
+        assert fields[field_name]["type"] == field_type
+        assert fields[field_name]["mode"] == field_mode
+
+    for field_name, field_type in expected_nullable.items():
+        assert field_name in fields
+        assert fields[field_name]["type"] == field_type
+        assert fields[field_name]["mode"] == "NULLABLE"
+
+
+def test_region_priority_scores_v2_schema_contract() -> None:
+    schema = _load_schema(ML_SCHEMAS_DIR / "region_priority_scores_v2_schema.json")
+    fields = _field_map(schema)
+
+    expected_required = {
+        "anio": ("INT64", "REQUIRED"),
+        "region": ("STRING", "REQUIRED"),
+        "region_canonical": ("STRING", "REQUIRED"),
+    }
+    expected_nullable = {
+        "context_priority_score": "FLOAT64",
+        "coverage_gap_score": "FLOAT64",
+        "primera_generacion_score": "FLOAT64",
+        "priority_score_v2": "FLOAT64",
+        "priority_rank_v2": "INT64",
+        "priority_tier_v2": "STRING",
+        "context_priority_rank": "INT64",
+        "context_priority_tier": "STRING",
+        "coverage_data_quality_flag": "STRING",
+        "coverage_source_method": "STRING",
+        "coverage_source_notes": "STRING",
+        "has_estimated_coverage": "BOOL",
+        "score_version": "STRING",
+        "score_method": "STRING",
         "created_at": "TIMESTAMP",
     }
 

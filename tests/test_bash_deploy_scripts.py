@@ -63,9 +63,13 @@ def test_deploy_bigquery_includes_ml_sql_rendered_artifacts():
     assert "create_dim_region_mapping.rendered.sql" in content
     assert "create_region_context_features.rendered.sql" in content
     assert "create_region_priority_scores.rendered.sql" in content
+    assert "create_region_coverage_features.rendered.sql" in content
+    assert "create_region_priority_scores_v2.rendered.sql" in content
     assert content.index("create_dim_region_mapping.rendered.sql") < content.index("create_region_context_features.rendered.sql")
     assert content.index("create_region_context_features.rendered.sql") < content.index("create_region_priority_scores.rendered.sql")
-    assert content.index("create_region_priority_scores.rendered.sql") < content.index("create_gold_views.rendered.sql")
+    assert content.index("create_region_priority_scores.rendered.sql") < content.index("create_region_coverage_features.rendered.sql")
+    assert content.index("create_region_coverage_features.rendered.sql") < content.index("create_region_priority_scores_v2.rendered.sql")
+    assert content.index("create_region_priority_scores_v2.rendered.sql") < content.index("create_gold_views.rendered.sql")
 
 
 def test_render_sql_templates_script_passes_ml_dataset_to_renderer():
@@ -76,6 +80,8 @@ def test_render_sql_templates_script_passes_ml_dataset_to_renderer():
     assert "sql/ml/create_dim_region_mapping.sql" in content
     assert "sql/ml/create_region_context_features.sql" in content
     assert "sql/ml/create_region_priority_scores.sql" in content
+    assert "sql/ml/create_region_coverage_features.sql" in content
+    assert "sql/ml/create_region_priority_scores_v2.sql" in content
 
 
 def test_generate_bigquery_ddl_script_supports_ci_and_deploy_modes():
