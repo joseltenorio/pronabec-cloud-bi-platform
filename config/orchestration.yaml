@@ -320,3 +320,9 @@ gold:
       query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_predictive_region_priority_scores`"
     - name: vw_predictive_region_priority_scores_v2
       query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_predictive_region_priority_scores_v2`"
+    - name: vw_predictive_region_clusters
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_predictive_region_clusters`"
+    - name: vw_predictive_region_cluster_profiles
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_predictive_region_cluster_profiles`"
+    - name: vw_predictive_budget_forecast
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_predictive_budget_forecast`"

@@ -607,3 +607,58 @@ SELECT
   score_method,
   created_at
 FROM `{project_id}.{ml_dataset}.region_priority_scores_v2`;
+
+
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_predictive_region_clusters` AS
+SELECT
+  anio,
+  region,
+  region_canonical,
+  centroid_id,
+  centroid_distance,
+  cluster_label,
+  priority_score_v2,
+  SAFE_MULTIPLY(priority_score_v2, 100) AS priority_score_v2_pct,
+  context_priority_score,
+  coverage_gap_score,
+  primera_generacion_score,
+  pobreza_monetaria_pct,
+  matricula_5to_secundaria,
+  poblacion_15_29,
+  brecha_digital_pct,
+  ruralidad_educativa_pct,
+  primera_generacion_ratio,
+  becas_por_1000_jovenes,
+  becas_por_1000_matriculados_5to,
+  created_at
+FROM `{project_id}.{ml_dataset}.region_cluster_assignments`;
+
+
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_predictive_region_cluster_profiles` AS
+SELECT
+  centroid_id,
+  cluster_label,
+  regiones_count,
+  avg_priority_score_v2,
+  avg_context_priority_score,
+  avg_coverage_gap_score,
+  avg_primera_generacion_score,
+  avg_pobreza_monetaria_pct,
+  avg_matricula_5to_secundaria,
+  avg_brecha_digital_pct,
+  avg_ruralidad_educativa_pct,
+  created_at
+FROM `{project_id}.{ml_dataset}.region_cluster_profiles`;
+
+
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_predictive_budget_forecast` AS
+SELECT
+  forecast_timestamp,
+  forecast_value,
+  prediction_interval_lower_bound,
+  prediction_interval_upper_bound,
+  confidence_level,
+  forecast_horizon_months,
+  model_name,
+  forecast_version
+FROM `{project_id}.{ml_dataset}.budget_forecast_results`;
