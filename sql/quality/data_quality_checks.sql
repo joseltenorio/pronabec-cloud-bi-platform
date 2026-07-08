@@ -1197,3 +1197,205 @@ FROM (
     HAVING COUNT(*) > 1
   )
 );
+
+-- ============================================================================
+-- ML regional context foundation checks
+-- ============================================================================
+
+-- Check: ml_region_context_features_not_empty
+-- Tipo: Tabla/vista no vacía
+SELECT
+  'ml_region_context_features_not_empty' AS check_id,
+  'ml' AS layer,
+  'region_context_features' AS table_name,
+  'ERROR' AS severity,
+  IF(cnt = 0, 1, 0) AS failed_rows,
+  (cnt > 0) AS passed,
+  IF(cnt = 0, 'La vista ML de contexto regional está vacía', 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS cnt FROM `{project_id}.{ml_dataset}.region_context_features`
+);
+
+-- Check: ml_region_context_features_unique_grain
+-- Tipo: Unicidad por grano canónico
+SELECT
+  'ml_region_context_features_unique_grain' AS check_id,
+  'ml' AS layer,
+  'region_context_features' AS table_name,
+  'ERROR' AS severity,
+  dup_cnt AS failed_rows,
+  (dup_cnt = 0) AS passed,
+  IF(dup_cnt > 0, CONCAT('Se encontraron ', CAST(dup_cnt AS STRING), ' combinaciones duplicadas de anio y region_canonical'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS dup_cnt
+  FROM (
+    SELECT anio, region_canonical
+    FROM `{project_id}.{ml_dataset}.region_context_features`
+    GROUP BY anio, region_canonical
+    HAVING COUNT(*) > 1
+  )
+);
+
+-- Check: ml_region_context_features_year_range
+-- Tipo: Rango de años esperado
+SELECT
+  'ml_region_context_features_year_range' AS check_id,
+  'ml' AS layer,
+  'region_context_features' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con anio fuera de rango 2012-2025'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_context_features`
+  WHERE anio < 2012 OR anio > 2025
+);
+
+-- Check: ml_region_context_features_percentage_ranges
+-- Tipo: Rangos porcentuales válidos
+SELECT
+  'ml_region_context_features_percentage_ranges' AS check_id,
+  'ml' AS layer,
+  'region_context_features' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con porcentajes fuera de rango'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_context_features`
+  WHERE (pobreza_monetaria_pct IS NOT NULL AND (pobreza_monetaria_pct < 0 OR pobreza_monetaria_pct > 100))
+     OR (internet_acceso_pct IS NOT NULL AND (internet_acceso_pct < 0 OR internet_acceso_pct > 100))
+     OR (brecha_digital_pct IS NOT NULL AND (brecha_digital_pct < 0 OR brecha_digital_pct > 100))
+     OR (ruralidad_educativa_pct IS NOT NULL AND (ruralidad_educativa_pct < 0 OR ruralidad_educativa_pct > 100))
+);
+
+-- Check: ml_region_context_features_nonnegative_counts
+-- Tipo: Conteos no negativos
+SELECT
+  'ml_region_context_features_nonnegative_counts' AS check_id,
+  'ml' AS layer,
+  'region_context_features' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con conteos negativos'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_context_features`
+  WHERE (matricula_5to_secundaria IS NOT NULL AND matricula_5to_secundaria < 0)
+     OR (matricula_5to_publica IS NOT NULL AND matricula_5to_publica < 0)
+     OR (matricula_5to_privada IS NOT NULL AND matricula_5to_privada < 0)
+     OR (matricula_5to_urbana IS NOT NULL AND matricula_5to_urbana < 0)
+     OR (matricula_5to_rural IS NOT NULL AND matricula_5to_rural < 0)
+     OR (poblacion_total IS NOT NULL AND poblacion_total < 0)
+     OR (poblacion_15_24 IS NOT NULL AND poblacion_15_24 < 0)
+     OR (poblacion_15_29 IS NOT NULL AND poblacion_15_29 < 0)
+);
+
+-- Check: ml_region_context_features_completeness_score_range
+-- Tipo: Score de completitud en rango
+SELECT
+  'ml_region_context_features_completeness_score_range' AS check_id,
+  'ml' AS layer,
+  'region_context_features' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con feature_completeness_score fuera de rango'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_context_features`
+  WHERE feature_completeness_score IS NOT NULL
+    AND (feature_completeness_score < 0 OR feature_completeness_score > 1)
+);
+
+-- Check: ml_region_context_features_feature_quality_flag_allowed_values
+-- Tipo: Bandera de calidad controlada
+SELECT
+  'ml_region_context_features_feature_quality_flag_allowed_values' AS check_id,
+  'ml' AS layer,
+  'region_context_features' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con feature_quality_flag fuera del conjunto permitido'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_context_features`
+  WHERE feature_quality_flag IS NOT NULL
+    AND feature_quality_flag NOT IN ('complete', 'usable', 'partial', 'insufficient')
+);
+
+-- Check: ml_region_context_features_source_priority_allowed_values
+-- Tipo: Prioridad de fuente controlada
+SELECT
+  'ml_region_context_features_source_priority_allowed_values' AS check_id,
+  'ml' AS layer,
+  'region_context_features' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con source_priority fuera del conjunto permitido'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_context_features`
+  WHERE source_priority IS NOT NULL
+    AND source_priority NOT IN ('official', 'manual_public_source', 'synthetic_demo', 'mixed')
+);
+
+-- Check: ml_region_context_features_critical_regions_present
+-- Tipo: Cobertura de regiones críticas
+SELECT
+  'ml_region_context_features_critical_regions_present' AS check_id,
+  'ml' AS layer,
+  'region_context_features' AS table_name,
+  'ERROR' AS severity,
+  missing_cnt AS failed_rows,
+  (missing_cnt = 0) AS passed,
+  IF(missing_cnt > 0, CONCAT('Faltan ', CAST(missing_cnt AS STRING), ' regiones críticas en la base regional ML'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS missing_cnt
+  FROM (
+    SELECT region_name
+    FROM UNNEST(['LIMA', 'CALLAO', 'CUSCO', 'PUNO', 'LORETO', 'CAJAMARCA', 'AYACUCHO']) AS region_name
+    EXCEPT DISTINCT
+    SELECT DISTINCT region_canonical
+FROM `{project_id}.{ml_dataset}.region_context_features`
+  )
+);
+
+-- Check: ml_region_context_features_no_legacy_region_variants
+-- Tipo: Ausencia de variantes regionales obsoletas en la salida final
+SELECT
+  'ml_region_context_features_no_legacy_region_variants' AS check_id,
+  'ml' AS layer,
+  'region_context_features' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' regiones finales con variantes no canónicas'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+FROM `{project_id}.{ml_dataset}.region_context_features`
+  WHERE region IN ('LIMA METROPOLITANA', 'LIMA PROVINCIAS', 'PROV. CONST. DEL CALLAO', 'PROVINCIA CONSTITUCIONAL DEL CALLAO')
+     OR region_canonical IN ('LIMA METROPOLITANA', 'LIMA PROVINCIAS', 'PROV. CONST. DEL CALLAO', 'PROVINCIA CONSTITUCIONAL DEL CALLAO')
+);
+
+-- Check: ml_region_context_features_synthetic_metadata_consistency
+-- Tipo: Consistencia de metadata sintética
+SELECT
+  'ml_region_context_features_synthetic_metadata_consistency' AS check_id,
+  'ml' AS layer,
+  'region_context_features' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con metadata sintética inconsistente'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+FROM `{project_id}.{ml_dataset}.region_context_features`
+  WHERE (has_synthetic_values = TRUE AND (synthetic_fields IS NULL OR TRIM(synthetic_fields) = ''))
+     OR (has_synthetic_values = FALSE AND synthetic_fields IS NOT NULL AND TRIM(synthetic_fields) <> '')
+);
