@@ -310,6 +310,8 @@ def run_quality_checks(
     extraction_date: str | None = None,
     dry_run: bool = False,
     fail_on_error: bool = False,
+    *,
+    ml_dataset: str = "ml",
 ) -> int:
     """
     Carga y ejecuta las consultas de calidad de datos, y persiste los resultados en Audit.
@@ -335,6 +337,7 @@ def run_quality_checks(
         silver_dataset=silver_dataset,
         gold_dataset=gold_dataset,
         audit_dataset=audit_dataset,
+        ml_dataset=ml_dataset,
         checks_file=checks_file,
         pipeline_run_id=pipeline_run_id,
         extraction_date=extraction_date,
@@ -372,7 +375,8 @@ def run_quality_checks(
             project_id=project_id,
             silver_dataset=silver_dataset,
             gold_dataset=gold_dataset,
-            audit_dataset=audit_dataset
+            audit_dataset=audit_dataset,
+            ml_dataset=ml_dataset,
         )
 
         # Extraer metadatos estáticos de la consulta para usar de fallback si falla la ejecución
@@ -595,6 +599,11 @@ def main() -> None:
         help="Nombre del dataset de auditoría en BigQuery."
     )
     parser.add_argument(
+        "--ml-dataset",
+        default=os.getenv("BQ_ML_DATASET", "ml"),
+        help="Nombre del dataset ML en BigQuery.",
+    )
+    parser.add_argument(
         "--checks-file",
         default="sql/quality/data_quality_checks.sql",
         help="Ruta al archivo SQL con los checks de calidad."
@@ -629,6 +638,7 @@ def main() -> None:
         silver_dataset=args.silver_dataset,
         gold_dataset=args.gold_dataset,
         audit_dataset=args.audit_dataset,
+        ml_dataset=args.ml_dataset,
         checks_file=args.checks_file,
         pipeline_run_id=pipeline_run_id or "",
         extraction_date=extraction_date,

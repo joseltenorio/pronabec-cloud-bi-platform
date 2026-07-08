@@ -75,6 +75,7 @@ def test_render_sql_templates_script_passes_ml_dataset_to_renderer():
     assert "BQ_ML_DATASET" in content
     assert "sql/ml/create_dim_region_mapping.sql" in content
     assert "sql/ml/create_region_context_features.sql" in content
+    assert "sql/ml/create_region_priority_scores.sql" in content
 
 
 def test_generate_bigquery_ddl_script_supports_ci_and_deploy_modes():
@@ -124,6 +125,8 @@ def test_deploy_cloud_run_jobs_references_main_and_dataflow_images():
     assert "CLOUD_RUN_IMAGE" in content
     assert "DATAFLOW_WORKER_IMAGE" in content
     assert "DATAFLOW_SDK_CONTAINER_IMAGE" in content
+    assert "BQ_ML_DATASET" in content
+    assert "--ml-dataset" in content
 
 
 def test_run_cloud_deploy_supports_expected_flags():
