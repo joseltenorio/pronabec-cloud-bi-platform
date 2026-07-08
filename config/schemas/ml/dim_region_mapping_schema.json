@@ -1,0 +1,8 @@
+[
+  { "name": "source_region", "type": "STRING", "mode": "REQUIRED", "description": "Valor regional original observado en la fuente." },
+  { "name": "region_canonical", "type": "STRING", "mode": "REQUIRED", "description": "Nombre regional canónico estandarizado." },
+  { "name": "region_scope", "type": "STRING", "mode": "NULLABLE", "description": "Alcance territorial normalizado de la región." },
+  { "name": "mapping_rule", "type": "STRING", "mode": "NULLABLE", "description": "Regla aplicada para la normalización del nombre regional." },
+  { "name": "is_aggregated_region", "type": "BOOL", "mode": "NULLABLE", "description": "Indica si la región canónica consolida variantes o subregiones fuente." },
+  { "name": "notes", "type": "STRING", "mode": "NULLABLE", "description": "Notas metodológicas o de trazabilidad del mapeo." }
+]
