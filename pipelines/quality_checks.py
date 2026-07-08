@@ -60,7 +60,7 @@ def deduce_source_metadata(table_name: str) -> tuple[str, str]:
     if table_name.startswith("inei_"):
         return "inei_reports", table_name
 
-    if table_name in {"region_context_features", "dim_region_mapping"}:
+    if table_name in {"region_context_features", "region_priority_scores", "dim_region_mapping"}:
         return "ml", table_name
 
     return "unknown", "unknown"

@@ -1399,3 +1399,256 @@ FROM `{project_id}.{ml_dataset}.region_context_features`
   WHERE (has_synthetic_values = TRUE AND (synthetic_fields IS NULL OR TRIM(synthetic_fields) = ''))
      OR (has_synthetic_values = FALSE AND synthetic_fields IS NOT NULL AND TRIM(synthetic_fields) <> '')
 );
+
+-- =============================================================================
+-- ML regional priority score checks
+-- =============================================================================
+
+-- Check: ml_region_priority_scores_not_empty
+-- Tipo: Tabla/vista no vacía
+SELECT
+  'ml_region_priority_scores_not_empty' AS check_id,
+  'ml' AS layer,
+  'region_priority_scores' AS table_name,
+  'ERROR' AS severity,
+  IF(cnt = 0, 1, 0) AS failed_rows,
+  (cnt > 0) AS passed,
+  IF(cnt = 0, 'La vista ML de score regional está vacía', 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS cnt FROM `{project_id}.{ml_dataset}.region_priority_scores`
+);
+
+-- Check: ml_region_priority_scores_unique_grain
+-- Tipo: Unicidad por grano canónico
+SELECT
+  'ml_region_priority_scores_unique_grain' AS check_id,
+  'ml' AS layer,
+  'region_priority_scores' AS table_name,
+  'ERROR' AS severity,
+  dup_cnt AS failed_rows,
+  (dup_cnt = 0) AS passed,
+  IF(dup_cnt > 0, CONCAT('Se encontraron ', CAST(dup_cnt AS STRING), ' combinaciones duplicadas de anio y region_canonical'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS dup_cnt
+  FROM (
+    SELECT anio, region_canonical
+    FROM `{project_id}.{ml_dataset}.region_priority_scores`
+    GROUP BY anio, region_canonical
+    HAVING COUNT(*) > 1
+  )
+);
+
+-- Check: ml_region_priority_scores_priority_score_range
+-- Tipo: Score principal en rango
+SELECT
+  'ml_region_priority_scores_priority_score_range' AS check_id,
+  'ml' AS layer,
+  'region_priority_scores' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con priority_score fuera de rango'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_priority_scores`
+  WHERE priority_score IS NOT NULL
+    AND (priority_score < 0 OR priority_score > 1)
+);
+
+-- Check: ml_region_priority_scores_component_ranges
+-- Tipo: Componentes normalizados en rango
+SELECT
+  'ml_region_priority_scores_component_ranges' AS check_id,
+  'ml' AS layer,
+  'region_priority_scores' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con componentes normalizados fuera de rango'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_priority_scores`
+  WHERE (pobreza_score IS NOT NULL AND (pobreza_score < 0 OR pobreza_score > 1))
+     OR (demanda_educativa_score IS NOT NULL AND (demanda_educativa_score < 0 OR demanda_educativa_score > 1))
+     OR (poblacion_joven_score IS NOT NULL AND (poblacion_joven_score < 0 OR poblacion_joven_score > 1))
+     OR (ruralidad_score IS NOT NULL AND (ruralidad_score < 0 OR ruralidad_score > 1))
+     OR (brecha_digital_score IS NOT NULL AND (brecha_digital_score < 0 OR brecha_digital_score > 1))
+);
+
+-- Check: ml_region_priority_scores_tier_allowed_values
+-- Tipo: Tiers controlados
+SELECT
+  'ml_region_priority_scores_tier_allowed_values' AS check_id,
+  'ml' AS layer,
+  'region_priority_scores' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con priority_tier fuera del conjunto permitido'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_priority_scores`
+  WHERE priority_tier IS NOT NULL
+    AND priority_tier NOT IN ('Muy alta', 'Alta', 'Media', 'Baja', 'Insuficiente')
+);
+
+-- Check: ml_region_priority_scores_rank_positive
+-- Tipo: Ranking positivo cuando hay score
+SELECT
+  'ml_region_priority_scores_rank_positive' AS check_id,
+  'ml' AS layer,
+  'region_priority_scores' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con priority_rank inválido'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_priority_scores`
+  WHERE priority_score IS NOT NULL
+    AND (priority_rank IS NULL OR priority_rank < 1)
+);
+
+-- Check: ml_region_priority_scores_version_constant
+-- Tipo: Versionado estable del score
+SELECT
+  'ml_region_priority_scores_version_constant' AS check_id,
+  'ml' AS layer,
+  'region_priority_scores' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con score_version distinto de regional_context_v1'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_priority_scores`
+  WHERE score_version IS NOT NULL
+    AND score_version <> 'regional_context_v1'
+);
+
+-- Check: ml_region_priority_scores_no_legacy_region_variants
+-- Tipo: Ausencia de variantes regionales obsoletas
+SELECT
+  'ml_region_priority_scores_no_legacy_region_variants' AS check_id,
+  'ml' AS layer,
+  'region_priority_scores' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' regiones finales con variantes no canónicas'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{ml_dataset}.region_priority_scores`
+  WHERE region IN ('LIMA METROPOLITANA', 'LIMA PROVINCIAS', 'PROV. CONST. DEL CALLAO', 'PROVINCIA CONSTITUCIONAL DEL CALLAO')
+     OR region_canonical IN ('LIMA METROPOLITANA', 'LIMA PROVINCIAS', 'PROV. CONST. DEL CALLAO', 'PROVINCIA CONSTITUCIONAL DEL CALLAO')
+);
+
+-- Check: ml_region_priority_scores_critical_regions_present
+-- Tipo: Cobertura de regiones críticas
+SELECT
+  'ml_region_priority_scores_critical_regions_present' AS check_id,
+  'ml' AS layer,
+  'region_priority_scores' AS table_name,
+  'ERROR' AS severity,
+  missing_cnt AS failed_rows,
+  (missing_cnt = 0) AS passed,
+  IF(missing_cnt > 0, CONCAT('Faltan ', CAST(missing_cnt AS STRING), ' regiones críticas en la prioridad regional ML'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS missing_cnt
+  FROM (
+    SELECT region_name
+    FROM UNNEST(['LIMA', 'CALLAO', 'CUSCO', 'PUNO', 'LORETO', 'CAJAMARCA', 'AYACUCHO']) AS region_name
+    EXCEPT DISTINCT
+    SELECT DISTINCT region_canonical
+    FROM `{project_id}.{ml_dataset}.region_priority_scores`
+  )
+);
+
+-- =============================================================================
+-- Gold predictive region priority score checks
+-- =============================================================================
+
+-- Check: gold_predictive_region_priority_scores_not_empty
+-- Tipo: Vista no vacía
+SELECT
+  'gold_predictive_region_priority_scores_not_empty' AS check_id,
+  'gold' AS layer,
+  'vw_predictive_region_priority_scores' AS table_name,
+  'ERROR' AS severity,
+  IF(cnt = 0, 1, 0) AS failed_rows,
+  (cnt > 0) AS passed,
+  IF(cnt = 0, 'La vista Gold predictiva de score regional está vacía', 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS cnt FROM `{project_id}.{gold_dataset}.vw_predictive_region_priority_scores`
+);
+
+-- Check: gold_predictive_region_priority_scores_unique_grain
+-- Tipo: Unicidad por grano canónico
+SELECT
+  'gold_predictive_region_priority_scores_unique_grain' AS check_id,
+  'gold' AS layer,
+  'vw_predictive_region_priority_scores' AS table_name,
+  'ERROR' AS severity,
+  dup_cnt AS failed_rows,
+  (dup_cnt = 0) AS passed,
+  IF(dup_cnt > 0, CONCAT('Se encontraron ', CAST(dup_cnt AS STRING), ' combinaciones duplicadas de anio y region_canonical'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS dup_cnt
+  FROM (
+    SELECT anio, region_canonical
+    FROM `{project_id}.{gold_dataset}.vw_predictive_region_priority_scores`
+    GROUP BY anio, region_canonical
+    HAVING COUNT(*) > 1
+  )
+);
+
+-- Check: gold_predictive_region_priority_scores_priority_score_range
+-- Tipo: Score principal en rango
+SELECT
+  'gold_predictive_region_priority_scores_priority_score_range' AS check_id,
+  'gold' AS layer,
+  'vw_predictive_region_priority_scores' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con priority_score fuera de rango'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{gold_dataset}.vw_predictive_region_priority_scores`
+  WHERE priority_score IS NOT NULL
+    AND (priority_score < 0 OR priority_score > 1)
+);
+
+-- Check: gold_predictive_region_priority_scores_priority_score_pct_range
+-- Tipo: Score porcentual en rango
+SELECT
+  'gold_predictive_region_priority_scores_priority_score_pct_range' AS check_id,
+  'gold' AS layer,
+  'vw_predictive_region_priority_scores' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con priority_score_pct fuera de rango'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{gold_dataset}.vw_predictive_region_priority_scores`
+  WHERE priority_score_pct IS NOT NULL
+    AND (priority_score_pct < 0 OR priority_score_pct > 100)
+);
+
+-- Check: gold_predictive_region_priority_scores_rank_positive
+-- Tipo: Ranking positivo cuando hay score
+SELECT
+  'gold_predictive_region_priority_scores_rank_positive' AS check_id,
+  'gold' AS layer,
+  'vw_predictive_region_priority_scores' AS table_name,
+  'ERROR' AS severity,
+  failed_cnt AS failed_rows,
+  (failed_cnt = 0) AS passed,
+  IF(failed_cnt > 0, CONCAT('Se encontraron ', CAST(failed_cnt AS STRING), ' registros con priority_rank inválido'), 'Validación exitosa') AS details
+FROM (
+  SELECT COUNT(*) AS failed_cnt
+  FROM `{project_id}.{gold_dataset}.vw_predictive_region_priority_scores`
+  WHERE priority_score IS NOT NULL
+    AND (priority_rank IS NULL OR priority_rank < 1)
+);
