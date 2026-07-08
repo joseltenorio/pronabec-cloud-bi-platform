@@ -533,3 +533,43 @@ SELECT
   SAFE_DIVIDE(p.total_devengado, NULLIF(b.total_becas_otorgadas, 0)) AS costo_promedio_por_beca
 FROM becas_otorgadas b
 FULL OUTER JOIN presupuesto_ejecutado p ON b.ano = p.ano;
+
+
+-- =============================================================================
+-- Gold - Prioridad regional predictiva
+-- =============================================================================
+
+CREATE OR REPLACE VIEW `{project_id}.{gold_dataset}.vw_predictive_region_priority_scores` AS
+SELECT
+  anio,
+  region,
+  region_canonical,
+  priority_rank,
+  priority_tier,
+  priority_score,
+  SAFE_MULTIPLY(priority_score, 100) AS priority_score_pct,
+  CASE
+    WHEN priority_rank IS NULL THEN region_canonical
+    ELSE CONCAT(CAST(priority_rank AS STRING), '. ', region_canonical)
+  END AS priority_label,
+  pobreza_score,
+  demanda_educativa_score,
+  poblacion_joven_score,
+  brecha_digital_score,
+  ruralidad_score,
+  pobreza_monetaria_pct,
+  matricula_5to_secundaria,
+  poblacion_15_29,
+  poblacion_15_24,
+  ruralidad_educativa_pct,
+  internet_acceso_pct,
+  brecha_digital_pct,
+  feature_completeness_score,
+  feature_quality_flag,
+  source_priority,
+  has_synthetic_values,
+  synthetic_fields,
+  score_version,
+  score_method,
+  created_at
+FROM `{project_id}.{ml_dataset}.region_priority_scores`;

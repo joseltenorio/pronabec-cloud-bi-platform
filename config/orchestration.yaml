@@ -316,3 +316,5 @@ gold:
       query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_pronabec_becas_vs_presupuesto_anual`"
     - name: vw_pronabec_beca18_resumen_analitico
       query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_pronabec_beca18_resumen_analitico`"
+    - name: vw_predictive_region_priority_scores
+      query: "SELECT COUNT(*) AS rows_count FROM `{project_id}.{gold_dataset}.vw_predictive_region_priority_scores`"
