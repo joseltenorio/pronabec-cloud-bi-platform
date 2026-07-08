@@ -199,6 +199,13 @@ def test_gold_sql_predictive_region_priority_v2_spec(gold_sql_content: str) -> N
     assert "{project_id}.{ml_dataset}.region_priority_scores_v2" in gold_sql_content
     assert "priority_score_v2_pct" in gold_sql_content
     assert "priority_label_v2" in gold_sql_content
+    assert "CAST(NULL AS NUMERIC) AS regional_becarios_pct" in gold_sql_content
+    assert "CAST(NULL AS NUMERIC) AS regional_becarios_estimated" in gold_sql_content
+    assert "CAST(NULL AS NUMERIC) AS total_becas_anual" in gold_sql_content
+    assert "CAST(NULL AS NUMERIC) AS becas_por_1000_jovenes" in gold_sql_content
+    assert "CAST(NULL AS NUMERIC) AS becas_por_1000_matriculados_5to" in gold_sql_content
+    assert "CAST(NULL AS NUMERIC) AS demanda_no_cubierta_estimada" in gold_sql_content
+    assert not re.search(r"^\s*regional_becarios_pct\s*,\s*$", gold_sql_content, re.MULTILINE)
 
 
 def test_gold_sql_predictive_ml_model_outputs_spec(gold_sql_content: str) -> None:
