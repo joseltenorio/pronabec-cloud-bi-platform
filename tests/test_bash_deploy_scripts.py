@@ -57,6 +57,22 @@ def test_deploy_bigquery_invokes_generate_bigquery_ddl_python_tool():
     assert "tools/generate_bigquery_ddl.py" in content
 
 
+def test_deploy_bigquery_includes_ml_sql_rendered_artifacts():
+    content = _read("scripts/deploy_bigquery_sql.sh")
+
+    assert "create_dim_region_mapping.rendered.sql" in content
+    assert "create_region_context_features.rendered.sql" in content
+
+
+def test_render_sql_templates_script_passes_ml_dataset_to_renderer():
+    content = _read("scripts/render_sql_templates.sh") + _read("tools/render_sql_templates.py")
+
+    assert "--ml-dataset" in content
+    assert "BQ_ML_DATASET" in content
+    assert "sql/ml/create_dim_region_mapping.sql" in content
+    assert "sql/ml/create_region_context_features.sql" in content
+
+
 def test_generate_bigquery_ddl_script_supports_ci_and_deploy_modes():
     content = _read("scripts/generate_bigquery_ddl.sh")
 

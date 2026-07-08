@@ -146,6 +146,11 @@ def test_deduce_source_metadata():
     assert sys == "inei_reports"
     assert ds == "inei_population_youth_region"
 
+    # Caso ML
+    sys, ds = deduce_source_metadata("region_context_features")
+    assert sys == "ml"
+    assert ds == "region_context_features"
+
     # Caso desconocido
     sys, ds = deduce_source_metadata("tabla_desconocida")
     assert sys == "unknown"
@@ -646,6 +651,36 @@ def test_gold_checks_remain_global_without_extraction_date(tmp_path, monkeypatch
         audit_dataset="audit_ds",
         checks_file=str(checks_file),
         pipeline_run_id="run-gold",
+        dry_run=False,
+        fail_on_error=True,
+    )
+
+    assert exit_code == 0
+    assert len(mock_client.queries_run) == 1
+    assert "@extraction_date" not in mock_client.queries_run[0]
+    assert mock_client.query_job_configs[0] is None
+
+
+def test_ml_checks_remain_global_without_extraction_date(tmp_path, monkeypatch):
+    checks_file = tmp_path / "checks.sql"
+    checks_file.write_text(
+        "SELECT 'ml_check' AS check_id, 'ml' AS layer, "
+        "'region_context_features' AS table_name, 'ERROR' AS severity, "
+        "0 AS failed_rows, TRUE AS passed, 'Ok' AS details "
+        "FROM `{project_id}.ml.region_context_features`;",
+        encoding="utf-8",
+    )
+
+    mock_client = MockBigQueryClient()
+    monkeypatch.setattr("google.cloud.bigquery.Client", lambda project: mock_client)
+
+    exit_code = run_quality_checks(
+        project_id="test-project",
+        silver_dataset="silver_ds",
+        gold_dataset="gold_ds",
+        audit_dataset="audit_ds",
+        checks_file=str(checks_file),
+        pipeline_run_id="run-ml",
         dry_run=False,
         fail_on_error=True,
     )
