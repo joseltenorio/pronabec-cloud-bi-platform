@@ -127,6 +127,8 @@ run_bq_sql_file "${GENERATED_SQL_DIR}/create_audit_tables.rendered.sql" "Tablas 
 run_bq_sql_file "${GENERATED_SQL_DIR}/create_dim_region_mapping.rendered.sql" "Dimensión ML de regiones"
 run_bq_sql_file "${GENERATED_SQL_DIR}/create_region_context_features.rendered.sql" "Features ML regionales"
 run_bq_sql_file "${GENERATED_SQL_DIR}/create_region_priority_scores.rendered.sql" "Score ML de prioridad regional"
+run_bq_sql_file "${GENERATED_SQL_DIR}/create_region_coverage_features.rendered.sql" "Features ML de cobertura regional"
+run_bq_sql_file "${GENERATED_SQL_DIR}/create_region_priority_scores_v2.rendered.sql" "Score ML de prioridad regional v2"
 
 if [[ "$SKIP_GOLD" == false ]]; then
   run_bq_sql_file "${GENERATED_SQL_DIR}/create_gold_views.rendered.sql" "Vistas Gold"
