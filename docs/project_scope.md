@@ -59,6 +59,8 @@ El proyecto incluye los siguientes componentes:
 - Implementar una base regional predictiva en el dataset `ml` a partir de fuentes Silver.
 - Estandarizar contexto territorial con INEI + MINEDU.
 - Publicar un score regional de prioridad explicable para consumo inicial en Power BI.
+- Agregar una capa de cobertura regional PRONABEC como proxy analítico para cobertura relativa, brecha de cobertura y primera generación.
+- Publicar un score regional v2 que combine contexto, cobertura PRONABEC y primera generación.
 - Preparar features para scoring, simulación y clustering territorial.
 - Dejar la capa lista para BigQuery ML y futuros modelos regionales.
 
@@ -76,6 +78,7 @@ Los siguientes elementos no forman parte del alcance inicial:
 - Predicción individual de estudiantes.
 - Modelos supervisados de estudiantes sintéticos.
 - KMeans, ARIMA_PLUS y regresiones en esta rama.
+- Random Forest, XGBoost, deserción, pérdida de beca, datos sintéticos individuales y escenarios presupuestales todavía no forman parte de esta fase.
 
 ## Modo de procesamiento
 

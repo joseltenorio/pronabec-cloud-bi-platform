@@ -870,6 +870,49 @@ La primera capa del módulo predictivo vive en el dataset `ml`, pero no implemen
 
 `ml.region_priority_scores` no es una predicción individual ni un modelo causal. Es un score explicable y ponderado sobre contexto regional.
 
+## `ml.region_coverage_features`
+
+| Campo | Tipo esperado | Descripción |
+| --- | --- | --- |
+| anio | INTEGER | Año de referencia. |
+| region | STRING | Región canónica de presentación. |
+| region_canonical | STRING | Clave canónica unificada. |
+| regional_becarios_pct | NUMERIC/FLOAT64 | Proxy de distribución regional de becarios PRONABEC. |
+| regional_becarios_estimated | INTEGER | Becarios regionales estimados desde porcentaje regional y total anual. |
+| total_becas_anual | INTEGER | Total anual de becas otorgadas usado para la estimación. |
+| primera_generacion_ratio | NUMERIC/FLOAT64 | Proporción de primera generación reportada por región. |
+| becas_por_1000_jovenes | NUMERIC/FLOAT64 | Cobertura estimada por mil jóvenes. |
+| becas_por_1000_matriculados_5to | NUMERIC/FLOAT64 | Cobertura estimada por mil matriculados de quinto. |
+| coverage_gap_score | NUMERIC/FLOAT64 | Brecha de cobertura normalizada por año. |
+| primera_generacion_score | NUMERIC/FLOAT64 | Score normalizado de primera generación. |
+| coverage_data_quality_flag | STRING | Bandera resumida de calidad de cobertura. |
+| coverage_source_method | STRING | Método de estimación o señal utilizada. |
+| has_estimated_coverage | BOOLEAN | Indica si la cobertura fue estimada. |
+
+### Consideración metodológica
+
+`ml.region_coverage_features` usa PRONABEC como proxy de cobertura territorial. Si no existe un conteo regional real, la cobertura se estima desde porcentaje regional y total anual de becas otorgadas. La métrica `coverage_gap_score` no es causal.
+
+## `ml.region_priority_scores_v2`
+
+| Campo | Tipo esperado | Descripción |
+| --- | --- | --- |
+| anio | INTEGER | Año de referencia. |
+| region | STRING | Región canónica de presentación. |
+| region_canonical | STRING | Clave canónica unificada. |
+| context_priority_score | NUMERIC/FLOAT64 | Score contextual heredado de v1. |
+| coverage_gap_score | NUMERIC/FLOAT64 | Brecha de cobertura regional. |
+| primera_generacion_score | NUMERIC/FLOAT64 | Score de primera generación. |
+| priority_score_v2 | NUMERIC/FLOAT64 | Score v2 combinado. |
+| priority_rank_v2 | INTEGER | Ranking anual v2. |
+| priority_tier_v2 | STRING | Banda de prioridad v2. |
+| score_version | STRING | Versión lógica del score. |
+| score_method | STRING | Método de cálculo. |
+
+### Consideración metodológica
+
+`ml.region_priority_scores_v2` mejora el score contextual v1 incorporando cobertura PRONABEC y primera generación. Sigue siendo un score explicable, no un modelo supervisado ni una predicción individual.
+
 ---
 
 # 15. Campos derivados y enriquecimientos previstos
@@ -945,6 +988,7 @@ Las vistas Gold estarán orientadas al consumo en Power BI.
 | gold.vw_presupuesto_vs_becas       | Relación entre presupuesto y cobertura                   | Página Análisis Ejecutivo    |
 | gold.vw_riesgo_desercion           | Indicadores o predicciones de riesgo académico/deserción | Página Riesgo o ML           |
 | gold.vw_predictive_region_priority_scores | Score regional explicable para priorización           | Página Prioridad Regional    |
+| gold.vw_predictive_region_priority_scores_v2 | Score regional v2 explicable para priorización        | Página Prioridad Regional    |
 
 ## Reglas generales para Gold
 

@@ -111,3 +111,7 @@ La siguiente rama podrá construir sobre esta base:
 - simulación de asignación regional
 - clustering territorial
 - forecast presupuestal
+
+## Estado actual
+
+La foundation regional ya se usa como base para `ml.region_priority_scores` y para la nueva capa `ml.region_coverage_features`. Esta segunda vista no recalcula el contexto INEI/MINEDU; solo lo consume para combinarlo con señales PRONABEC de cobertura y primera generación.

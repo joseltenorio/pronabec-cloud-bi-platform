@@ -154,3 +154,13 @@ La tabla `pronabec_ubigeo_postulacion` puede incluir registros de postulación e
 * **Aislamiento en Tests**: La suite de pruebas unitarias locales utiliza mocks del cliente de BigQuery, por lo que no ejecuta sentencias reales en la nube ni requiere credenciales activas de GCP.
 * **Reglas de Negocio Complejas**: Los checks están diseñados para consistencia lógica del modelo relacional. No cubren validaciones dinámicas avanzadas de negocio de nivel transaccional profundo.
 * **Validación de PES 2025**: Debido a que los reportes de la familia PES 2025 provienen de archivos manuales complejos, es altamente recomendable realizar ejecuciones de validación con datos cargados en un entorno de staging/dry-run en GCP antes de promocionarlos a producción y generar las tablas Gold definitivas.
+
+## 11. Extensión regional v2
+
+El archivo `sql/quality/data_quality_checks.sql` ya incluye reglas para:
+
+- `ml.region_coverage_features`
+- `ml.region_priority_scores_v2`
+- `gold.vw_predictive_region_priority_scores_v2`
+
+Estas reglas validan rangos, unicidad, catálogos permitidos y presencia de señales PRONABEC sin asumir causalidad.

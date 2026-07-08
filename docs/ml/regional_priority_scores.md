@@ -86,3 +86,13 @@ Esto permite tableros de ranking, mapas coropléticos y segmentación por banda 
 - Construir escenarios de asignación.
 - Evaluar KMeans territorial.
 - Incorporar forecast cuando exista una hipótesis presupuestal estable.
+
+## Score v2
+
+La siguiente evolución del score es `ml.region_priority_scores_v2`. Esa vista mantiene el contexto v1 y suma:
+
+- `ml.region_coverage_features`
+- `coverage_gap_score`
+- `primera_generacion_score`
+
+La lógica sigue siendo explicable y ponderada. No es un modelo supervisado ni una predicción individual.

@@ -172,3 +172,7 @@ Las métricas expuestas en la capa Gold asumen que los controles de calidad en S
 ## 6. Integración y Conexión en Power BI
 - **Acceso:** Power BI debe conectarse exclusivamente al dataset `gold` en BigQuery utilizando la conexión nativa DirectQuery o Import.
 - **Prohibición:** Está terminantemente prohibido conectar tableros o reportes directos del usuario de negocio a la capa `bronze` para evitar latencias, lecturas innecesarias e inconsistencias de datos. La capa `silver` sólo se expone para propósitos de desarrollo, pruebas de auditoría técnica o depuración.
+
+## 7. Extensión v2 de prioridad regional
+
+La vista `vw_predictive_region_priority_scores_v2` amplía la salida regional existente con cobertura PRONABEC y primera generación. Su fuente curada es `ml.region_priority_scores_v2`, por lo que Gold sigue siendo una capa de exposición y no de recálculo.
