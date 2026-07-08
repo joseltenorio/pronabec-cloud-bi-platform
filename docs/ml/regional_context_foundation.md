@@ -97,7 +97,7 @@ En v1, la intención es no sintetizar salvo necesidad operativa clara.
 ## Limitaciones
 
 - No hay predicción individual.
-- No hay KMeans, ARIMA_PLUS, regresión ni scoring final en esta rama.
+- La foundation regional alimenta actualmente el score regional explicable `ml.region_priority_scores`. Aún no implementa KMeans, ARIMA_PLUS, regresión, cobertura PRONABEC ni simulación presupuestal.
 - Lima y Callao se colapsan en una sola unidad canónica cada una.
 - La tabla es una base de features, no un modelo ML.
 
@@ -105,8 +105,9 @@ En v1, la intención es no sintetizar salvo necesidad operativa clara.
 
 La siguiente rama podrá construir sobre esta base:
 
-- `ml.region_priority_scores`
-- `gold.vw_predictive_region_priority_scores`
+- `ml.region_coverage_features`
+- score regional v2 con cobertura PRONABEC
 - escenarios presupuestales
 - simulación de asignación regional
 - clustering territorial
+- forecast presupuestal

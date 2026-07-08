@@ -185,12 +185,14 @@ def test_bronze_manifest_validation_runs_after_bronze_tasks() -> None:
     assert 'TaskGroup(group_id="inei_reports_bronze")' in content
     assert 'TaskGroup(group_id="minedu_escale_bronze")' in content
     assert "discover_pronabec_datasets >> build_pronabec_extraction_plan >> run_pronabec_extraction_plan" in content
-    assert "run_pronabec_extraction_plan >> pronabec_finalize_tasks" in content
     assert "def chain_tasks_in_batches" in content
     assert "chain_tasks_in_batches(" in content
+    assert "run_pronabec_extraction_plan," in content
+    assert "pronabec_finalize_tasks," in content
     assert "batch_size=5" in content
     assert 'gate_prefix="finalize_pronabec"' in content
     assert "chain_tasks(pronabec_finalize_tasks)" not in content
+    assert "run_pronabec_extraction_plan >> pronabec_finalize_tasks" not in content
     assert "chain_tasks(report_stage_tasks)" in content
     assert "bronze_parallel = [pronabec_api_bronze, mef_bronze, pronabec_reports_bronze, inei_reports_bronze, minedu_escale_bronze]" in content
     assert "init_run >> bronze_parallel" in content

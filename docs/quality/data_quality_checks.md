@@ -67,7 +67,7 @@ Para evitar sesgos o alteraciones incorrectas de datos operacionales, se aplican
 Todas las consultas SQL de calidad de datos devuelven un **shape homogéneo**:
 
 * `check_id` (STRING): Identificador único de la regla de calidad.
-* `layer` (STRING): Capa de datos evaluada (`silver`, `gold`).
+* `layer` (STRING): Capa de datos evaluada (`silver`, `gold`, `ml`).
 * `table_name` (STRING): Tabla evaluada.
 * `severity` (STRING): Severidad del check (`ERROR`, `WARNING`, `INFO`).
 * `failed_rows` (INT64): Cantidad de registros que fallan la regla.
@@ -115,6 +115,22 @@ Para ejecutar las pruebas en la nube y persistir los resultados en BigQuery:
 ```
 
 Se puede añadir el flag `--fail-on-error` si se desea levantar una excepción y detener procesos posteriores ante cualquier fallo de ejecución SQL.
+
+### Ejemplo ML regional
+
+Las reglas que validan `ml.region_priority_scores` y `gold.vw_predictive_region_priority_scores` se ejecutan dentro del mismo runner y devuelven `layer = 'ml'` o `layer = 'gold'` según corresponda. Por ejemplo:
+
+```sql
+SELECT
+  'ml_region_priority_scores_not_empty' AS check_id,
+  'ml' AS layer,
+  'region_priority_scores' AS table_name,
+  'ERROR' AS severity,
+  0 AS failed_rows,
+  TRUE AS passed,
+  'ok' AS details
+FROM `{project_id}.{ml_dataset}.region_priority_scores`
+```
 
 ## 8. Interpretación de Severidades
 
