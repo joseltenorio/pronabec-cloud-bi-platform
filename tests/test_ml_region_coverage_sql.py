@@ -21,6 +21,10 @@ def test_region_coverage_sql_contract() -> None:
     assert "{project_id}.{silver_dataset}.pronabec_report_beca18_region_postulacion_anual" in content
     assert "{project_id}.{silver_dataset}.pronabec_report_beca18_becas_otorgadas_modalidad_anual" in content
     assert "{project_id}.{silver_dataset}.pronabec_report_beca18_primera_generacion_region" in content
+    assert "coverage_base AS (" in content
+    assert "coverage_scored AS (" in content
+    assert "primera_generacion_ratio_base" in content
+    assert "primera_generacion_ratio_base AS primera_generacion_ratio" in content
     assert "bronze." not in content
     assert "presupuesto_mef_departamento" not in content
     assert "regional_becarios_pct" in content
@@ -31,4 +35,3 @@ def test_region_coverage_sql_contract() -> None:
     assert "primera_generacion_score" in content
     assert "coverage_data_quality_flag" in content
     assert "coverage_source_method" in content
-

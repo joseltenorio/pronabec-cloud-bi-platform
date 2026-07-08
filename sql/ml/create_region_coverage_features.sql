@@ -204,13 +204,39 @@ coverage_with_rates AS (
     END AS has_estimated_coverage
   FROM coverage_metrics
 ),
-normalized_yearly AS (
+coverage_scored AS (
   SELECT
     *,
-    MIN(becas_por_1000_matriculados_5to) OVER (PARTITION BY anio) AS becas_min_anual,
-    MAX(becas_por_1000_matriculados_5to) OVER (PARTITION BY anio) AS becas_max_anual,
-    MIN(primera_generacion_ratio_base) OVER (PARTITION BY anio) AS primera_gen_min_anual,
-    MAX(primera_generacion_ratio_base) OVER (PARTITION BY anio) AS primera_gen_max_anual
+    CASE
+      WHEN primera_generacion_ratio_base IS NULL THEN NULL
+      ELSE COALESCE(
+        SAFE_DIVIDE(
+          primera_generacion_ratio_base
+          - MIN(primera_generacion_ratio_base) OVER (PARTITION BY anio),
+          NULLIF(
+            MAX(primera_generacion_ratio_base) OVER (PARTITION BY anio)
+            - MIN(primera_generacion_ratio_base) OVER (PARTITION BY anio),
+            0
+          )
+        ),
+        0
+      )
+    END AS primera_generacion_score,
+    CASE
+      WHEN becas_por_1000_matriculados_5to IS NULL THEN NULL
+      ELSE 1 - COALESCE(
+        SAFE_DIVIDE(
+          becas_por_1000_matriculados_5to
+          - MIN(becas_por_1000_matriculados_5to) OVER (PARTITION BY anio),
+          NULLIF(
+            MAX(becas_por_1000_matriculados_5to) OVER (PARTITION BY anio)
+            - MIN(becas_por_1000_matriculados_5to) OVER (PARTITION BY anio),
+            0
+          )
+        ),
+        0
+      )
+    END AS coverage_gap_score
   FROM coverage_with_rates
 ),
 final_features AS (
@@ -231,31 +257,14 @@ final_features AS (
     regional_becarios_pct,
     regional_becarios_estimated,
     total_becas_anual,
-    CASE
-      WHEN primera_generacion_ratio_base IS NULL THEN NULL
-      ELSE COALESCE(
-        SAFE_DIVIDE(
-          primera_generacion_ratio_base - primera_gen_min_anual,
-          NULLIF(primera_gen_max_anual - primera_gen_min_anual, 0)
-        ),
-        0
-      )
-    END AS primera_generacion_score,
+    primera_generacion_ratio_base,
+    primera_generacion_score,
     total_becarios_primera_generacion,
     total_becarios_encuestados,
     becas_por_1000_jovenes,
     becas_por_1000_matriculados_5to,
     demanda_no_cubierta_estimada,
-    CASE
-      WHEN becas_por_1000_matriculados_5to IS NULL THEN NULL
-      ELSE 1 - COALESCE(
-        SAFE_DIVIDE(
-          becas_por_1000_matriculados_5to - becas_min_anual,
-          NULLIF(becas_max_anual - becas_min_anual, 0)
-        ),
-        0
-      )
-    END AS coverage_gap_score,
+    coverage_gap_score,
     CASE
       WHEN regional_becarios_pct IS NOT NULL
        AND total_becas_anual IS NOT NULL
@@ -274,7 +283,7 @@ final_features AS (
     coverage_source_notes,
     has_estimated_coverage,
     CURRENT_TIMESTAMP() AS created_at
-  FROM normalized_yearly
+  FROM coverage_scored
 )
 SELECT
   anio,

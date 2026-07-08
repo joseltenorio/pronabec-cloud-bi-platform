@@ -47,12 +47,11 @@ def _parse_required_int(record: dict[str, Any], field_name: str) -> int:
     return parsed
 
 
-def _ratio(numerator: int | None, denominator: int | None) -> str | None:
+def _ratio(numerator: int | None, denominator: int | None) -> Decimal | None:
     if numerator is None or denominator in (None, 0):
         return None
     value = Decimal(numerator) / Decimal(denominator)
-    value = value.quantize(Decimal("0.000000001"), rounding=ROUND_HALF_UP)
-    return format(value, "f")
+    return value.quantize(Decimal("0.000000001"), rounding=ROUND_HALF_UP)
 
 
 def transform_minedu_matricula_secundaria_departamental(
@@ -106,8 +105,7 @@ def transform_minedu_matricula_secundaria_departamental(
     ):
         value = transformed[pct_field]
         if value is not None:
-            decimal_value = Decimal(value)
-            if decimal_value < 0 or decimal_value > 1:
+            if value < 0 or value > 1:
                 raise ValueError(f"{pct_field} debe estar entre 0 y 1.")
 
     transformed.update(
