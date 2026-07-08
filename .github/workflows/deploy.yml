@@ -50,12 +50,14 @@ permissions:
 
 env:
   GCP_PROJECT_ID: pronabec-cloud-bi-platform
+  GCP_PROJECT_NUMBER: "1030103187284"
   GCP_REGION: us-central1
   GCS_BUCKET_NAME: pronabec-cloud-bi-platform-lake-1030103187284
   GCS_BUCKET: pronabec-cloud-bi-platform-lake-1030103187284
   CLOUD_RUN_REGION: us-central1
   COMPOSER_LOCATION: us-central1
   COMPOSER_ENVIRONMENT_NAME: pronabec-composer
+  COMPOSER_SERVICE_ACCOUNT: pronabec-composer-sa@pronabec-cloud-bi-platform.iam.gserviceaccount.com
   BQ_BRONZE_DATASET: bronze
   BQ_SILVER_DATASET: silver
   BQ_GOLD_DATASET: gold
@@ -84,6 +86,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Make Bash scripts executable
+        run: chmod +x scripts/*.sh
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2

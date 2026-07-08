@@ -74,7 +74,10 @@ def test_composer_lifecycle_scripts_validate_required_environment():
 
     for required in ["GCP_PROJECT_ID", "COMPOSER_LOCATION", "COMPOSER_ENVIRONMENT_NAME"]:
         assert required in check_content
+    assert "ALLOW_MISSING=false" in check_content
     assert "--allow-missing" in check_content
+    assert "exit 0" in check_content
+    assert "does not exist" in check_content
     assert "gcloud composer environments describe" in check_content
 
     for required in [
@@ -84,12 +87,14 @@ def test_composer_lifecycle_scripts_validate_required_environment():
         "COMPOSER_SERVICE_ACCOUNT",
     ]:
         assert required in create_content
+    assert "require_env COMPOSER_SERVICE_ACCOUNT" in create_content
     assert "./scripts/check_composer_environment.sh --allow-missing" in create_content
     assert "gcloud composer environments create" in create_content
 
     for required in ["GCP_PROJECT_ID", "COMPOSER_LOCATION", "COMPOSER_ENVIRONMENT_NAME"]:
         assert required in delete_content
     assert "./scripts/check_composer_environment.sh --allow-missing" in delete_content
+    assert "Nothing to delete." in delete_content
     assert "gcloud composer environments delete" in delete_content
 
 
@@ -162,3 +167,69 @@ def test_deploy_workflow_exposes_optional_bronze_extraction_date():
     assert "Create Composer environment" in content
     assert "Delete Composer environment" in content
     assert "Validate Composer import errors" in content
+
+
+def test_deploy_workflow_makes_bash_scripts_executable() -> None:
+    content = _read(".github/workflows/deploy.yml")
+
+    assert "Make Bash scripts executable" in content
+    assert "chmod +x scripts/*.sh" in content
+
+
+def test_deploy_workflow_declares_composer_service_account() -> None:
+    content = _read(".github/workflows/deploy.yml")
+
+    assert "COMPOSER_SERVICE_ACCOUNT:" in content
+    assert (
+        "COMPOSER_SERVICE_ACCOUNT: pronabec-composer-sa@"
+        "pronabec-cloud-bi-platform.iam.gserviceaccount.com"
+    ) in content
+
+
+def test_deploy_workflow_does_not_source_local_pronabec_env() -> None:
+    content = _read(".github/workflows/deploy.yml")
+
+    assert "source ./pronabec_env.sh" not in content
+    assert "source pronabec_env.sh" not in content
+    assert ". ./pronabec_env.sh" not in content
+
+
+def test_deploy_workflow_is_manual_only() -> None:
+    content = _read(".github/workflows/deploy.yml")
+
+    assert "workflow_dispatch:" in content
+    assert "push:" not in content
+
+
+def test_deploy_workflow_exposes_required_manual_inputs() -> None:
+    content = _read(".github/workflows/deploy.yml")
+
+    for input_name in [
+        "create_composer_environment:",
+        "delete_composer_environment:",
+        "deploy_bigquery:",
+        "deploy_images:",
+        "deploy_jobs:",
+        "deploy_composer:",
+        "validate_composer:",
+    ]:
+        assert input_name in content
+
+
+def test_deploy_workflow_validates_mutually_exclusive_composer_lifecycle_inputs() -> None:
+    content = _read(".github/workflows/deploy.yml")
+
+    assert 'inputs.create_composer_environment' in content
+    assert 'inputs.delete_composer_environment' in content
+    assert "Cannot create and delete Composer in the same deployment run." in content
+
+
+def test_ci_workflow_does_not_deploy_or_manage_composer() -> None:
+    content = _read(".github/workflows/ci.yml")
+
+    assert "google-github-actions/auth" not in content
+    assert "create_composer_environment" not in content
+    assert "delete_composer_environment" not in content
+    assert "deploy_bigquery_sql.sh" not in content
+    assert "deploy_cloud_run_jobs.sh" not in content
+    assert "upload_composer_dag.sh" not in content
