@@ -708,10 +708,9 @@ with DAG(
                         "SOURCE_DATASET": source_dataset,
                     },
                 )
-            )
+        )
 
         discover_pronabec_datasets >> build_pronabec_extraction_plan >> run_pronabec_extraction_plan
-        run_pronabec_extraction_plan >> pronabec_finalize_tasks
         chain_tasks_in_batches(
             run_pronabec_extraction_plan,
             pronabec_finalize_tasks,
